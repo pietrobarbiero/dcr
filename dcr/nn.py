@@ -53,8 +53,8 @@ class ConceptReasoningLayer(torch.nn.Module):
         filtered_values = self.logic.disj_pair(sign_terms, self.logic.neg(filter_attn))
 
         # generate minterm
-        # preds = self.logic.conj(filtered_values, dim=1).squeeze().float()
-        preds = self.logic.conj(filtered_values, dim=1).softmax(dim=-1).squeeze()   # FIXME: softmax looks weird
+        # preds = self.logic.conj(filtered_values, dim=1).softmax(dim=-1).squeeze()   # FIXME: softmax looks weird
+        preds = self.logic.conj(filtered_values, dim=1).squeeze(1).float()
 
         # TODO: add OR for global explanations
 
@@ -108,3 +108,31 @@ class ConceptReasoningLayer(torch.nn.Module):
                     })
 
         return explanations
+
+
+class ConceptEmbedding(torch.nn.Module):
+    def __init__(self, in_features, n_concepts, emb_size):
+        super().__init__()
+        self.emb_size = emb_size
+        self.concept_context_generators = torch.nn.ModuleList()
+        for i in range(n_concepts):
+            self.concept_context_generators.append(torch.nn.Sequential(
+                torch.nn.Linear(in_features, 2 * emb_size),
+                torch.nn.LeakyReLU(),
+            ))
+        self.concept_prob_predictor = torch.nn.Sequential(
+            torch.nn.Linear(2 * emb_size, 1),
+            torch.nn.Sigmoid(), # TODO: can we work in the logit space?
+        )
+
+    def forward(self, x):
+        c_emb_list, c_pred_list = [], []
+        for i, context_gen in enumerate(self.concept_context_generators):
+            context = context_gen(x)
+            c_pred = self.concept_prob_predictor(context)
+            context_pos = context[:, :self.emb_size]
+            context_neg = context[:, self.emb_size:]
+            c_emb = context_pos * c_pred + context_neg * (1 - c_pred)
+            c_emb_list.append(c_emb.unsqueeze(1))
+            c_pred_list.append(c_pred)
+        return torch.cat(c_emb_list, axis=1), torch.cat(c_pred_list, axis=1)

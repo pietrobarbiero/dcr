@@ -1,3 +1,4 @@
+import torch
 from torch.utils.data import Subset
 from torchvision.datasets import CelebA
 from torchvision.transforms import Resize, ToTensor, Compose
@@ -11,7 +12,8 @@ all_attr = ['5_o_Clock_Shadow', 'Arched_Eyebrows', 'Attractive', 'Bags_Under_Eye
                  'Rosy_Cheeks', 'Sideburns', 'Smiling', 'Straight_Hair', 'Wavy_Hair', 'Wearing_Earrings', 'Wearing_Hat',
                  'Wearing_Lipstick', 'Wearing_Necklace', 'Wearing_Necktie', 'Young'
                  ]
-class_names = ['Attractive', 'Male', 'Young']
+# class_names = ['Attractive', 'Male', 'Young']
+class_names = ['Male']
 class_pos = [all_attr.index(c) for c in class_names]
 attr_pos = [a for a in range(len(all_attr)) if a not in class_pos]
 
@@ -21,7 +23,7 @@ class ToHierarchy(object):
         self.attr_pos = attr_pos
 
     def __call__(self, attr):
-        return attr[self.attr_pos], attr[self.class_pos]
+        return attr[self.attr_pos], torch.cat([attr[self.class_pos], 1-attr[self.class_pos]])
 
     def __repr__(self) -> str:
         return f"{self.__class__.__name__}()"
@@ -41,4 +43,4 @@ def load_celeba(root='.', img_size=64):
     test_idx = np.setdiff1d(np.arange(len(dataset)), train_idx)
     train_data = Subset(dataset, train_idx)
     test_data = Subset(dataset, test_idx)
-    return train_data, test_data, len(attr_pos), len(class_pos), concept_names, class_names
+    return train_data, test_data, len(attr_pos), 2*len(class_pos), concept_names, ['Male', 'Female']

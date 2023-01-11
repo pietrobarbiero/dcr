@@ -7,13 +7,14 @@ from torch.utils.data import DataLoader
 
 from dcr.data.celeba import load_celeba
 from dcr.models import DeepConceptReasoner
+from dcr.semantics import GodelTNorm
 
 
 def main():
-    epochs = 100
-    learning_rate = 0.008
+    epochs = 50
+    learning_rate = 0.0008
     emb_size = 16
-    batch_size = 32
+    batch_size = 128
     limit_batches = 1.0
 
     train_data, test_data, in_concepts, out_concepts, concept_names, class_names = load_celeba()
@@ -28,7 +29,8 @@ def main():
         model = DeepConceptReasoner(in_concepts=in_concepts, out_concepts=out_concepts, emb_size=emb_size,
                                     concept_names=concept_names, class_names=class_names,
                                     learning_rate=learning_rate, loss_form=BCELoss(),
-                                    reasoner=True, temperature=1)
+                                    concept_loss_weight=1, class_loss_weight=0.1, logic=GodelTNorm(),
+                                    reasoner=True, temperature_pos=1, temperature_neg=1)
         if not os.path.exists(model_path):
             print(f'Running epochs={epochs}, batch_size={batch_size}, learning_rate={learning_rate}')
             logger = TensorBoardLogger(save_dir=results_dir, name="lightning_logs")

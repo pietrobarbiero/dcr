@@ -4,17 +4,25 @@ import torch
 from .semantics import Logic
 
 EPS = 1e-3
-MAX_EXP = 30
+MAXABS = 10
 
 
-def softmaxnorm(values, temperature):
-    x = torch.clamp_max(values / temperature, MAX_EXP)
-    softmax_scores = torch.exp(x) / torch.sum(torch.exp(x), dim=1, keepdim=True)
-    return softmax_scores / softmax_scores.max(dim=1)[0].unsqueeze(1)
+def softelastic(values, temperature_pos, temperature_neg):
+    values = MAXABS * torch.tanh(values)
+    values_positive = torch.clamp_min(values, 0)
+    values_negative = torch.clamp_max(values, 0)
+    n_positive = torch.sum(values_positive > 0, dim=1) + EPS
+    n_negative = torch.sum(values_negative < 0, dim=1) + EPS
+    elastic_constant = torch.clamp_max(n_positive / n_negative, 10).unsqueeze(1)
+    values_positive_new = temperature_pos * values_positive**3 - elastic_constant * values_positive
+    values_negative_new = temperature_neg * values_negative**3 - 1/elastic_constant * values_negative
+    values_new = values_positive_new + values_negative_new
+    filter_attn = torch.sigmoid(values_new)
+    return filter_attn
 
 
 class ConceptReasoningLayer(torch.nn.Module):
-    def __init__(self, emb_size, n_classes, logic: Logic, temperature_complexity: float = 1.):
+    def __init__(self, emb_size, n_classes, logic: Logic, temperature_pos: float = 1., temperature_neg: float = 1.):
         super().__init__()
         self.emb_size = emb_size
         self.n_classes = n_classes
@@ -29,11 +37,11 @@ class ConceptReasoningLayer(torch.nn.Module):
             torch.nn.LeakyReLU(),
             torch.nn.Linear(emb_size, n_classes),
         )
-        self.temperature_complexity = temperature_complexity
+        self.temperature_pos = temperature_pos
+        self.temperature_neg = temperature_neg
 
     def forward(self, x, c, return_attn=False, sign_attn=None, filter_attn=None):
         values = c.unsqueeze(-1).repeat(1, 1, self.n_classes)
-        # x = c.unsqueeze(-1).repeat(1, 1, self.emb_size)
 
         if sign_attn is None:
             # compute attention scores to build logic sentence
@@ -41,19 +49,19 @@ class ConceptReasoningLayer(torch.nn.Module):
             sign_attn = torch.sigmoid(self.sign_nn(x))  # TODO: might be independent of input x (but requires OR)
 
         # attention scores need to be aligned with predicted concept truth values (attn <-> values)
-        # (not A or V) and (A or not V) <-> (A <-> V)   # TODO: Fra check
+        # (not A or V) and (A or not V) <-> (A <-> V)
         sign_terms = self.logic.iff_pair(sign_attn, values)    # TODO: temperature sharp here?
 
         if filter_attn is None:
             # compute attention scores to identify only relevant concepts for each class
-           filter_attn = softmaxnorm(self.filter_nn(x), self.temperature_complexity)   # TODO: might be independent of input x (but requires OR)
+           filter_attn = softelastic(self.filter_nn(x), self.temperature_pos, self.temperature_neg)
 
         # filter values
         # filtered implemented as "or(a, not b)", corresponding to "b -> a"
         filtered_values = self.logic.disj_pair(sign_terms, self.logic.neg(filter_attn))
+        # filtered_values = self.logic.disj_pair(sign_terms, filter_attn)   # TODO: avoid negation
 
         # generate minterm
-        # preds = self.logic.conj(filtered_values, dim=1).softmax(dim=-1).squeeze()   # FIXME: softmax looks weird
         preds = self.logic.conj(filtered_values, dim=1).squeeze(1).float()
 
         # TODO: add OR for global explanations
@@ -63,37 +71,71 @@ class ConceptReasoningLayer(torch.nn.Module):
         else:
             return preds
 
-    def explain(self, x, c, mode):
+    def explain(self, x, c, mode, concept_names=None, class_names=None):
         assert mode in ['local', 'global', 'exact']
-        explanations = None
 
+        if concept_names is None:
+            concept_names = [f'c_{i}' for i in range(c.shape[1])]
+        if class_names is None:
+            class_names = [f'y_{i}' for i in range(self.n_classes)]
+
+        # make a forward pass to get predictions and attention weights
         y_preds, sign_attn_mask, filter_attn_mask = self.forward(x, c, return_attn=True)
-        sign_attn_mask, filter_attn_mask = sign_attn_mask > 0.5, filter_attn_mask > 0.5
 
-        # TODO: add extraction of exact fuzzy rules (fidelity=1)
+        explanations = []
+        all_class_explanations = {cn: [] for cn in class_names}
+        for sample_idx in range(len(x)):
+            prediction = y_preds[sample_idx] > 0.5
+            active_classes = torch.argwhere(prediction).ravel()
 
-        if mode in ['local', 'global']:
-            # extract local explanations
-            predictions = y_preds.argmax(dim=-1).detach()
-            explanations = []
-            all_class_explanations = {c: [] for c in range(self.n_classes)}
-            for filter_attn, sign_attn, prediction in zip(filter_attn_mask, sign_attn_mask, predictions):
-                # select mask for predicted class only
-                # and generate minterm
-                minterm = []
-                for idx, (concept_score, attn_score) in enumerate(zip(sign_attn[:, prediction], filter_attn[:, prediction])):
-                    if attn_score:
-                        if concept_score:
-                            minterm.append(f'f{idx}')
-                        else:
-                            minterm.append(f'~f{idx}')
-                minterm = ' & '.join(minterm)
-                # add explanation to list
-                all_class_explanations[prediction.item()].append(minterm)
+            if len(active_classes) == 0:
+                # if no class is active for this sample, then we cannot extract any explanation
                 explanations.append({
-                    'class': prediction.item(),
-                    'explanation': minterm,
+                    'class': -1,
+                    'explanation': '',
+                    'attention': [],
                 })
+            else:
+                # else we can extract an explanation for each active class!
+                for target_class in active_classes:
+                    attentions = []
+                    minterm = []
+                    for concept_idx in range(len(concept_names)):
+                        c_pred = c[sample_idx, concept_idx]
+                        sign_attn = sign_attn_mask[sample_idx, concept_idx, target_class]
+                        filter_attn = filter_attn_mask[sample_idx, concept_idx, target_class]
+
+                        # we first check if the concept was relevant
+                        # a concept is relevant <-> the filter attention score is lower than the concept probability
+                        at_score = 0
+                        sign_terms = self.logic.iff_pair(sign_attn, c_pred).item()
+                        if self.logic.neg(filter_attn) < sign_terms:
+                            if sign_attn >= 0.5:
+                                # if the concept is relevant and the sign is positive we just take its attention score
+                                at_score = filter_attn.item()
+                                if mode == 'exact':
+                                    minterm.append(f'{sign_terms:.3f} ({concept_names[concept_idx]})')
+                                else:
+                                    minterm.append(f'{concept_names[concept_idx]}')
+                            else:
+                                # if the concept is relevant and the sign is positive we take (-1) * its attention score
+                                at_score = -filter_attn.item()
+                                if mode == 'exact':
+                                    minterm.append(f'{sign_terms:.3f} (~{concept_names[concept_idx]})')
+                                else:
+                                    minterm.append(f'~{concept_names[concept_idx]}')
+                        attentions.append(at_score)
+
+                    # add explanation to list
+                    target_class_name = class_names[target_class]
+                    minterm = ' & '.join(minterm)
+                    all_class_explanations[target_class_name].append(minterm)
+                    explanations.append({
+                        'sample-id': sample_idx,
+                        'class': target_class_name,
+                        'explanation': minterm,
+                        'attention': attentions,
+                    })
 
         if mode == 'global':
             # count most frequent explanations for each class

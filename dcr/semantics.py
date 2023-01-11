@@ -96,6 +96,15 @@ class GodelTNorm(Logic):
     def disj(self, a, dim=1):
         return torch.max(a, dim=dim, keepdim=True)[0]
 
+    def conj_pair(self, a, b):
+        return torch.minimum(a, b)
+
+    def disj_pair(self, a, b):
+        return torch.maximum(a, b)
+
+    def iff_pair(self, a, b):
+        return self.conj_pair(self.disj_pair(self.neg(a), b), self.disj_pair(a, self.neg(b)))
+
     def neg(self, a):
         return 1 - a
 

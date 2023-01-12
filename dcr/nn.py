@@ -3,21 +3,11 @@ import torch
 
 from .semantics import Logic
 
-EPS = 1e-3
-MAXABS = 10
 
-
-def softelastic(values, temperature):
-    values_positive = torch.clamp_min(values, 0)
-    values_negative = torch.clamp_max(values, 0)
-    n_positive = torch.sum(values_positive > 0, dim=1) + EPS
-    n_negative = torch.sum(values_negative < 0, dim=1) + EPS
-    elastic_constant = torch.clamp_max(n_positive / n_negative, 10).unsqueeze(1)
-    values_positive_new = temperature * values_positive**3 - elastic_constant * values_positive
-    values_negative_new = 1/temperature * values_negative**3 - 1/elastic_constant * values_negative
-    values_new = values_positive_new + values_negative_new
-    filter_attn = torch.sigmoid(values_new)
-    return filter_attn
+def softselect(values, temperature):
+    softmax_scores = torch.log_softmax(values, dim=1)
+    softscores = torch.sigmoid(softmax_scores - temperature * softmax_scores.mean(dim=1, keepdim=True))
+    return softscores
 
 
 class ConceptReasoningLayer(torch.nn.Module):
@@ -52,7 +42,7 @@ class ConceptReasoningLayer(torch.nn.Module):
 
         if filter_attn is None:
             # compute attention scores to identify only relevant concepts for each class
-           filter_attn = softelastic(self.filter_nn(x), self.temperature)
+           filter_attn = softselect(self.filter_nn(x), self.temperature)
 
         # filter values
         # filtered implemented as "or(a, not b)", corresponding to "b -> a"

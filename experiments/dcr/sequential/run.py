@@ -18,7 +18,7 @@ def main():
     datasets = ['xor', 'trig', 'vec', 'celeba']
     train_epochs = [500, 500, 500, 200]
     n_epochs = [3000, 3000, 3000, 3000]
-    temperatures = [100000000, 100000000, 100000000, 10000]
+    temperatures = [100, 100, 100, 100]
 
     learning_rate = 0.001
     logic = GodelTNorm()

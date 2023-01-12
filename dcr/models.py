@@ -9,7 +9,7 @@ from .semantics import Logic, GodelTNorm
 class DeepConceptReasoner(pl.LightningModule):
     def __init__(self, in_concepts, out_concepts, emb_size, concept_names, class_names,
                  learning_rate, loss_form, concept_loss_weight: float = 1., class_loss_weight: float = 1.,
-                 temperature_pos: float = 1., temperature_neg: float = 1., reasoner: bool = True,
+                 temperature: float = 1., reasoner: bool = True,
                  logic: Logic = GodelTNorm()):
         super().__init__()
         self.concept_loss_weight = concept_loss_weight
@@ -25,7 +25,7 @@ class DeepConceptReasoner(pl.LightningModule):
         self.concept_embedder = ConceptEmbedding(n_features, in_concepts, emb_size)
         self.reasoner = reasoner
         if self.reasoner:
-            self.predictor = ConceptReasoningLayer(emb_size, out_concepts, logic, temperature_pos, temperature_neg)
+            self.predictor = ConceptReasoningLayer(emb_size, out_concepts, logic, temperature)
         else:
             self.predictor = torch.nn.Sequential(
                 torch.nn.Linear(in_concepts, 10),

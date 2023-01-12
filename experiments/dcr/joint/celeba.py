@@ -30,7 +30,7 @@ def main():
                                     concept_names=concept_names, class_names=class_names,
                                     learning_rate=learning_rate, loss_form=BCELoss(),
                                     concept_loss_weight=1, class_loss_weight=0.1, logic=GodelTNorm(),
-                                    reasoner=True, temperature_pos=1, temperature_neg=1)
+                                    reasoner=True, temperature=1)
         if not os.path.exists(model_path):
             print(f'Running epochs={epochs}, batch_size={batch_size}, learning_rate={learning_rate}')
             logger = TensorBoardLogger(save_dir=results_dir, name="lightning_logs")

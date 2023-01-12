@@ -7,22 +7,21 @@ EPS = 1e-3
 MAXABS = 10
 
 
-def softelastic(values, temperature_pos, temperature_neg):
-    values = MAXABS * torch.tanh(values)
+def softelastic(values, temperature):
     values_positive = torch.clamp_min(values, 0)
     values_negative = torch.clamp_max(values, 0)
     n_positive = torch.sum(values_positive > 0, dim=1) + EPS
     n_negative = torch.sum(values_negative < 0, dim=1) + EPS
     elastic_constant = torch.clamp_max(n_positive / n_negative, 10).unsqueeze(1)
-    values_positive_new = temperature_pos * values_positive**3 - elastic_constant * values_positive
-    values_negative_new = temperature_neg * values_negative**3 - 1/elastic_constant * values_negative
+    values_positive_new = temperature * values_positive**3 - elastic_constant * values_positive
+    values_negative_new = 1/temperature * values_negative**3 - 1/elastic_constant * values_negative
     values_new = values_positive_new + values_negative_new
     filter_attn = torch.sigmoid(values_new)
     return filter_attn
 
 
 class ConceptReasoningLayer(torch.nn.Module):
-    def __init__(self, emb_size, n_classes, logic: Logic, temperature_pos: float = 1., temperature_neg: float = 1.):
+    def __init__(self, emb_size, n_classes, logic: Logic, temperature: float = 1.):
         super().__init__()
         self.emb_size = emb_size
         self.n_classes = n_classes
@@ -37,8 +36,7 @@ class ConceptReasoningLayer(torch.nn.Module):
             torch.nn.LeakyReLU(),
             torch.nn.Linear(emb_size, n_classes),
         )
-        self.temperature_pos = temperature_pos
-        self.temperature_neg = temperature_neg
+        self.temperature = temperature
 
     def forward(self, x, c, return_attn=False, sign_attn=None, filter_attn=None):
         values = c.unsqueeze(-1).repeat(1, 1, self.n_classes)
@@ -54,7 +52,7 @@ class ConceptReasoningLayer(torch.nn.Module):
 
         if filter_attn is None:
             # compute attention scores to identify only relevant concepts for each class
-           filter_attn = softelastic(self.filter_nn(x), self.temperature_pos, self.temperature_neg)
+           filter_attn = softelastic(self.filter_nn(x), self.temperature)
 
         # filter values
         # filtered implemented as "or(a, not b)", corresponding to "b -> a"
@@ -89,6 +87,7 @@ class ConceptReasoningLayer(torch.nn.Module):
             active_classes = torch.argwhere(prediction).ravel()
 
             if len(active_classes) == 0:
+                # TODO: explain even not active classes!
                 # if no class is active for this sample, then we cannot extract any explanation
                 explanations.append({
                     'class': -1,

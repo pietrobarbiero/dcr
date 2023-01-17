@@ -7,10 +7,22 @@ from .semantics import Logic, GodelTNorm
 
 
 class DeepConceptReasoner(pl.LightningModule):
-    def __init__(self, in_concepts, out_concepts, emb_size, concept_names, class_names,
-                 learning_rate, loss_form, concept_loss_weight: float = 1., class_loss_weight: float = 1.,
-                 temperature: float = 1., reasoner: bool = True,
-                 logic: Logic = GodelTNorm()):
+    def __init__(
+        self,
+        in_concepts,
+        out_concepts,
+        emb_size,
+        concept_names,
+        class_names,
+        learning_rate,
+        loss_form,
+        concept_loss_weight: float = 1.,
+        class_loss_weight: float = 1.,
+        temperature: float = 1.,
+        reasoner: bool = True,
+        logic: Logic = GodelTNorm(),
+        intervention_idxs=None,
+    ):
         super().__init__()
         self.concept_loss_weight = concept_loss_weight
         self.class_loss_weight = class_loss_weight
@@ -18,11 +30,18 @@ class DeepConceptReasoner(pl.LightningModule):
         for param in self.resnet.parameters():
             param.requires_grad = False
         n_features = self.resnet.fc.in_features
+        self.intervention_idxs = intervention_idxs
         self.resnet.fc = torch.nn.Sequential(
             torch.nn.Linear(n_features, n_features),
             torch.nn.LeakyReLU(),
         )
-        self.concept_embedder = ConceptEmbedding(n_features, in_concepts, emb_size)
+        
+        self.concept_embedder = ConceptEmbedding(
+            in_features=n_features,
+            n_concepts=in_concepts,
+            emb_size=emb_size,
+            intervention_idxs=self.intervention_idxs,
+        )
         self.reasoner = reasoner
         if self.reasoner:
             self.predictor = ConceptReasoningLayer(emb_size, out_concepts, logic, temperature)
@@ -38,19 +57,49 @@ class DeepConceptReasoner(pl.LightningModule):
         self.learning_rate = learning_rate
         self.loss_form = loss_form
 
-    def forward(self, x):
+    def _forward(self, x, intervention_idxs=None, c=None):
         h = self.resnet.forward(x)
-        c_emb, c_pred = self.concept_embedder(h)
+        c_emb, c_pred = self.concept_embedder(
+            h,
+            intervention_idxs=intervention_idxs,
+            c=c,
+        )
         if self.reasoner:
             y_pred = self.predictor(c_emb, c_pred)
         else:
             y_pred = self.predictor(c_pred)
         return c_pred, y_pred
-
+    
+    def forward(self, x, intervention_idxs=None, c=None,):
+        if intervention_idxs is not None:
+            # This takes precedence over the model construction parameter
+            c_pred, y_pred = self._forward(
+                x,
+                intervention_idxs=intervention_idxs,
+                c=c,
+            )
+        elif self.intervention_idxs is not None:
+            c_pred, y_pred = self._forward(
+                x,
+                intervention_idxs=self.intervention_idxs,
+                c=c,
+            )
+        else:
+            c_pred, y_pred = self._forward(x, c=c)
+        return c_pred, y_pred
+    
+    def _unpack_input(self, batch):
+        if len(batch) == 2:
+            x, (c, y) = batch
+            intervention_idxs = None
+        elif len(batch) == 3:
+            # Then we assume we are also given a set of concepts to intervene on as an argument!
+            x, (c, y), intervention_idxs = batch
+        return x, c, y, intervention_idxs
+        
     def training_step(self, batch, batch_idx):
-        x, t = batch
-        c, y = t
-        c_pred, y_pred = self.forward(x)
+        x, c, y, intervention_idxs = self._unpack_input(batch=batch)
+        c_pred, y_pred = self.forward(x, intervention_idxs=intervention_idxs, c=c)
         concept_loss = self.loss_form(c_pred, c.float())
         class_loss = self.loss_form(y_pred, y.float())
         loss = self.concept_loss_weight * concept_loss + self.class_loss_weight * class_loss
@@ -60,9 +109,8 @@ class DeepConceptReasoner(pl.LightningModule):
         return loss
 
     def test_step(self, batch, batch_idx):
-        x, t = batch
-        c, y = t[0], t[1]
-        c_pred, y_pred = self.forward(x)
+        x, c, y, intervention_idxs = self._unpack_input(batch=batch)
+        c_pred, y_pred = self.forward(x, intervention_idxs=intervention_idxs, c=c)
         concept_loss = self.loss_form(c_pred, c.float())
         class_loss = self.loss_form(y_pred, y.float())
         loss = self.concept_loss_weight * concept_loss + self.class_loss_weight * class_loss
@@ -70,8 +118,8 @@ class DeepConceptReasoner(pl.LightningModule):
         return loss
 
     def predict_step(self, batch, batch_idx, dataloader_idx: int = 0):
-        x, t = batch
-        return self.forward(x)
+        x, c, y, intervention_idxs = self._unpack_input(batch=batch)
+        return self.forward(x, intervention_idxs=intervention_idxs, c=c)
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.parameters(), lr=self.learning_rate)

@@ -16,12 +16,14 @@ class DeepConceptReasoner(pl.LightningModule):
         class_names,
         learning_rate,
         loss_form,
+        loss_form_concept=None,
         concept_loss_weight: float = 1.,
         class_loss_weight: float = 1.,
         temperature: float = 1.,
         reasoner: bool = True,
         logic: Logic = GodelTNorm(),
         intervention_idxs=None,
+        training_intervention_prob=0.25,
     ):
         super().__init__()
         self.concept_loss_weight = concept_loss_weight
@@ -41,6 +43,7 @@ class DeepConceptReasoner(pl.LightningModule):
             n_concepts=in_concepts,
             emb_size=emb_size,
             intervention_idxs=self.intervention_idxs,
+            training_intervention_prob=training_intervention_prob,
         )
         self.reasoner = reasoner
         if self.reasoner:
@@ -56,13 +59,15 @@ class DeepConceptReasoner(pl.LightningModule):
         self.class_names = class_names
         self.learning_rate = learning_rate
         self.loss_form = loss_form
+        self.loss_form_concept = loss_form_concept or loss_form
 
-    def _forward(self, x, intervention_idxs=None, c=None):
+    def _forward(self, x, intervention_idxs=None, c=None, train=False):
         h = self.resnet.forward(x)
         c_emb, c_pred = self.concept_embedder(
             h,
             intervention_idxs=intervention_idxs,
             c=c,
+            train=train,
         )
         if self.reasoner:
             y_pred = self.predictor(c_emb, c_pred)
@@ -70,22 +75,24 @@ class DeepConceptReasoner(pl.LightningModule):
             y_pred = self.predictor(c_pred)
         return c_pred, y_pred
     
-    def forward(self, x, intervention_idxs=None, c=None,):
+    def forward(self, x, intervention_idxs=None, c=None, train=False):
         if intervention_idxs is not None:
             # This takes precedence over the model construction parameter
             c_pred, y_pred = self._forward(
                 x,
                 intervention_idxs=intervention_idxs,
                 c=c,
+                train=train,
             )
         elif self.intervention_idxs is not None:
             c_pred, y_pred = self._forward(
                 x,
                 intervention_idxs=self.intervention_idxs,
                 c=c,
+                train=train,
             )
         else:
-            c_pred, y_pred = self._forward(x, c=c)
+            c_pred, y_pred = self._forward(x, c=c, train=train)
         return c_pred, y_pred
     
     def _unpack_input(self, batch):
@@ -99,8 +106,8 @@ class DeepConceptReasoner(pl.LightningModule):
         
     def training_step(self, batch, batch_idx):
         x, c, y, intervention_idxs = self._unpack_input(batch=batch)
-        c_pred, y_pred = self.forward(x, intervention_idxs=intervention_idxs, c=c)
-        concept_loss = self.loss_form(c_pred, c.float())
+        c_pred, y_pred = self.forward(x, intervention_idxs=intervention_idxs, c=c, train=True)
+        concept_loss = self.loss_form_concept(c_pred, c.float())
         class_loss = self.loss_form(y_pred, y.float())
         loss = self.concept_loss_weight * concept_loss + self.class_loss_weight * class_loss
         self.log("train_loss", loss.item())
@@ -110,8 +117,8 @@ class DeepConceptReasoner(pl.LightningModule):
 
     def test_step(self, batch, batch_idx):
         x, c, y, intervention_idxs = self._unpack_input(batch=batch)
-        c_pred, y_pred = self.forward(x, intervention_idxs=intervention_idxs, c=c)
-        concept_loss = self.loss_form(c_pred, c.float())
+        c_pred, y_pred = self.forward(x, intervention_idxs=intervention_idxs, c=c, train=False)
+        concept_loss = self.loss_form_concept(c_pred, c.float())
         class_loss = self.loss_form(y_pred, y.float())
         loss = self.concept_loss_weight * concept_loss + self.class_loss_weight * class_loss
         self.log("test_loss", loss.item())
@@ -119,7 +126,7 @@ class DeepConceptReasoner(pl.LightningModule):
 
     def predict_step(self, batch, batch_idx, dataloader_idx: int = 0):
         x, c, y, intervention_idxs = self._unpack_input(batch=batch)
-        return self.forward(x, intervention_idxs=intervention_idxs, c=c)
+        return self.forward(x, intervention_idxs=intervention_idxs, c=c, train=False)
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.parameters(), lr=self.learning_rate)

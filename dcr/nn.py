@@ -150,10 +150,15 @@ class ConceptEmbedding(torch.nn.Module):
         active_intervention_values=None,
         inactive_intervention_values=None,
         intervention_idxs=None,
+        training_intervention_prob=0.25,
     ):
         super().__init__()
         self.emb_size = emb_size
         self.intervention_idxs = intervention_idxs
+        self.training_intervention_prob = training_intervention_prob
+        if self.training_intervention_prob != 0:
+            self.ones = torch.ones(n_concepts)
+            
         self.concept_context_generators = torch.nn.ModuleList()
         for i in range(n_concepts):
             self.concept_context_generators.append(torch.nn.Sequential(
@@ -185,7 +190,14 @@ class ConceptEmbedding(torch.nn.Module):
         concept_idx,
         intervention_idxs=None,
         c_true=None,
+        train=False,
     ):
+        if train and (self.training_intervention_prob != 0) and (
+            intervention_idxs is None
+        ):
+            # Then we will probabilistically intervene in some concepts
+            mask = torch.bernoulli(self.ones * self.training_intervention_prob)
+            intervention_idxs = torch.nonzero(mask).reshape(-1)
         if (c_true is None) or (intervention_idxs is None):
             return prob
         if concept_idx not in intervention_idxs:
@@ -201,7 +213,7 @@ class ConceptEmbedding(torch.nn.Module):
             )
         )
 
-    def forward(self, x, intervention_idxs=None, c=None):
+    def forward(self, x, intervention_idxs=None, c=None, train=False):
         c_emb_list, c_pred_list = [], []
         # We give precendence to inference time interventions arguments
         used_int_idxs = intervention_idxs
@@ -217,6 +229,7 @@ class ConceptEmbedding(torch.nn.Module):
                 concept_idx=i,
                 intervention_idxs=used_int_idxs,
                 c_true=c,
+                train=train,
             )
                 
             context_pos = context[:, :self.emb_size]

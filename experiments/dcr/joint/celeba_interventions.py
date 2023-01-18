@@ -11,12 +11,20 @@ import numpy as np
 
 
 import sys
-sys.path.append("/homes/me466/EmbeddingLogic/dcr")
+sys.path.append(".")
 
 from dcr.data.celeba import load_celeba
 from dcr.models import DeepConceptReasoner
 from dcr.semantics import GodelTNorm
 
+def find_class_imbalance(c_train):
+    imbalance_ratio = []
+    n, n_attr = c_train.shape
+    n_ones = np.sum(c_train, axis=0)
+    total = np.array([n] * n_attr)
+    for j in range(len(n_ones)):
+        imbalance_ratio.append(total[j]/n_ones[j] - 1)
+    return imbalance_ratio
 
 def random_int_policy(num_groups_intervened, concept_group_map):
     selected_groups_for_trial = np.random.choice(
@@ -36,23 +44,44 @@ def main():
     emb_size = 16
     batch_size = 128
     limit_batches = 1.0
-    intervention_trials = 5
+    intervention_trials = 3
     concept_selection_policy = random_int_policy
+    num_workers = 6
 
     train_data, test_data, n_concepts, out_concepts, concept_names, class_names = load_celeba()
-    train_dl = DataLoader(train_data, batch_size, shuffle=True, pin_memory=True, num_workers=8)
-    test_dl = DataLoader(test_data, batch_size, shuffle=False, pin_memory=True, num_workers=8)
+    train_dl = DataLoader(train_data, batch_size, shuffle=True, pin_memory=True, num_workers=num_workers)
+    test_dl = DataLoader(test_data, batch_size, shuffle=False, pin_memory=True, num_workers=num_workers)
     x_test, c_test, y_test = [], [], []
     for x, (c, y) in test_dl:
         x_test.append(x)
         c_test.append(c)
         y_test.append(y)
+    
+    x_train, c_train, y_train = [], [], []
+    for x, (c, y) in train_dl:
+        x_train.append(x)
+        c_train.append(c)
+        y_train.append(y)
+    
+    x_train = np.concatenate(x_train, axis=0)
+    y_train = np.concatenate(y_train, axis=0)
+    c_train = np.concatenate(c_train, axis=0)
+    print("x_train.shape =", x_train.shape)
+    print("y_train.shape =", y_train.shape)
+    print("y_train distribution =", np.mean(y_train, axis=0))
+    print("c_train.shape =", c_train.shape)
+    print("c_train distribution =", np.mean(c_train, axis=0))
+    imbalance = find_class_imbalance(c_train)
+    print("imbalance =", imbalance)
+    
     x_test = np.concatenate(x_test, axis=0)
     y_test = np.concatenate(y_test, axis=0)
     c_test = np.concatenate(c_test, axis=0)
     print("x_test.shape =", x_test.shape)
     print("y_test.shape =", y_test.shape)
+    print("y_test distribution =", np.mean(y_test, axis=0))
     print("c_test.shape =", c_test.shape)
+    print("c_test distribution =", np.mean(c_test, axis=0))
         
     concept_group_map = None
     
@@ -69,8 +98,9 @@ def main():
             class_names=class_names,
             learning_rate=learning_rate,
             loss_form=BCELoss(),
+            loss_form_concept=BCELoss(weight=torch.FloatTensor(imbalance)),
             concept_loss_weight=1,
-            class_loss_weight=0.1,
+            class_loss_weight=10, #0.1,
             logic=GodelTNorm(),
             reasoner=True,
             temperature=1,
@@ -108,9 +138,11 @@ def main():
         )
         test_results['auc'] = roc_auc_score(y_test, y_pred)
         test_results['acc'] = accuracy_score(np.argmax(y_test, axis=1), np.argmax(y_pred, axis=1))
-        print(c_pred)
-        test_results['c_auc'] = roc_auc_score(c_test, (c_pred > 0.5).astype(np.int32))
-        test_results['c_acc'] = accuracy_score(c_test, (c_pred > 0.5).astype(np.int32))
+        test_results['c_auc'] = 0
+        test_results['c_acc'] = 0
+        for i in range(n_concepts):
+            test_results['c_auc'] += roc_auc_score(c_test[:, i], (c_pred[:, i] > 0.5).astype(np.int32))/n_concepts
+            test_results['c_acc'] += accuracy_score(c_test[:, i], (c_pred[:, i] > 0.5).astype(np.int32))/n_concepts
         print(f"Test results! for fold {fold}:")
         for k, v in test_results.items():
             print(f'\t"{k}" -> {v*100:.2f}%')
@@ -147,6 +179,7 @@ def main():
                 int_model_args = copy.deepcopy(model_args)
                 int_model_args['intervention_idxs'] = intervention_idxs
                 int_model = DeepConceptReasoner(**int_model_args)
+                int_model.load_state_dict(torch.load(model_path))
                 trainer = pl.Trainer(
                     gpus=1,
                 )

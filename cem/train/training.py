@@ -13,6 +13,9 @@ from torchvision.models import resnet18, resnet34, resnet50, densenet121
 import cem.models.cem as models_cem
 import cem.models.cbm as models_cbm
 import cem.train.utils as utils
+import dcr.models as models_dcr
+from dcr.semantics import GodelTNorm
+
 
 ################################################################################
 ## MODEL CONSTRUCTION
@@ -33,7 +36,7 @@ def construct_model(
     active_intervention_values=None,
     inactive_intervention_values=None,
 ):
-    if config["architecture"] in ["ConceptEmbeddingModel", "MixtureEmbModel"]:
+    if config["architecture"] in ["ConceptEmbeddingModel", "MixtureEmbModel", "CEM"]:
         model_cls = models_cem.ConceptEmbeddingModel
         extra_params = {
             "emb_size": config["emb_size"],
@@ -48,6 +51,22 @@ def construct_model(
             ),
             "concat_prob": config.get("concat_prob", False),
             "embeding_activation": config.get("embeding_activation", None),
+        }
+    elif config["architecture"] in ["DCR", "DeepConceptReasoner"]:
+        model_cls = models_dcr.DeepConceptReasoner
+        extra_params = {
+            "emb_size": config["emb_size"],
+            "intervention_idxs": intervention_idxs,
+            "training_intervention_prob": config.get(
+                'training_intervention_prob',
+                0.0,
+            ),
+            "temperature": config.get("temperature", 1),
+            "concept_names": config.get("concept_names", None),
+            "class_names": config.get("class_names", None),
+            "reasoner": config.get("reasoner", True),
+            "logic": config.get('logit', GodelTNorm()),
+            "concept_embedder": config.get("concept_embedder", None),
         }
     elif "ConceptBottleneckModel" in config["architecture"]:
         model_cls = models_cbm.ConceptBottleneckModel

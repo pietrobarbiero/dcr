@@ -2,7 +2,7 @@ import sklearn.metrics
 import torch
 import pytorch_lightning as pl
 from torchvision.models import resnet50, densenet121
-
+import numpy as np
 
 ################################################################################
 ## HELPER FUNCTIONS
@@ -217,10 +217,13 @@ class ConceptBottleneckModel(pl.LightningModule):
 
     def _unpack_batch(self, batch):
         x = batch[0]
-        if isinstance(batch[1], list):
-            y, c = batch[1]
+        if len(batch) > 1:
+            if isinstance(batch[1], list):
+                y, c = batch[1]
+            else:
+                y, c = batch[1], batch[2]
         else:
-            y, c = batch[1], batch[2]
+            y, c = None, None
         return x, y, c
 
     def _switch_concepts(self, c):

@@ -42,7 +42,7 @@ class ConceptReasoningLayer(torch.nn.Module):
 
         if filter_attn is None:
             # compute attention scores to identify only relevant concepts for each class
-           filter_attn = softselect(self.filter_nn(x), self.temperature)
+            filter_attn = softselect(self.filter_nn(x), self.temperature)
 
         # filter values
         # filtered implemented as "or(a, not b)", corresponding to "b -> a"

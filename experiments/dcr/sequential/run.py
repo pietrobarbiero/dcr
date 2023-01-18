@@ -1,7 +1,9 @@
 from sklearn.ensemble import GradientBoostingClassifier
-from sklearn.linear_model import LogisticRegression
+from sklearn.linear_model import LogisticRegression, LogisticRegressionCV
 from sklearn.metrics import f1_score, roc_auc_score
 from sklearn.tree import DecisionTreeClassifier
+from sklearn.model_selection import GridSearchCV
+from xgboost import XGBClassifier
 
 from causality.counterfactuals import counterfact
 from dcr.semantics import GodelTNorm
@@ -29,11 +31,9 @@ def main():
     os.makedirs(results_dir, exist_ok=True)
 
     competitors = [
-        DecisionTreeClassifier(random_state=random_state),
-        LogisticRegression(random_state=random_state),
-        GradientBoostingClassifier(random_state=random_state),
-        # XGBClassifier(),
-        # RandomForestClassifier(random_state=random_state)
+        GridSearchCV(DecisionTreeClassifier(random_state=random_state), cv=3, param_grid={'max_depth': [2, 4, 10, None], 'min_samples_split': [2, 4, 10], 'min_samples_leaf': [1, 2, 5, 10]}),
+        GridSearchCV(LogisticRegression(random_state=random_state), cv=3, param_grid={'solver': ['lbfgs', 'saga'], 'penalty': ['l1', 'l2', 'elasticnet']}),
+        GridSearchCV(XGBClassifier(random_state=random_state), cv=3, param_grid={'booster': ['gbtree', 'gblinear', 'dart']}),
     ]
 
     results = []
@@ -109,9 +109,9 @@ def main():
                 classifier.fit(c_scores_train, y_train.argmax(dim=-1).detach())
                 y_pred = classifier.predict(c_scores_test)
                 test_accuracy = f1_score(y_test.argmax(dim=-1).detach(), y_pred, average='weighted')
-                print(f'{classifier.__class__.__name__}: Test accuracy: {test_accuracy:.4f}')
+                print(f'{classifier.best_estimator_.__class__.__name__}: Test accuracy: {test_accuracy:.4f}')
 
-                results.append(['', test_accuracy, fold, classifier.__class__.__name__, dataset])
+                results.append(['', test_accuracy, fold, classifier.best_estimator_.__class__.__name__, dataset])
                 pd.DataFrame(results, columns=cols).to_csv(os.path.join(results_dir, 'accuracy.csv'))
 
             print('\nAnd now run competitors with embeddings!\n')
@@ -119,9 +119,9 @@ def main():
                 classifier.fit(c_emb_train.reshape(c_emb_train.shape[0], -1), y_train.argmax(dim=-1).detach())
                 y_pred = classifier.predict(c_emb_test.reshape(c_emb_test.shape[0], -1))
                 test_accuracy = f1_score(y_test.argmax(dim=-1).detach(), y_pred, average='weighted')
-                print(f'{classifier.__class__.__name__}: Test accuracy: {test_accuracy:.4f}')
+                print(f'{classifier.best_estimator_.__class__.__name__}: Test accuracy: {test_accuracy:.4f}')
 
-                results.append(['', test_accuracy, fold, classifier.__class__.__name__ + ' (Emb.)', dataset])
+                results.append(['', test_accuracy, fold, classifier.best_estimator_.__class__.__name__ + ' (Emb.)', dataset])
                 pd.DataFrame(results, columns=cols).to_csv(os.path.join(results_dir, 'accuracy.csv'))
 
 

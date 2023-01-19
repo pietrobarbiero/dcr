@@ -32,22 +32,31 @@ class DefaultConceptEmbedder(torch.nn.Module):
     def __init__(
         self,
         n_concepts,
+        c_extractor_arch,
         emb_size,
         intervention_idxs=None,
         training_intervention_prob=0.25,
+        freeze_pretrain=False,
     ):
         super().__init__()
-        self.resnet = torchvision.models.resnet18(pretrained=True)
-        # Why are we freezing these guys?! Let them roam freeeeeee
         self.intervention_idxs = intervention_idxs
         self.training_intervention_prob = training_intervention_prob
-        for param in self.resnet.parameters():
-            param.requires_grad = False
-        n_features = self.resnet.fc.in_features
-        self.resnet.fc = torch.nn.Sequential(
-            torch.nn.Linear(n_features, n_features),
-            torch.nn.LeakyReLU(),
-        )
+        
+        # Else we assume that it is a callable function which we will
+        # need to instantiate here
+        try:
+            self.laten_code_gen = c_extractor_arch(pretrained=pretrain_model)
+            n_features = self.laten_code_gen.fc.in_features
+            if freeze_pretrain:
+                for param in self.laten_code_gen.parameters():
+                    param.requires_grad = False
+            self.laten_code_gen.fc = torch.nn.Sequential(
+                torch.nn.Linear(n_features, n_features),
+                torch.nn.LeakyReLU(),
+            )
+        except Exception as e:
+            n_features = n_concepts
+            self.laten_code_gen = c_extractor_arch(output_dim=n_concepts)
 
         self.concept_embedder = ConceptEmbedding(
             in_features=n_features,
@@ -58,7 +67,7 @@ class DefaultConceptEmbedder(torch.nn.Module):
         )
 
     def forward(self, x, intervention_idxs=None, c=None, train=False):
-        h = self.resnet.forward(x)
+        h = self.laten_code_gen.forward(x)
         if intervention_idxs is not None:
             # This takes precedence over the model construction parameter
             c_emb, c_pred = self.concept_embedder(
@@ -100,6 +109,7 @@ class DeepConceptReasoner(ConceptBottleneckModel):
         intervention_idxs=None,
         training_intervention_prob=0.25,
         concept_embedder=None,
+        c_extractor_arch=torchvision.models.resnet18,
 
         momentum=0.9,
         learning_rate=0.01,
@@ -120,6 +130,7 @@ class DeepConceptReasoner(ConceptBottleneckModel):
                 n_concepts=n_concepts,
                 emb_size=emb_size,
                 intervention_idxs=intervention_idxs,
+                c_extractor_arch=c_extractor_arch,
                 training_intervention_prob=training_intervention_prob,
             )
         else:

@@ -9,11 +9,17 @@ import numpy as np
 ################################################################################
 
 def compute_bin_accuracy(c_pred, y_pred, c_true, y_true):
-    c_pred = c_pred.reshape(-1).cpu().detach() > 0.5
+    if len(c_pred.shape) == 2 and c_pred.shape[-1] == 2:
+        c_pred = np.argmax(c_pred.cpu().detach(), axis=-1)
+    else:
+        c_pred = c_pred.reshape(-1).cpu().detach() > 0.5
     y_probs = y_pred.cpu().detach()
     y_pred = y_probs > 0.5
     c_true = c_true.reshape(-1).cpu().detach()
-    y_true = y_true.reshape(-1).cpu().detach()
+    if len(y_true.shape) == 2 and y_true.shape[-1] == 2:
+        y_true = np.argmax(y_true.cpu().detach(), axis=-1)
+    else:
+        y_true = y_true.reshape(-1).cpu().detach()
     c_accuracy = sklearn.metrics.accuracy_score(c_true, c_pred)
     c_auc = sklearn.metrics.roc_auc_score(c_true, c_pred, multi_class='ovo')
     c_f1 = sklearn.metrics.f1_score(c_true, c_pred, average='macro')
@@ -37,12 +43,18 @@ def compute_accuracy(
             y_true,
         )
     c_pred = c_pred.reshape(-1).cpu().detach() > 0.5
+    
     y_probs = torch.nn.Softmax(dim=-1)(y_pred).cpu().detach()
     used_classes = np.unique(y_true.reshape(-1).cpu().detach())
     y_probs = y_probs[:, sorted(list(used_classes))]
     y_pred = y_pred.argmax(dim=-1).cpu().detach()
     c_true = c_true.reshape(-1).cpu().detach()
-    y_true = y_true.reshape(-1).cpu().detach()
+    if len(y_true.shape) == 2:
+        # Then it is a one-hot encoding so let's
+        # discretize it
+        y_true = np.argmax(y_true.cpu().detach(), axis=-1)
+    else:
+        y_true = y_true.reshape(-1).cpu().detach()
     c_accuracy = sklearn.metrics.accuracy_score(c_true, c_pred)
     try:
         c_auc = sklearn.metrics.roc_auc_score(
@@ -60,7 +72,10 @@ def compute_accuracy(
         )
     except:
         c_f1 = 0
-    y_accuracy = sklearn.metrics.accuracy_score(y_true, y_pred)
+    y_accuracy = sklearn.metrics.accuracy_score(
+        y_true,
+        y_pred,
+    )
     try:
         y_auc = sklearn.metrics.roc_auc_score(
             y_true,
@@ -70,7 +85,11 @@ def compute_accuracy(
     except:
         y_auc = 0.0
     try:
-        y_f1 = sklearn.metrics.f1_score(y_true, y_pred, average='macro')
+        y_f1 = sklearn.metrics.f1_score(
+            y_true,
+            y_pred,
+            average='macro',
+        )
     except:
         y_f1 = 0.0
     return (c_accuracy, c_auc, c_f1), (y_accuracy, y_auc, y_f1)

@@ -149,8 +149,9 @@ def dump_end_embeddings(
             list(map(lambda x: x[1], batch_results)),
             axis=0,
         )
-        (n, dim) = c_pred.shape
-        c_pred = np.reshape(c_pred, [n, n_concepts, dim//n_concepts])
+        if len(c_pred.shape) == 2:
+            (n, dim) = c_pred.shape
+            c_pred = np.reshape(c_pred, [n, n_concepts, dim//n_concepts])
         y_pred = np.concatenate(
             list(map(lambda x: x[2], batch_results)),
             axis=0,

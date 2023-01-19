@@ -32,7 +32,7 @@ def main():
 
     competitors = [
         GridSearchCV(DecisionTreeClassifier(random_state=random_state), cv=3, param_grid={'max_depth': [2, 4, 10, None], 'min_samples_split': [2, 4, 10], 'min_samples_leaf': [1, 2, 5, 10]}),
-        GridSearchCV(LogisticRegression(random_state=random_state), cv=3, param_grid={'solver': ['lbfgs', 'saga'], 'penalty': ['l1', 'l2', 'elasticnet']}),
+        GridSearchCV(LogisticRegression(random_state=random_state), cv=3, param_grid={'solver': ['liblinear'], 'penalty': ['l1', 'l2', 'elasticnet']}),
         GridSearchCV(XGBClassifier(random_state=random_state), cv=3, param_grid={'booster': ['gbtree', 'gblinear', 'dart']}),
     ]
 
@@ -44,7 +44,7 @@ def main():
     for dataset, train_epoch, epochs, temperature in zip(datasets, train_epochs, n_epochs, temperatures):
         for fold in folds:
             # load data
-            c_emb_train, c_scores_train, y_train, c_emb_test, c_scores_test, y_test = load_data(dataset, fold, train_epoch)
+            c_emb_train, c_scores_train, y_train, c_emb_test, c_scores_test, y_test, n_concepts_all = load_data(dataset, fold, train_epoch)
             emb_size = c_emb_train.shape[2]
             n_classes = y_train.shape[1]
 
@@ -97,18 +97,30 @@ def main():
             if dataset == 'celeba':
                 # here we simulate that concept 0 and concept 1 are not available at test time
                 # by setting them to a default value of zero
-                c_emb_empty = torch.zeros((c_emb_test.shape[0], c_emb_train.shape[1], c_emb_test.shape[2]))
-                c_scores_empty = torch.zeros((c_scores_test.shape[0], c_scores_train.shape[1]))
-                c_emb_empty[:, 1:] = c_emb_test
-                c_scores_empty[:, 1:] = c_scores_test
-                c_emb_test = c_emb_empty
+                c_scores_empty = torch.zeros((c_scores_test.shape[0], n_concepts_all))
+                c_emb_empty = torch.zeros((c_emb_test.shape[0], n_concepts_all, c_emb_test.shape[2]))
+                c_scores_empty[:, 5:] = c_scores_test
+                c_emb_empty[:, 5:] = c_emb_test
                 c_scores_test = c_scores_empty
+                c_emb_test = c_emb_empty
+
+                c_scores_empty = torch.zeros((c_scores_train.shape[0], n_concepts_all))
+                c_emb_empty = torch.zeros((c_emb_train.shape[0], n_concepts_all, c_emb_train.shape[2]))
+                c_scores_empty[:, :1] = c_scores_train[:, :1]
+                c_emb_empty[:, :1] = c_emb_train[:, :1]
+                c_scores_empty[:, 1:] = c_scores_train[:, 1:]
+                c_emb_empty[:, 1:] = c_emb_train[:, 1:]
+                c_scores_train = c_scores_empty
+                c_emb_train = c_emb_empty
 
             print('\nAnd now run competitors!\n')
             for classifier in competitors:
                 classifier.fit(c_scores_train, y_train.argmax(dim=-1).detach())
-                y_pred = classifier.predict(c_scores_test)
-                test_accuracy = f1_score(y_test.argmax(dim=-1).detach(), y_pred, average='weighted')
+                try:
+                    y_pred = classifier.predict_proba(c_scores_test)
+                except:
+                    y_pred = classifier.predict(c_scores_test)
+                test_accuracy = roc_auc_score(y_test.detach(), y_pred)
                 print(f'{classifier.best_estimator_.__class__.__name__}: Test accuracy: {test_accuracy:.4f}')
 
                 results.append(['', test_accuracy, fold, classifier.best_estimator_.__class__.__name__, dataset])
@@ -117,8 +129,11 @@ def main():
             print('\nAnd now run competitors with embeddings!\n')
             for classifier in competitors:
                 classifier.fit(c_emb_train.reshape(c_emb_train.shape[0], -1), y_train.argmax(dim=-1).detach())
-                y_pred = classifier.predict(c_emb_test.reshape(c_emb_test.shape[0], -1))
-                test_accuracy = f1_score(y_test.argmax(dim=-1).detach(), y_pred, average='weighted')
+                try:
+                    y_pred = classifier.predict_proba(c_emb_test.reshape(c_emb_test.shape[0], -1))
+                except:
+                    y_pred = classifier.predict(c_emb_test.reshape(c_emb_test.shape[0], -1))
+                test_accuracy = roc_auc_score(y_test.detach(), y_pred)
                 print(f'{classifier.best_estimator_.__class__.__name__}: Test accuracy: {test_accuracy:.4f}')
 
                 results.append(['', test_accuracy, fold, classifier.best_estimator_.__class__.__name__ + ' (Emb.)', dataset])

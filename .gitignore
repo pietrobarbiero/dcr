@@ -5,6 +5,8 @@ lightning_logs/
 *.py[cod]
 *$py.class
 
+celeba/
+
 # C extensions
 *.so
 

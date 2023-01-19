@@ -22,11 +22,6 @@ def main():
     n_epochs = [3000, 3000, 3000, 3000]
     temperatures = [100, 100, 100, 100]
 
-    datasets = ['cub']
-    train_epochs = [300]
-    n_epochs = [3000]
-    temperatures = [1]
-
     learning_rate = 0.001
     logic = GodelTNorm()
     folds = [i+1 for i in range(5)]

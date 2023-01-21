@@ -464,14 +464,14 @@ for i, concept_name in enumerate(list(np.array(CUB_ATTRS)[CUB_SEL_ATTRS])):
 def generate_cub_dataset(config, data_dir=CUB_DIR):
     base_dir = os.path.join(data_dir, 'class_attr_data_10')
     train_data_path = os.path.join(base_dir, 'train.pkl')
-    if og_config['weight_loss']:
+    if config['weight_loss']:
         imbalance = find_class_imbalance(train_data_path, True)
     else:
         imbalance = None
 
     val_data_path = train_data_path.replace('train.pkl', 'val.pkl')
     test_data_path = train_data_path.replace('train.pkl', 'test.pkl')
-    sampling_percent = og_config.get("sampling_percent", 1)
+    sampling_percent = config.get("sampling_percent", 1)
     n_concepts, n_tasks = 112, 200
     if sampling_percent != 1:
         # Do the subsampling
@@ -493,46 +493,46 @@ def generate_cub_dataset(config, data_dir=CUB_DIR):
                 sample = np.array(sample)
             return sample[selected_concepts]
 
-        if og_config['weight_loss']:
+        if config['weight_loss']:
             imbalance = np.array(imbalance)[selected_concepts]
 
         train_dl = load_data(
             pkl_paths=[train_data_path],
             use_attr=True,
             no_img=False,
-            batch_size=og_config['batch_size'],
+            batch_size=config['batch_size'],
             uncertain_label=False,
             n_class_attr=2,
             image_dir='images',
             resampling=False,
             root_dir=CUB_DIR,
-            num_workers=og_config['num_workers'],
+            num_workers=config['num_workers'],
             concept_transform=subsample_transform,
         )
         val_dl = load_data(
             pkl_paths=[val_data_path],
             use_attr=True,
             no_img=False,
-            batch_size=og_config['batch_size'],
+            batch_size=config['batch_size'],
             uncertain_label=False,
             n_class_attr=2,
             image_dir='images',
             resampling=False,
             root_dir=CUB_DIR,
-            num_workers=og_config['num_workers'],
+            num_workers=config['num_workers'],
             concept_transform=subsample_transform,
         )
         test_dl = load_data(
             pkl_paths=[test_data_path],
             use_attr=True,
             no_img=False,
-            batch_size=og_config['batch_size'],
+            batch_size=config['batch_size'],
             uncertain_label=False,
             n_class_attr=2,
             image_dir='images',
             resampling=False,
             root_dir=CUB_DIR,
-            num_workers=og_config['num_workers'],
+            num_workers=config['num_workers'],
             concept_transform=subsample_transform,
         )
 
@@ -543,35 +543,36 @@ def generate_cub_dataset(config, data_dir=CUB_DIR):
             pkl_paths=[train_data_path],
             use_attr=True,
             no_img=False,
-            batch_size=og_config['batch_size'],
+            batch_size=config['batch_size'],
             uncertain_label=False,
             n_class_attr=2,
             image_dir='images',
             resampling=False,
             root_dir=CUB_DIR,
-            num_workers=og_config['num_workers'],
+            num_workers=config['num_workers'],
         )
         val_dl = load_data(
             pkl_paths=[val_data_path],
             use_attr=True,
             no_img=False,
-            batch_size=og_config['batch_size'],
+            batch_size=config['batch_size'],
             uncertain_label=False,
             n_class_attr=2,
             image_dir='images',
             resampling=False,
             root_dir=CUB_DIR,
-            num_workers=og_config['num_workers'],
+            num_workers=config['num_workers'],
         )
         test_dl = load_data(
             pkl_paths=[test_data_path],
             use_attr=True,
             no_img=False,
-            batch_size=og_config['batch_size'],
+            batch_size=config['batch_size'],
             uncertain_label=False,
             n_class_attr=2,
             image_dir='images',
             resampling=False,
             root_dir=CUB_DIR,
-            num_workers=og_config['num_workers'],
+            num_workers=config['num_workers'],
         )
+    return train_dl, test_dl, val_dl

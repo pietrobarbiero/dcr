@@ -39,6 +39,16 @@ def load_trained_model(
             f"{config['architecture']}{config.get('extra_name', '')}_"
             f"{arch_name}"
         )
+    if sequential:
+        extra = "Sequential"
+    elif independent:
+        extra = "Independent"
+    else:
+        extra = ""
+    model_saved_path = os.path.join(
+        result_dir or ".",
+        f'{extra}{full_run_name}.pt'
+    )
     selected_concepts = np.arange(n_concepts)
     if (
         (intervention_idxs is not None) and
@@ -54,6 +64,7 @@ def load_trained_model(
             config=config,
             imbalance=imbalance,
         )
+        model.load_state_dict(torch.load(model_saved_path))
         trainer = pl.Trainer(
             gpus=gpu,
         )
@@ -115,16 +126,7 @@ def load_trained_model(
         inactive_intervention_values=inactive_intervention_values,
         c2y_model=c2y_model,
     )
-    if sequential:
-        extra = "Sequential"
-    elif independent:
-        extra = "Independent"
-    else:
-        extra = ""
-    model_saved_path = os.path.join(
-        result_dir or ".",
-        f'{extra}{full_run_name}.pt'
-    )
+    
     model.load_state_dict(torch.load(model_saved_path))
     return model
 

@@ -32,17 +32,26 @@ def load_data(dataset, fold, train_epochs):
     y_train = y1h[train_mask]
 
     # define test set
-    c_emb_test = c_emb_test_all = c_emb[test_mask]
-    c_scores_test = c_scores_test_all = c[test_mask]
+    c_emb_test = c_emb[test_mask]
+    c_scores_test = c[test_mask]
     y_test = y1h[test_mask]
+
+    n_concepts_all = c_scores_train.shape[1]
 
     if dataset == 'celeba':
         # in celeba we first re-define the task to simulate an OOD setting
-        y_train = one_hot(torch.sum(c_scores_train[:, :2], dim=1).long()).float()
-        y_test = one_hot(torch.sum(c_scores_test[:, :2], dim=1).long()).float()
+        y_train = one_hot(torch.sum(c_scores_train[:, :1], dim=1).long()).float()
+        c_scores_train = torch.concat((c_scores_train[:, :1], c_scores_train[:, 5:]), axis=1)
+        c_emb_train = torch.concat((c_emb_train[:, :1], c_emb_train[:, 5:]), axis=1)
 
-        # and then we simulate a real-world scenario where the first two concepts are missing
-        c_emb_test = c_emb_test_all[:, 1:]
-        c_scores_test = c_scores_test_all[:, 1:]
+        y_test = one_hot(torch.sum(c_scores_test[:, :1], dim=1).long()).float()
+        c_scores_test = c_scores_test[:, 5:]
+        c_emb_test = c_emb_test[:, 5:]
 
-    return c_emb_train, c_scores_train, y_train, c_emb_test, c_scores_test, y_test
+    if dataset == 'cub':
+        sumc = torch.sum(c_scores_train[:, :100], dim=1)
+        y_train = one_hot((sumc > torch.mean(sumc)).long()).float()
+        sumc = torch.sum(c_scores_test[:, :100], dim=1)
+        y_test = one_hot((sumc > torch.mean(sumc)).long()).float()
+
+    return c_emb_train, c_scores_train, y_train, c_emb_test, c_scores_test, y_test, n_concepts_all

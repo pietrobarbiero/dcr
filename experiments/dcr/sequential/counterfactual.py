@@ -22,7 +22,7 @@ from lens.utils.base import tree_to_formula, collect_parameters
 from lens.utils.relu_nn import get_reduced_model
 
 
-def counterfactual_dcr(model: ConceptReasoningLayer, c_emb: torch.Tensor, c_score: torch.Tensor, k=10):
+def counterfactual_dcr(model: ConceptReasoningLayer, c_emb: torch.Tensor, c_score: torch.Tensor, k=5):
     df = {
         "counterfactual_samples": [],
         "counterfactual_preds": [],
@@ -68,7 +68,7 @@ def counterfactual_dcr(model: ConceptReasoningLayer, c_emb: torch.Tensor, c_scor
     return df
 
 
-def counterfactual_logistic(model: LogisticRegression, x: np.ndarray, k=10):
+def counterfactual_logistic(model: LogisticRegression, x: np.ndarray, k=5):
     df = {
         "counterfactual_samples": [],
         "counterfactual_preds": [],
@@ -111,7 +111,7 @@ def counterfactual_logistic(model: LogisticRegression, x: np.ndarray, k=10):
     return df
 
 
-def counterfactual_xrelu(model: XReluNN, x: np.ndarray, k=10):
+def counterfactual_xrelu(model: XReluNN, x: np.ndarray, k=5):
     df = {
         "counterfactual_samples": [],
         "counterfactual_preds": [],
@@ -155,7 +155,7 @@ def counterfactual_xrelu(model: XReluNN, x: np.ndarray, k=10):
     return df
 
 
-def counterfactual_tree(model: DecisionTreeClassifier, x: np.ndarray, y: np.ndarray, k=10):
+def counterfactual_tree(model: DecisionTreeClassifier, x: np.ndarray, y: np.ndarray, k=5):
     n_features = x.shape[1]
     n_classes = y.shape[1]
     concept_names = [f"f_{i}" for i in range(n_features)]

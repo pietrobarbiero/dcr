@@ -44,7 +44,7 @@ class ConceptReasoningLayer(torch.nn.Module):
             # compute attention scores to identify only relevant concepts for each class
             filter_attn = softselect(self.filter_nn(x), self.temperature)
 
-        # filter values
+        # filter value
         # filtered implemented as "or(a, not b)", corresponding to "b -> a"
         filtered_values = self.logic.disj_pair(sign_terms, self.logic.neg(filter_attn))
         # filtered_values = self.logic.disj_pair(sign_terms, filter_attn)   # TODO: avoid negation

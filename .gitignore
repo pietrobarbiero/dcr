@@ -5,6 +5,7 @@ lightning_logs/
 *.py[cod]
 *$py.class
 
+results/
 celeba/
 
 # C extensions

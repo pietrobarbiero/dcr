@@ -27,7 +27,7 @@ def main():
 
     sns.set_style('whitegrid')
     sns.despine()
-    all_cols = ListedColormap(sns.color_palette('colorblind')).colors[:3]
+    all_cols = ListedColormap(sns.color_palette('colorblind')).colors[:4]
 
     out_file = os.path.join(res_dir, 'results_sensitivity.png')
     out_file_pdf = os.path.join(res_dir, 'results_sensitivity.pdf')

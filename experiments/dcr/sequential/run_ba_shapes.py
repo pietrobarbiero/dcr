@@ -16,17 +16,24 @@ import numpy as np
 # torch.autograd.set_detect_anomaly(True)
 
 
-def load_ba_shapes_data(dataset, fold, train_epochs):
-    c_emb = np.load(f'./results/ba_shapes/{fold}/embedding_encoding.npy')
-    c_scores = np.load(f'./results/ba_shapes/{fold}/concept_scores.npy')
-    train_mask = np.load(f'./results/ba_shapes/{fold}/train_mask.npy')
-    test_mask = np.load(f'./results/ba_shapes/{fold}/test_mask.npy')
-    y = np.load(f'./results/ba_shapes/{fold}/y.npy')
+def load_ba_shapes_data(dataset, fold, num_classes):
+    c_emb = np.load(f'./results/{dataset}/{fold}/embedding_encoding.npy')
+    c_scores = np.load(f'./results/{dataset}/{fold}/concept_scores.npy')
+    train_mask = np.load(f'./results/{dataset}/{fold}/train_mask.npy')
+    test_mask = np.load(f'./results/{dataset}/{fold}/test_mask.npy')
+    y = np.load(f'./results/{dataset}/{fold}/y_graph.npy')
 
     c_emb = torch.from_numpy(c_emb).float()
     c_scores = torch.from_numpy(c_scores).float()
-    y = torch.nn.functional.one_hot(torch.from_numpy(y), num_classes=7).float()
+    print(num_classes)
+    y = torch.nn.functional.one_hot(torch.from_numpy(y), num_classes=num_classes).float()
 
+    if dataset == 'mutag':
+        train_mask = np.zeros(len(y), dtype=bool)
+        train_mask[:int(len(y) * 0.8)] = True
+        test_mask = ~train_mask
+
+    print(train_mask)
 
     c_emb_train = c_emb[train_mask]
     c_scores_train = c_scores[train_mask]
@@ -38,11 +45,14 @@ def load_ba_shapes_data(dataset, fold, train_epochs):
 
     n_concepts_all = c_scores_train.shape[1]
 
+    print(y_train)
+
     return c_emb_train, c_scores_train, y_train, c_emb_test, c_scores_test, y_test, n_concepts_all
 
 def main():
     random_state = 42
-    datasets = ['ba_shapes']
+    datasets = ['mutag']
+    classes = [2]
     train_epochs = [500]
     n_epochs = [7000]
     temperatures = [100]
@@ -66,10 +76,10 @@ def main():
     global_explanations_df = pd.DataFrame()
     counterfactuals_df = pd.DataFrame()
     cols = ['rules', 'accuracy', 'fold', 'model', 'dataset']
-    for dataset, train_epoch, epochs, temperature in zip(datasets, train_epochs, n_epochs, temperatures):
+    for dataset, train_epoch, epochs, temperature, num_classes in zip(datasets, train_epochs, n_epochs, temperatures, classes):
         for fold in folds:
             # load data
-            c_emb_train, c_scores_train, y_train, c_emb_test, c_scores_test, y_test, n_concepts_all = load_ba_shapes_data(dataset, fold - 1, train_epoch)
+            c_emb_train, c_scores_train, y_train, c_emb_test, c_scores_test, y_test, n_concepts_all = load_ba_shapes_data(dataset, fold - 1, num_classes=num_classes)
             emb_size = c_emb_train.shape[2]
             n_classes = y_train.shape[1]
 

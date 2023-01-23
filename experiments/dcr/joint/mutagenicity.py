@@ -102,7 +102,7 @@ def load_mutagenicity(batch_size):
 
 
 def run_experiment(seed, fold):
-    epochs = 1000
+    epochs = 10
     lr = 0.001
     batch_size = 16
     num_hidden_units = 40
@@ -134,6 +134,8 @@ def run_experiment(seed, fold):
     activation = torch.vstack((train_activation, test_activation)).detach().numpy()
 
     y = torch.cat((train_data.y, test_data.y))
+    print(y)
+    return
     expanded_train_y = ba_shapes_model_utils.reshape_graph_to_node_data(train_data.y, train_data.batch)
     expanded_test_y = ba_shapes_model_utils.reshape_graph_to_node_data(test_data.y, test_data.batch)
     expanded_y = torch.cat((expanded_train_y, expanded_test_y))

@@ -21,7 +21,8 @@ import torch
 global activation_list
 activation_list = {}
 
-from dcr.data.ba_shapes import NUMBER_OF_CLASSES
+# from dcr.data.ba_shapes import NUMBER_OF_CLASSES
+NUMBER_OF_CLASSES = 2
 
 def get_activation(idx):
     '''Learned from: https://discuss.pytorch.org/t/how-can-l-load-my-best-model-as-a-feature-extractor-evaluator/17254/6'''

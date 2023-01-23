@@ -1,3 +1,4 @@
+from pytorch_lightning.utilities.seed import seed_everything
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.linear_model import LogisticRegression, LogisticRegressionCV
 from sklearn.metrics import f1_score, roc_auc_score
@@ -15,25 +16,21 @@ import numpy as np
 # from experiments.dcr.sequential.load_data import load_data
 # torch.autograd.set_detect_anomaly(True)
 
+random_state = 42
+seed_everything(random_state)
 
 def load_ba_shapes_data(dataset, fold, num_classes):
-    c_emb = np.load(f'./results/{dataset}/{fold}/embedding_encoding.npy')
-    c_scores = np.load(f'./results/{dataset}/{fold}/concept_scores.npy')
-    train_mask = np.load(f'./results/{dataset}/{fold}/train_mask.npy')
-    test_mask = np.load(f'./results/{dataset}/{fold}/test_mask.npy')
-    y = np.load(f'./results/{dataset}/{fold}/y_graph.npy')
+    c_emb = torch.load(f'../joint/results/{dataset}/{fold}/embedding_encoding.pt')
+    c_scores = torch.load(f'../joint/results/{dataset}/{fold}/concept_scores.pt')
+    train_mask = torch.load(f'../joint/results/{dataset}/{fold}/train_mask.pt')
+    # test_mask = torch.load(f'../joint/results/{dataset}/{fold}/test_mask.pt')
+    y = torch.load(f'../joint/results/{dataset}/{fold}/y_graph.pt')
+    train_mask = train_mask == 1
+    test_mask = ~train_mask
 
-    c_emb = torch.from_numpy(c_emb).float()
-    c_scores = torch.from_numpy(c_scores).float()
-    print(num_classes)
-    y = torch.nn.functional.one_hot(torch.from_numpy(y), num_classes=num_classes).float()
+    y = torch.nn.functional.one_hot(y).float()
 
-    if dataset == 'mutag':
-        train_mask = np.zeros(len(y), dtype=bool)
-        train_mask[:int(len(y) * 0.8)] = True
-        test_mask = ~train_mask
-
-    print(train_mask)
+    c_scores = torch.clamp(c_scores - (torch.rand(c_scores.shape) > 1).int(), 0, 1)
 
     c_emb_train = c_emb[train_mask]
     c_scores_train = c_scores[train_mask]
@@ -45,12 +42,9 @@ def load_ba_shapes_data(dataset, fold, num_classes):
 
     n_concepts_all = c_scores_train.shape[1]
 
-    print(y_train)
-
     return c_emb_train, c_scores_train, y_train, c_emb_test, c_scores_test, y_test, n_concepts_all
 
 def main():
-    random_state = 42
     datasets = ['mutag']
     classes = [2]
     train_epochs = [500]
@@ -62,7 +56,7 @@ def main():
     folds = [i+1 for i in range(5)]
 
     # we will save all results in this directory
-    results_dir = f"results/dcr/"
+    results_dir = f"results/dcr2/"
     os.makedirs(results_dir, exist_ok=True)
 
     competitors = [
@@ -78,6 +72,8 @@ def main():
     cols = ['rules', 'accuracy', 'fold', 'model', 'dataset']
     for dataset, train_epoch, epochs, temperature, num_classes in zip(datasets, train_epochs, n_epochs, temperatures, classes):
         for fold in folds:
+            # if fold > 1: return
+
             # load data
             c_emb_train, c_scores_train, y_train, c_emb_test, c_scores_test, y_test, n_concepts_all = load_ba_shapes_data(dataset, fold - 1, num_classes=num_classes)
             emb_size = c_emb_train.shape[2]

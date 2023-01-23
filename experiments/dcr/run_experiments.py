@@ -446,9 +446,8 @@ def main(
         config["architecture"] = "DeepConceptReasoner"
         config["extra_name"] = f"Sequential"
         config['training_intervention_prob'] = 0.25
-        config['temperature'] = config.get('temperature', 1000)
+        config['temperature'] = config.get('temperature', 1.5)
         config['emb_size'] = config['emb_size']
-        config['concept_loss_weight'] = 10
         config['concept_embedder'] = CemEmbedder(cem=cem_model, n_concepts=n_concepts)
 
         dcr_sequential_model, dcr_sequential_test_results = \
@@ -515,9 +514,8 @@ def main(
         config["architecture"] = "DeepConceptReasoner"
         config["extra_name"] = f"Joint"
         config['training_intervention_prob'] = 0.25
-        config['temperature'] = config.get('temperature', 1000)
+        config['temperature'] = config.get('temperature', 1.5)
         config['emb_size'] = config['emb_size']
-        config['concept_loss_weight'] = 10
         dcr_joint_model, dcr_joint_test_results = \
             training.train_model(
                 n_concepts=n_concepts,

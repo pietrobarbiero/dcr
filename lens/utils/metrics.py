@@ -112,7 +112,10 @@ class RocAUC(Metric):
             "Target tensor needs to be (N,1) tensor if output is such."
         # Multi-class
         if len(outputs.squeeze().shape) > 1 and len(targets.squeeze().shape) == 1:
-            discrete_output = outputs
+            if targets.max() == 1:
+                discrete_output = outputs.argmax(dim=1)
+            else:
+                discrete_output = outputs
         # Multi-label or Binary classification
         else:
             discrete_output = outputs.cpu().numpy() > 0.5

@@ -15,11 +15,14 @@ from scipy.spatial.distance import cdist
 
 from dcr.data.ba_shapes import load_ba_shapes, NUMBER_OF_CLASSES
 
+import networkx as nx
 from sklearn.cluster import KMeans
 
+import torch_geometric as pyg
 import ba_shapes_model_utils
 from torch_geometric.loader import DataLoader
 from torch_geometric.datasets import TUDataset
+from sklearn.metrics import pairwise_distances
 
 global activation_list
 activation_list = {}
@@ -101,12 +104,10 @@ def load_mutagenicity(batch_size):
     return graphs, train_loader, test_loader, full_train_loader, full_test_loader, full_loader, small_loader
 
 
+components = ['C', 'O', 'l', 'H', 'N', 'F', 'r', 'S', 'P', 'I', 'a', 'K', 'i', 'a']
+
 def run_experiment(seed, fold):
-<<<<<<< HEAD
-    epochs = 2
-=======
     epochs = 20
->>>>>>> 81cbd544762515551fd306318c9392f0dde95ac7
     lr = 0.001
     batch_size = 16
     num_hidden_units = 40
@@ -141,11 +142,8 @@ def run_experiment(seed, fold):
     activation_graph = torch.vstack((train_activation_graph, test_activation_graph)).detach().numpy()
 
     y = torch.cat((train_data.y, test_data.y))
-<<<<<<< HEAD
-=======
     # print(y)
     # return
->>>>>>> 81cbd544762515551fd306318c9392f0dde95ac7
     expanded_train_y = ba_shapes_model_utils.reshape_graph_to_node_data(train_data.y, train_data.batch)
     expanded_test_y = ba_shapes_model_utils.reshape_graph_to_node_data(test_data.y, test_data.batch)
     expanded_y = torch.cat((expanded_train_y, expanded_test_y))
@@ -168,95 +166,54 @@ def run_experiment(seed, fold):
     completeness = clf.score(used_centroid_labels[test_mask].reshape(-1, 1), expanded_y[test_mask])
     print("Completeness score ", completeness)
 
-    # ba_shapes_model_utils.plot_clustering(seed, test_activation.detach().numpy(), expanded_test_y, centroids, centroid_labels, used_centroid_labels[test_mask])
+    ba_shapes_model_utils.plot_clustering(seed, test_activation.detach().numpy(), expanded_test_y, centroids, centroid_labels, used_centroid_labels[test_mask])
 
     offset = train_data.batch[-1] + 1
-    batch = torch.cat((train_data.batch, test_data.batch + offset)).detach().numpy()
+    batch = torch.cat((train_data.batch, test_data.batch + offset))
 
-    # save concept scores - 3 colours plus 4 structures
-    number_of_concepts = K
-    concept_scores = []
+    path = f'./results/mutag/concepts'
+    os.makedirs(path, exist_ok=True)
 
-<<<<<<< HEAD
-    print("Batch ", batch)
+    # find 5 closest graphs to each centroid
+    all_dist = pairwise_distances(test_activation.detach().numpy(), centroids)
+    min_5_dist = np.argsort(all_dist, axis=0)[:5]
+    for i in range(K):
+        for j in min_5_dist[:, i]:
+            graph_id = test_data.batch[j]
+            graph_nodes = torch.argwhere(test_data.batch == graph_id)
+            edges = []
+            node_labels = {}
+            for n_pos, node in enumerate(graph_nodes.ravel()):
+                edges.append(test_data.edge_index[:, test_data.edge_index[0]==node])
+                node_labels[n_pos] = components[torch.argwhere(test_data.x[node])[0]]
+            edges = torch.hstack(edges)
 
-    current_counter = batch[0]
+            # make figure
+            colors = ['r' if gn==j else 'gray' for gn in graph_nodes]
+            data = pyg.data.Data(edge_index=edges-torch.min(edges), num_nodes=len(graph_nodes))
+            G = pyg.utils.to_networkx(data)
+            pos = nx.spring_layout(G)
+            label = 'mutagenic' if test_data.y[graph_id]==0 else 'non-mutagenic'
+            plt.figure()
+            plt.title(f'Label: {label} - Concept ID: {i}')
+            nx.draw(G, pos=pos, node_color=colors, labels=node_labels)
+            plt.tight_layout()
+            plt.savefig(f'{path}/concept_label_{label}_concept_{i}.png')
+            plt.savefig(f'{path}/concept_label_{label}_concept_{i}.pdf')
+            plt.show()
 
-    current_concept_vector = np.zeros(number_of_concepts)
-
-
-    for i, g_idx in enumerate(batch):
-        if g_idx != current_counter:
-            concept_scores.append(current_concept_vector)
-            current_counter = i
-            current_concept_vector = np.zeros(number_of_concepts)
-
-        current_concept_vector[used_centroid_labels[i]] = 1
-        print("i ", i, " current counter ", current_counter)
-        print("length ", len(current_concept_vector))
-        print(current_concept_vector)
-
-    concept_scores.append(current_concept_vector)
-    concept_scores = np.array(concept_scores)
-
-    # save embedding encoding
-    embedding_encoding = []
-    for concept_vector in concept_scores:
-        embedding_vector = []
-        for i, c in enumerate(concept_vector):
-            if c == 1:
-                embedding_vector.append(np.array(centroids[i]))
-=======
-    # find unique concepts in each graph
-    all_concept_embeddings, all_concept_scores = [], []
-    all_train_mask = []
-    for i in torch.unique(batch):
-        # find concept/cluster ids
-        cid = used_centroid_labels[batch == i]
-        unique_concept_ids = np.unique(cid)
-        concept_scores = F.one_hot(torch.LongTensor(unique_concept_ids), num_classes=number_of_concepts).sum(dim=0)
-        concept_embeddings = []
-        for concept_id in range(number_of_concepts):
-            if concept_id in unique_concept_ids:
-                # concept_embeddings.append(torch.FloatTensor(activation[batch==i][cid==concept_id]))
-                new_emb = torch.FloatTensor(centroids[concept_id])
-                new_emb = torch.hstack((new_emb, torch.FloatTensor([cid==concept_id]).sum()))
-                concept_embeddings.append(new_emb)
->>>>>>> 81cbd544762515551fd306318c9392f0dde95ac7
-            else:
-                new_emb = torch.FloatTensor(activation_graph[i])
-                # new_emb = torch.ones_like(torch.FloatTensor(activation_graph[i]))
-                new_emb = torch.hstack((new_emb, torch.FloatTensor([concept_id])))
-                concept_embeddings.append(new_emb)
-        concept_embeddings = torch.vstack(concept_embeddings)
-        all_concept_embeddings.append(concept_embeddings.unsqueeze(0))
-        all_concept_scores.append(concept_scores.unsqueeze(0))
-        all_train_mask.append(train_mask[batch==i][0])
-
-    all_concept_embeddings = torch.vstack(all_concept_embeddings)
-    all_concept_scores = torch.vstack(all_concept_scores)
-    all_train_mask = torch.LongTensor(all_train_mask)
-
-    path = f'./results/mutag/{fold}'
-    if not os.path.exists(path):
-        os.makedirs(path)
-
-    # torch.save(model.state_dict(), f'{path}/model.pt')
-    torch.save(all_concept_embeddings, f'{path}/embedding_encoding.pt')
-    torch.save(all_concept_scores, f'{path}/concept_scores.pt')
-    torch.save(all_train_mask, f'{path}/train_mask.pt')
-    torch.save(y, f'{path}/y_graph.pt')
 
 def main():
     # run multiple times for confidence interval - seeds generated using Google's random number generator
     random_seeds = [42, 19, 76, 58, 92]
+    random_seeds = [92]
 
     for fold, seed in enumerate(random_seeds):
         print("\nSTART EXPERIMENT-----------------------------------------\n")
         seed_everything(seed)
         run_experiment(seed, fold)
         print("\nEND EXPERIMENT-------------------------------------------\n")
-        # break
+        break
 
 
 if __name__ == '__main__':

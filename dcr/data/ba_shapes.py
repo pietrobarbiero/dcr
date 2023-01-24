@@ -12,10 +12,10 @@ NUMBER_OF_CLASSES = 6
 NUMBER_OF_EXAMPLES = 1500
 
 def load_graph(idx):
-    G = nx.read_gpickle(f"./data/ba_shapes/{idx}_graph_ba_20_1.gpickel")
-    node_labels = np.load(f"./data/ba_shapes/{idx}_role_ids_ba_20_1.npy")
-    concept_labels = np.load(f"./data/ba_shapes/{idx}_color_concepts_ba_20_1.npy")
-    graph_label = np.load(f"data/ba_shapes/{idx}_y_ba_20_1.npy")
+    G = nx.read_gpickle(f"./data/ba_shapes2/{idx}_graph_ba_20_1.gpickel")
+    node_labels = np.load(f"./data/ba_shapes2/{idx}_role_ids_ba_20_1.npy")
+    concept_labels = np.load(f"./data/ba_shapes2/{idx}_color_concepts_ba_20_1.npy")
+    graph_label = np.load(f"data/ba_shapes2/{idx}_y_ba_20_1.npy")
 
     existing_node = list(G.nodes)[-1]
     feat_dim = G.nodes[existing_node]["feat"].size
@@ -82,7 +82,7 @@ def load_ba_shapes_node_class():
         if l == 0 and c == 1:
             labels.append(l)
 
-        if c == 2 or c == 15:
+        if c == 2 or c == 24:
             labels.append(l)
         # elif c == 24:
         #     if l == 4:

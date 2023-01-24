@@ -21,7 +21,6 @@ import torch
 global activation_list
 activation_list = {}
 
-from dcr.data.ba_shapes import NUMBER_OF_CLASSES
 
 def get_activation(idx):
     '''Learned from: https://discuss.pytorch.org/t/how-can-l-load-my-best-model-as-a-feature-extractor-evaluator/17254/6'''
@@ -203,7 +202,7 @@ def test_graph_class(model, dataloader, if_interpretable_model=True):
     return correct / len(dataloader.dataset)
 
 
-def train_graph_class(model, train_loader, test_loader, full_loader, epochs, lr, if_interpretable_model=True):
+def train_graph_class(model, train_loader, test_loader, full_loader, epochs, lr, num_classes=2, if_interpretable_model=True):
     # register hooks to track activation
     model = register_hooks(model)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
@@ -229,13 +228,16 @@ def train_graph_class(model, train_loader, test_loader, full_loader, epochs, lr,
                 out = model(data.x, data.edge_index, data.batch)
 
             # calculate loss
-            one_hot = torch.nn.functional.one_hot(data.y, num_classes=NUMBER_OF_CLASSES).type_as(out)
+            one_hot = torch.nn.functional.one_hot(data.y, num_classes=num_classes).type_as(out)
             if out.shape[1] == 1 or one_hot.shape[1] == 1:
                 print("What ", out.shape)
                 print(out)
                 print("What2 ", data.y.shape, " ", one_hot.shape)
                 print(data.y)
                 print(one_hot)
+
+            # print(out.shape)
+            # print(one_hot.shape)
             loss = criterion(out, one_hot)
             loss.backward()
             # torch.nn.utils.clip_grad_norm_(model.parameters(), 2.0)
@@ -263,7 +265,7 @@ def train_graph_class(model, train_loader, test_loader, full_loader, epochs, lr,
             else:
                 out = model(data.x, data.edge_index, data.batch)
 
-            one_hot = torch.nn.functional.one_hot(data.y, num_classes=NUMBER_OF_CLASSES).type_as(out)
+            one_hot = torch.nn.functional.one_hot(data.y, num_classes=num_classes).type_as(out)
             if out.shape[1] == 1 or one_hot.shape[1] == 1:
                 print("What ", out.shape)
                 print(out)

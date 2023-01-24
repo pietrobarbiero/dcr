@@ -26,10 +26,10 @@ def get_color_concept(color_str):
         return 80
     elif color_str == 'blue':
         return 15
-    elif color_str == 'orange':
-        return 24
-    elif color_str == 'cobalt':
-        return 80
+    # elif color_str == 'orange':
+    #     return 24
+    # elif color_str == 'cobalt':
+    #     return 80
 
 class FeatureGen(metaclass=abc.ABCMeta):
     """Feature Generator base class."""
@@ -71,7 +71,8 @@ def house(start, color=None, role_start=0):
     )
     # graph.add_edges_from([(start, start + 2), (start + 1, start + 3)])
     graph.add_edges_from([(start + 4, start), (start + 4, start + 1)])
-    roles = [role_start, role_start, role_start + 1, role_start + 1, role_start + 2]
+    # roles = [role_start, role_start, role_start + 1, role_start + 1, role_start + 2]
+    roles = [role_start, role_start, role_start, role_start, role_start]
 
     if color:
         concepts = np.ones(len(roles)) * color
@@ -110,7 +111,7 @@ def star(start, color=None, role_start=0):
     for i in range(peaks - 1):
         graph.add_edges_from([(start, start + i + 1)])
 
-    roles = [role_start] + ([role_start + 1] * (peaks))
+    roles = [role_start] + ([role_start] * (peaks))
 
     if color:
         concepts = np.ones(len(roles)) * color
@@ -162,9 +163,9 @@ def ba(start, width, color=None, role_start=0, m=5):
     return graph, roles, concepts
 
 
-def build_graph(width_basis, basis_type, list_shapes, color, start=0, rdm_basis_plugins=False, add_random_edges=0, m=5):
+def build_graph(width_basis, basis_type, list_shapes, color=None, start=0, rdm_basis_plugins=False, add_random_edges=0, m=5):
     if basis_type == "ba":
-        basis, role_id, concepts = eval(basis_type)(start, width_basis, m=m, color='green')
+        basis, role_id, concepts = eval(basis_type)(start, width_basis, m=m, color=None)
 
     n_basis, n_shapes = nx.number_of_nodes(basis), len(list_shapes)
     start += n_basis  # indicator of the id of the next node
@@ -179,15 +180,16 @@ def build_graph(width_basis, basis_type, list_shapes, color, start=0, rdm_basis_
 
     counter = 0
     for shape_id, shape in enumerate(list_shapes):
-        color = 'blue'
-        if counter >= 40:
-            color = 'red'
+        color=None
+        # color = 'blue'
+        # if counter >= 40:
+        #     color = 'red'
         # elif counter >= 30:
         #     color = 'orange'
 
         shape_type = shape[0]
         args = [start]
-        args += [get_color_concept(color)]
+        args += [color]
         if len(shape) > 1:
             args += shape[1:]
         args += [0]
@@ -323,10 +325,10 @@ def generate_ba_shapes_graph_class_pure_sturcture():
 
             name = basis_type + "_" + str(width_basis) + "_" + str(nb_shapes)
 
-            nx.readwrite.write_gpickle(G, f"./data/ba_shapes/{counter}_graph_{name}.gpickel")
-            np.save(f"data/ba_shapes/{counter}_role_ids_{name}.npy", np.array(role_id))
-            np.save(f"data/ba_shapes/{counter}_color_concepts_{name}.npy", np.array(concepts))
-            np.save(f"data/ba_shapes/{counter}_y_{name}.npy", np.array([y]))
+            nx.readwrite.write_gpickle(G, f"./data/ba_shapes2/{counter}_graph_{name}.gpickel")
+            np.save(f"data/ba_shapes2/{counter}_role_ids_{name}.npy", np.array(role_id))
+            np.save(f"data/ba_shapes2/{counter}_color_concepts_{name}.npy", np.array(concepts))
+            np.save(f"data/ba_shapes2/{counter}_y_{name}.npy", np.array([y]))
 
             if 5 in concepts:
                 print(shape1, " ", shape2)
@@ -367,9 +369,9 @@ def generate_ba_shapes_node_class():
 def main():
     # generate_ba_shapes_graph_class()
 
-    # generate_ba_shapes_graph_class_pure_sturcture()
+    generate_ba_shapes_graph_class_pure_sturcture()
 
-    generate_ba_shapes_node_class()
+    # generate_ba_shapes_node_class()
 
 
 

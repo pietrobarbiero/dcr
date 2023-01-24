@@ -323,10 +323,10 @@ def generate_ba_shapes_graph_class_pure_sturcture():
 
             name = basis_type + "_" + str(width_basis) + "_" + str(nb_shapes)
 
-            nx.readwrite.write_gpickle(G, f"./data/ba_shapes/{counter}_graph_{name}.gpickel")
-            np.save(f"data/ba_shapes/{counter}_role_ids_{name}.npy", np.array(role_id))
-            np.save(f"data/ba_shapes/{counter}_color_concepts_{name}.npy", np.array(concepts))
-            np.save(f"data/ba_shapes/{counter}_y_{name}.npy", np.array([y]))
+            nx.readwrite.write_gpickle(G, f"./data/ba_shapes2/{counter}_graph_{name}.gpickel")
+            np.save(f"data/ba_shapes2/{counter}_role_ids_{name}.npy", np.array(role_id))
+            np.save(f"data/ba_shapes2/{counter}_color_concepts_{name}.npy", np.array(concepts))
+            np.save(f"data/ba_shapes2/{counter}_y_{name}.npy", np.array([y]))
 
             if 5 in concepts:
                 print(shape1, " ", shape2)
@@ -367,9 +367,9 @@ def generate_ba_shapes_node_class():
 def main():
     # generate_ba_shapes_graph_class()
 
-    # generate_ba_shapes_graph_class_pure_sturcture()
+    generate_ba_shapes_graph_class_pure_sturcture()
 
-    generate_ba_shapes_node_class()
+    # generate_ba_shapes_node_class()
 
 
 

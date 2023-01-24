@@ -19,14 +19,20 @@ from sklearn.cluster import KMeans
 
 import ba_shapes_model_utils
 from torch_geometric.loader import DataLoader
-from torch_geometric.datasets import TUDataset
 
 global activation_list
 activation_list = {}
 
-from sklearn.metrics.cluster import completeness_score
-
 from sklearn.tree import DecisionTreeClassifier
+
+def register_hooks(model):
+    for name, m in model.named_modules():
+            if isinstance(m, GCNConv) or isinstance(m, nn.Linear) or isinstance(m, DenseGCNConv):
+                m.register_forward_hook(get_activation(f"{name}"))
+
+    return model
+
+from sklearn.metrics.cluster import completeness_score
 
 # model definition
 class GCN(nn.Module):
@@ -66,39 +72,6 @@ class GCN(nn.Module):
 
         return F.log_softmax(x, dim=-1)
 
-def load_mutagenicity(batch_size):
-    graphs = TUDataset(root='../data/', name='Mutagenicity')
-    graphs = graphs.shuffle()
-
-    train_split = 0.8
-    train_idx = int(len(graphs) * train_split)
-    train_set = graphs[:train_idx]
-    test_set = graphs[train_idx:]
-
-    train_loader = DataLoader(train_set, batch_size=batch_size, shuffle=True)
-    test_loader = DataLoader(test_set, batch_size=batch_size, shuffle=False)
-
-    full_train_loader = DataLoader(train_set, batch_size=int(len(train_set) * 0.1), shuffle=False)
-    full_test_loader = DataLoader(test_set, batch_size=int(len(test_set) * 0.1), shuffle=False)
-
-    full_loader = DataLoader(test_set, batch_size=int(len(test_set)), shuffle=False)
-    small_loader = DataLoader(test_set, batch_size=int(len(test_set) * 0.1), shuffle=False)
-
-    train_zeros = 0
-    train_ones = 0
-
-    for data in train_set:
-        train_ones += np.sum(data.y.detach().numpy())
-        train_zeros += len(data.y.detach().numpy()) - np.sum(data.y.detach().numpy())
-
-    test_zeros = 0
-    test_ones = 0
-
-    for data in test_set:
-        test_ones += np.sum(data.y.detach().numpy())
-        test_zeros += len(data.y.detach().numpy()) - np.sum(data.y.detach().numpy())
-
-    return graphs, train_loader, test_loader, full_train_loader, full_test_loader, full_loader, small_loader
 
 
 def run_experiment(seed, fold):
@@ -106,20 +79,26 @@ def run_experiment(seed, fold):
     lr = 0.001
     batch_size = 16
     num_hidden_units = 40
-    num_classes = 2
-    K = 30
+    num_classes = NUMBER_OF_CLASSES
+    K = 20
 
     # load data
-    graphs, train_dl, test_dl, full_train_dl, full_test_dl, full_loader, small_loader = load_mutagenicity(batch_size)
+    graphs, train_data, test_data, in_concepts, out_concepts, concept_names, class_names = load_ba_shapes()
+
+    train_dl = DataLoader(train_data, batch_size, shuffle=True)
+    test_dl = DataLoader(test_data, batch_size, shuffle=False)
+    full_train_dl = DataLoader(train_data, len(graphs), shuffle=True)
+    full_test_dl = DataLoader(test_data, len(graphs), shuffle=False)
+    full_loader = DataLoader(graphs, batch_size, shuffle=False)
 
     # model training
-    model = GCN(graphs.num_node_features, num_hidden_units, graphs.num_classes)
+    model = GCN(graphs[0].x.shape[1], num_hidden_units, num_classes)
 
     # register hooks to track activation
     model = ba_shapes_model_utils.register_hooks(model)
 
     # train
-    train_acc, test_acc, train_loss, test_loss = ba_shapes_model_utils.train_graph_class(model, train_dl, test_dl, full_loader, epochs, lr, if_interpretable_model=False)
+    train_acc, test_acc, train_loss, test_loss = ba_shapes_model_utils.train_graph_class(model, train_dl, test_dl, full_loader, epochs, lr, num_classes=num_classes, if_interpretable_model=False)
     print(test_acc[-1])
 
     # get model activations for complete dataset
@@ -149,38 +128,34 @@ def run_experiment(seed, fold):
     centroid_labels = np.sort(np.unique(used_centroid_labels))
     centroids = kmeans_model.cluster_centers_
 
-    # completeness = completeness_score(expanded_y, used_centroid_labels)
+    completeness = completeness_score(expanded_y, used_centroid_labels)
 
     clf = DecisionTreeClassifier(random_state=seed)
     clf = clf.fit(used_centroid_labels[train_mask].reshape(-1, 1), expanded_y[train_mask])
     completeness = clf.score(used_centroid_labels[test_mask].reshape(-1, 1), expanded_y[test_mask])
     print("Completeness score ", completeness)
 
-    # ba_shapes_model_utils.plot_clustering(seed, test_activation.detach().numpy(), expanded_test_y, centroids, centroid_labels, used_centroid_labels[test_mask])
+    ba_shapes_model_utils.plot_clustering(seed, test_activation.detach().numpy(), expanded_test_y, centroids, centroid_labels, used_centroid_labels[test_mask])
+
 
     offset = train_data.batch[-1] + 1
-    batch = torch.cat((train_data.batch, test_data.batch + offset)).detach().numpy()
+    batch = torch.cat((train_data.batch, test_data.batch + offset))
 
     # save concept scores - 3 colours plus 4 structures
     number_of_concepts = K
     concept_scores = []
 
-    print("Batch ", batch)
-
     current_counter = batch[0]
-
     current_concept_vector = np.zeros(number_of_concepts)
-
-
-    for i, g_idx in enumerate(batch):
-        if g_idx != current_counter:
+    for i in batch:
+        print(i)
+        if i != current_counter:
             concept_scores.append(current_concept_vector)
             current_counter = i
             current_concept_vector = np.zeros(number_of_concepts)
 
         current_concept_vector[used_centroid_labels[i]] = 1
-        print("i ", i, " current counter ", current_counter)
-        print("length ", len(current_concept_vector))
+        print("lengt ", len(current_concept_vector))
         print(current_concept_vector)
 
     concept_scores.append(current_concept_vector)
@@ -200,7 +175,7 @@ def run_experiment(seed, fold):
 
     embedding_encoding = np.array(embedding_encoding)
 
-    path = f'./results/mutag/{fold}'
+    path = f'./results/ba_shapes_graph/{fold}'
     if not os.path.exists(path):
         os.makedirs(path)
 

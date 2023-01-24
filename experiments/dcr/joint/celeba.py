@@ -11,7 +11,7 @@ from dcr.semantics import GodelTNorm
 
 
 def main():
-    epochs = 50
+    epochs = 1
     learning_rate = 0.0008
     emb_size = 16
     batch_size = 128
@@ -20,6 +20,7 @@ def main():
     train_data, test_data, in_concepts, out_concepts, concept_names, class_names = load_celeba()
     train_dl = DataLoader(train_data, batch_size, shuffle=True, pin_memory=True)
     test_dl = DataLoader(test_data, batch_size, shuffle=False, pin_memory=True)
+
 
     for fold in range(5):
         results_dir = f"./results/celeba/{fold}/"

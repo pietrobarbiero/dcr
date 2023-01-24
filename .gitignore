@@ -5,6 +5,13 @@ lightning_logs/
 *.py[cod]
 *$py.class
 
+.DS_Store
+data/ba_shapes/*_y_*
+data/ba_shapes2/
+results/
+celeba/
+dcr_env/
+
 # C extensions
 *.so
 

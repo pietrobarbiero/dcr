@@ -78,6 +78,7 @@ def main():
     competitors = [
         DecisionTreeClassifier(random_state=random_state),
         LogisticRegression(random_state=random_state),
+        XGBClassifier(random_state=random_state),
     ]
 
     results = []
@@ -117,23 +118,41 @@ def main():
                     # get explanations
                     classifier.fit(c_scores_train, y_train.argmax(dim=-1).detach())
                     pred_class = classifier.predict(c_scores_test)
-                    try:
-                        explanations = classifier.coef_
-                    except:
-                        explanations = classifier.feature_importances_
+                    if classifier.__class__.__name__ == 'XGBClassifier':
+                        method_name = f'{classifier.__class__.__name__}+LIME'
+                        explainer = lime_tabular.LimeTabularExplainer(c_scores_train.detach().numpy(),
+                                                                      discretize_continuous=True)
+                        explanations = []
+                        for sample in c_scores_test.detach().numpy():
+                            exp = explainer.explain_instance(sample, classifier.predict_proba)
+                            explanations.append([i[1] for i in exp.local_exp[1]])
+                    else:
+                        method_name = f'{classifier.__class__.__name__}'
+                        try:
+                            explanations = classifier.coef_
+                        except:
+                            explanations = classifier.feature_importances_
 
                     # get perturbed explanations
                     classifier.fit(c_scores_train_perturbed, y_train.argmax(dim=-1).detach())
                     pred_class_perturbed = classifier.predict(c_scores_test)
-                    try:
-                        explanations_perturbed = classifier.coef_
-                    except:
-                        explanations_perturbed = classifier.feature_importances_
+                    if classifier.__class__.__name__ == 'XGBClassifier':
+                        explainer = lime_tabular.LimeTabularExplainer(c_scores_train_perturbed.detach().numpy(),
+                                                                      discretize_continuous=True)
+                        explanations_perturbed = []
+                        for sample in c_scores_test.detach().numpy():
+                            exp = explainer.explain_instance(sample, classifier.predict_proba)
+                            explanations_perturbed.append([i[1] for i in exp.local_exp[1]])
+                    else:
+                        try:
+                            explanations_perturbed = classifier.coef_
+                        except:
+                            explanations_perturbed = classifier.feature_importances_
 
                     # compute sensitivity
                     explanation_distance = sensitivity(torch.FloatTensor(explanations), torch.FloatTensor(explanations_perturbed))
                     prediction_distance = sensitivity_predictions(torch.FloatTensor(pred_class), torch.FloatTensor(pred_class_perturbed))
-                    results.append(['', None, fold, f'{classifier.__class__.__name__}', dataset, radius.item(), explanation_distance.item(), prediction_distance.item()])
+                    results.append(['', None, fold, method_name, dataset, radius.item(), explanation_distance.item(), prediction_distance.item()])
                     pd.DataFrame(results, columns=cols).to_csv(os.path.join(results_dir, 'sensitivity.csv'))
 
 

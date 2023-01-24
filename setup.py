@@ -38,6 +38,8 @@ setuptools.setup(
         "sklearn>=0.0",
         "torch>=1.11.0",
         "torchmetrics>=0.6.2",
-        "torchvision>=0.12.0",
+        "torchvision>=0.14.0",
+        "networkx==2.5",
+        "scipy>=1.3.2"
     ],
 )

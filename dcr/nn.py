@@ -59,7 +59,7 @@ class ConceptReasoningLayer(torch.nn.Module):
         else:
             return preds
 
-    def explain(self, x, c, mode, concept_names=None, class_names=None):
+    def explain(self, x, c, mode, concept_names=None, class_names=None, filter_attn=None):
         assert mode in ['local', 'global', 'exact']
 
         if concept_names is None:
@@ -68,7 +68,7 @@ class ConceptReasoningLayer(torch.nn.Module):
             class_names = [f'y_{i}' for i in range(self.n_classes)]
 
         # make a forward pass to get predictions and attention weights
-        y_preds, sign_attn_mask, filter_attn_mask = self.forward(x, c, return_attn=True)
+        y_preds, sign_attn_mask, filter_attn_mask = self.forward(x, c, return_attn=True, filter_attn=filter_attn)
 
         explanations = []
         all_class_explanations = {cn: [] for cn in class_names}

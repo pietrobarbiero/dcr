@@ -248,7 +248,7 @@ class BaseClassifier(torch.nn.Module):
             if not save:
                 os.remove(self.name)
         elif save:
-            self.save()
+            self.save(set_trained=True)
 
         # Performance dictionary
         performance_dict = {

@@ -17,7 +17,14 @@ plt.rc('ytick', labelsize=18)
 plt.rc('axes', labelsize=23)
 
 def main():
-    results = pd.read_csv(f'results/dcr/accuracy.csv', index_col=None)
+    if os.path.exists(f'results/dcr/accuracy.csv'):
+        results = pd.read_csv(f'results/dcr/accuracy.csv', index_col=None)
+    else:
+        results = []
+        for dataset in ['xor', 'trig', 'vec', 'mutag', 'celeba']:
+            results.append(pd.read_csv(f'results/dcr/{dataset}_accuracy.csv', index_col=None))
+        results = pd.concat(results)
+        results['model'] = results['Model']
     res_dir = f'results/dcr/'
 
     os.makedirs(res_dir, exist_ok=True)
@@ -27,27 +34,31 @@ def main():
     # results['model'] = results['model'].str.replace('DCR+', 'DCR+ (ours)')
 
     datasets = results['dataset'].unique()
-    models = results['model'].unique()
+    models = results['Model'].unique()
     datasets_names = ['XOR', 'Trigonometry', 'Vector', 'Mutagenicity', 'CelebA']
     model_dict = {}
     for m in models:
-        if m == 'DCR (ours)': model_dict[m] = ['CEM+DCR (ours)', True]
-        if m == 'DecisionTreeClassifier': model_dict[m] = ['CBM+Decision Tree', True]
-        if m == 'LogisticRegression': model_dict[m] = ['CBM+Logistic Regression', True]
-        if m == 'XGBClassifier': model_dict[m] = ['CBM+XGBoost*', False]
-        if m == 'DecisionTreeClassifier (Emb.)': model_dict[m] = ['CEM+Decision Tree*', False]
-        if m == 'LogisticRegression (Emb.)': model_dict[m] = ['CEM+Logistic Regression*', False]
-        if m == 'XGBClassifier (Emb.)': model_dict[m] = ['CEM+XGBoost*', False]
-    model_df = pd.DataFrame(model_dict, index=['Model', 'Interpretable']).T
+        if m == 'DCR (ours)': model_dict[m] = ['CE+DCR (ours)', True]
+        if m == 'DecisionTreeClassifier': model_dict[m] = ['CT+Decision Tree', True]
+        if m == 'LogisticRegression': model_dict[m] = ['CT+Logistic Regression', True]
+        if m == 'XGBClassifier': model_dict[m] = ['CT+XGBoost*', False]
+        if m == "XReluNN": model_dict[m] = ["CT+ReluNet", True]
+        if m == 'DecisionTreeClassifier (Emb.)': model_dict[m] = ['CE+Decision Tree', False]
+        if m == 'LogisticRegression (Emb.)': model_dict[m] = ['CE+Logistic Regression', False]
+        if m == 'XGBClassifier (Emb.)': model_dict[m] = ['CE+XGBoost', False]
+        if m == "XReluNN (Emb.)": model_dict[m] = ["CE+ReluNet", False]
+    model_df = pd.DataFrame(model_dict, index=['model', 'Interpretable']).T
+
+
 
     sns.set_style('whitegrid')
     sns.despine()
-    hatches = itertools.cycle(['', '', '', '', '\\/', '\\/', '\\/'])
+    hatches = itertools.cycle(['', '', '', '',  '\\/','\\/', '\\/', '\\/', '\\/'])
     all_cols = ListedColormap(sns.color_palette('colorblind')).colors
-    old_cols = all_cols[0:3] + [all_cols[7]] + all_cols[1:3] + [all_cols[7]]
+    old_cols = all_cols[0:4] + [all_cols[7]] + all_cols[1:4] + [all_cols[7]]
     cols = []
     for i, c in enumerate(old_cols):
-        if i > 2:
+        if i > 3:
             cols.append((np.array(c)*0.6).tolist())
         else:
             cols.append(np.array(c).tolist())
@@ -68,7 +79,7 @@ def main():
         ymin = 100
         for g in groups:
             models_in_g = model_df[model_df['Interpretable']==g]
-            res_in_g = res_in_dataset[res_in_dataset['model'].isin(pd.Series(models_in_g['Model'].index))]
+            res_in_g = res_in_dataset[res_in_dataset['model'].isin(pd.Series(models_in_g['model'].index))]
             accs_mean = res_in_g.groupby(['model']).mean()
             accs_mean = accs_mean.loc[models_in_g.index].values.ravel() * 100
             accs_sem = res_in_g.groupby(['model']).sem()
@@ -103,11 +114,11 @@ def main():
             yt = np.arange(ymin+5, 101., 5).astype(int)
         plt.yticks(yt, yt)
     patches = [l for l in lines[0]] + [l for l in lines[1]]
-    fig.legend(patches, model_df['Model'].values, loc='upper center',
+    fig.legend(patches, model_df['model'].values, loc='upper center',
               # bbox_to_anchor=(-0.8, -0.2),
               bbox_to_anchor=(0.5, 0.05),
                fontsize=14, frameon=False,
-               fancybox=False, shadow=False, ncol=len(models))
+               fancybox=False, shadow=False, ncol=len(models)/2)
     plt.tight_layout()
     plt.savefig(out_file, bbox_inches='tight')
     plt.savefig(out_file_pdf, bbox_inches='tight')

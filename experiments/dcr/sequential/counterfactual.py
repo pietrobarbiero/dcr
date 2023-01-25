@@ -24,7 +24,7 @@ from lens.utils.base import tree_to_formula, collect_parameters
 from lens.utils.relu_nn import get_reduced_model
 
 
-def counterfactual_dcr(model: ConceptReasoningLayer, c_emb: torch.Tensor, c_score: torch.Tensor, k=5):
+def counterfactual_dcr(model: ConceptReasoningLayer, c_emb: torch.Tensor, c_score: torch.Tensor, k=10):
     df = {
         "counterfactual_samples": [],
         "counterfactual_preds": [],
@@ -73,7 +73,7 @@ def counterfactual_dcr(model: ConceptReasoningLayer, c_emb: torch.Tensor, c_scor
     return df
 
 
-def counterfactual_xrelu(model: XReluNN, x: np.ndarray, k=5):
+def counterfactual_xrelu(model: XReluNN, x: np.ndarray, k=10):
     df = {
         "counterfactual_samples": [],
         "counterfactual_preds": [],
@@ -120,7 +120,7 @@ def counterfactual_xrelu(model: XReluNN, x: np.ndarray, k=5):
     return df
 
 
-def counterfactual_logistic(model: LogisticRegression, x: np.ndarray, k=5):
+def counterfactual_logistic(model: LogisticRegression, x: np.ndarray, k=10):
     df = {
         "counterfactual_samples": [],
         "counterfactual_preds": [],
@@ -167,7 +167,7 @@ def counterfactual_logistic(model: LogisticRegression, x: np.ndarray, k=5):
     return df
 
 
-def counterfactual_tree(model: DecisionTreeClassifier, x: np.ndarray, k=5):
+def counterfactual_tree(model: DecisionTreeClassifier, x: np.ndarray, k=10):
     tree_ = model.tree_
 
     df = {
@@ -254,6 +254,8 @@ def counterfactual_tree(model: DecisionTreeClassifier, x: np.ndarray, k=5):
             df["counterfactual_preds_norm"].append(pred/orig_pred)
             df["sample_id"].append(i)
             df["iteration"].append(d + 1)
+            if d == k:
+                break
 
 
     return df
@@ -268,7 +270,7 @@ def counterfactual_tree(model: DecisionTreeClassifier, x: np.ndarray, k=5):
 # plt.show()
 
 
-def counterfactual_xgboost(model: XGBClassifier, x: np.ndarray, k=5):
+def counterfactual_xgboost(model: XGBClassifier, x: np.ndarray, k=10):
     df = {
         "counterfactual_samples": [],
         "counterfactual_preds": [],
@@ -310,7 +312,7 @@ def counterfactual_xgboost(model: XGBClassifier, x: np.ndarray, k=5):
     return df
 
 
-def counterfactual_lime(model: XGBClassifier, x: torch.Tensor, k=5):
+def counterfactual_lime(model: XGBClassifier, x: torch.Tensor, k=10):
     df = {
         "counterfactual_samples": [],
         "counterfactual_preds": [],
@@ -321,7 +323,7 @@ def counterfactual_lime(model: XGBClassifier, x: torch.Tensor, k=5):
 
     num_features = x.shape[1]
     explainer = LimeTabularExplainer(x.numpy(), categorical_features=[*range(num_features)],
-                                     feature_names=[f"x_{i}" for i in range(num_features)])
+                                     feature_names=[f"x_{i:2d}" for i in range(num_features)])
     for i, sample in enumerate(x):
         new_sample = copy.deepcopy(sample)
         orig_class = model.predict(new_sample.unsqueeze(0))[0]
@@ -335,8 +337,8 @@ def counterfactual_lime(model: XGBClassifier, x: torch.Tensor, k=5):
                                                  num_features=num_features, top_labels=1).as_list(label=orig_class)
         explanation = np.zeros(num_features)
         for feat, imp in lime_explanation:
-            d = int(feat[2])
-            sign = int(feat[4])
+            d = int(feat[2:4])
+            sign = int(feat[5])
             if not sign:
                 imp = - imp
             explanation[d] = imp

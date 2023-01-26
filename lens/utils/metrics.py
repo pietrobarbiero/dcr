@@ -115,6 +115,8 @@ class RocAUC(Metric):
             if targets.max() == 1:
                 discrete_output = outputs.argmax(dim=1)
             else:
+                if outputs.sum(1)[0] != 1:
+                    outputs = torch.softmax(outputs, dim=1)
                 discrete_output = outputs
         # Multi-label or Binary classification
         else:

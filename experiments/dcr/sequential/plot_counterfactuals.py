@@ -66,11 +66,15 @@ print(table_results.to_latex(escape=False))
 # Plot
 sns.set_style('whitegrid')
 sns.despine()
-# hatches = itertools.cycle(['', '', '', '', '\\/', '\\/', '\\/'])
-all_cols = ListedColormap(sns.color_palette('colorblind')).colors
-cols = all_cols[0:5] + [all_cols[7]] # + all_cols[1:3] + [all_cols[7]]
-cols = np.array(cols)
 
+cols = [
+    sns.color_palette('colorblind')[0],
+    sns.color_palette('colorblind')[7],
+    sns.color_palette('colorblind')[4],
+    sns.color_palette('colorblind')[1],
+    sns.color_palette('colorblind')[2],
+    sns.color_palette('colorblind')[3],
+]
 fig = plt.figure(figsize=[18, 4])
 lines = []
 for i, dataset in enumerate(datasets):
@@ -78,26 +82,24 @@ for i, dataset in enumerate(datasets):
     plt.title(rf'{datasets_names[i]}', fontsize=30)
     res_in_dataset = results[results['dataset'] == dataset]
     sns.lineplot(ax=ax, data=res_in_dataset, x="iteration", y="counterfactual_preds_norm",
-                        hue="Model", palette=cols, legend=False)
+                        hue="Model", palette=cols)
     sns.despine()
     if i == 0:
-        plt.ylabel("$\overline{f}(x^\star)$")
+        plt.ylabel("Model Confidence")
     else:
         plt.ylabel("")
-    plt.xlabel("$|x^\star - x|$")
+    plt.xlabel("\# Features Perturbed")
     lines.append(ax.get_legend_handles_labels())
+    ax.legend().set_visible(False)
 
-patches = [l for l in lines[0]] + [l for l in lines[1]]
-fig.legend(patches, model_df['Model'].values, loc='upper center',
-          # bbox_to_anchor=(-0.8, -0.2),
+fig.legend(lines[0][0], model_df['Model'].values, loc='upper center',
           bbox_to_anchor=(0.5, 0.05),
-           fontsize=12, frameon=False,
+           fontsize=16, frameon=False,
            fancybox=False, shadow=False, ncol=len(models))
 plt.tight_layout()
 plt.savefig(out_file, bbox_inches='tight')
 plt.savefig(out_file_pdf, bbox_inches='tight')
 plt.show()
-
 #
 # if __name__ == '__main__':
 #     main()

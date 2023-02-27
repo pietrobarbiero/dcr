@@ -14,13 +14,38 @@ from dcr.nn import ConceptReasoningLayer
 from experiments.dcr.sequential.load_data import load_data
 # torch.autograd.set_detect_anomaly(True)
 
+def load_ba_shapes_data(dataset, fold, num_classes):
+    c_emb = torch.load(f'../joint/results/{dataset}/{fold}/embedding_encoding.pt')
+    c_scores = torch.load(f'../joint/results/{dataset}/{fold}/concept_scores.pt')
+    train_mask = torch.load(f'../joint/results/{dataset}/{fold}/train_mask.pt')
+    # test_mask = torch.load(f'../joint/results/{dataset}/{fold}/test_mask.pt')
+    y = torch.load(f'../joint/results/{dataset}/{fold}/y_graph.pt')
+    train_mask = train_mask == 1
+    test_mask = ~train_mask
+
+    y = torch.nn.functional.one_hot(y).float()
+
+    c_scores = torch.clamp(c_scores - (torch.rand(c_scores.shape) > 1).int(), 0, 1)
+
+    c_emb_train = c_emb[train_mask]
+    c_scores_train = c_scores[train_mask]
+    y_train = y[train_mask]
+
+    c_emb_test = c_emb[test_mask]
+    c_scores_test = c_scores[test_mask]
+    y_test = y[test_mask]
+
+    n_concepts_all = c_scores_train.shape[1]
+
+    return c_emb_train, c_scores_train, y_train, c_emb_test, c_scores_test, y_test, n_concepts_all
+
 
 def main():
     random_state = 42
-    datasets = ['xor', 'trig', 'vec', 'celeba']
-    train_epochs = [500, 500, 500, 200]
-    n_epochs = [3000, 3000, 3000, 3000]
-    temperatures = [100, 100, 100, 100]
+    datasets = ['xor', 'trig', 'vec', 'mutag', 'celeba']
+    train_epochs = [500, 500, 500, 500, 200]
+    n_epochs = [3000, 3000, 3000, 7000, 3000]
+    temperatures = [100, 100, 100, 100, 100]
 
     learning_rate = 0.001
     logic = GodelTNorm()
@@ -44,7 +69,10 @@ def main():
     for dataset, train_epoch, epochs, temperature in zip(datasets, train_epochs, n_epochs, temperatures):
         for fold in folds:
             # load data
-            c_emb_train, c_scores_train, y_train, c_emb_test, c_scores_test, y_test, n_concepts_all = load_data(dataset, fold, train_epoch)
+            if dataset != 'mutag':
+                c_emb_train, c_scores_train, y_train, c_emb_test, c_scores_test, y_test, n_concepts_all = load_data(dataset, fold, train_epoch)
+            else:
+                c_emb_train, c_scores_train, y_train, c_emb_test, c_scores_test, y_test, n_concepts_all = load_ba_shapes_data(dataset, fold - 1, num_classes=2)
             emb_size = c_emb_train.shape[2]
             n_classes = y_train.shape[1]
 

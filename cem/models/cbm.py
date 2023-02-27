@@ -239,8 +239,17 @@ class ConceptBottleneckModel(pl.LightningModule):
         if len(batch) > 1:
             if isinstance(batch[1], list):
                 y, c = batch[1]
-            else:
+            elif len(batch) == 3:
                 y, c = batch[1], batch[2]
+            elif len(batch) == 2:
+                # Then we assume ground truth concepts were given
+                # but not labels
+                y = None
+                c = batch[1]
+            else:
+                raise ValueError(
+                    f"We got {len(batch)} tensor in a single batch but accept only up to 3 (x, y, c)."
+                )
         else:
             y, c = None, None
         return x, y, c

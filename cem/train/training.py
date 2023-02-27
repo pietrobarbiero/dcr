@@ -67,6 +67,7 @@ def construct_model(
             "reasoner": config.get("reasoner", True),
             "logic": config.get('logit', GodelTNorm()),
             "concept_embedder": config.get("concept_embedder", None),
+            "per_class_models": config.get("per_class_models", False),
         }
     elif "ConceptBottleneckModel" in config["architecture"]:
         model_cls = models_cbm.ConceptBottleneckModel

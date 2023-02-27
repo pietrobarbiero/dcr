@@ -14,7 +14,7 @@ from cem.data.CUB200.cub_loader import load_data, find_class_imbalance
 #                Instructions on how to download it can be found
 #                in the original CBM paper's repository
 #                found here: https://github.com/yewsiang/ConceptBottleneck
-CUB_DIR = 'cem/data/CUB200/'
+CUB_DIR = '/homes/me466/UncertaintyIntervention/cem/data/CUB200/'
 
 
 # Set of CUB attributes selected by original CBM paper

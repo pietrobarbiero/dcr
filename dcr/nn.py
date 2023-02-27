@@ -11,21 +11,49 @@ def softselect(values, temperature):
 
 
 class ConceptReasoningLayer(torch.nn.Module):
-    def __init__(self, emb_size, n_classes, logic: Logic, temperature: float = 1.):
+    def __init__(
+        self,
+        emb_size,
+        n_classes,
+        logic: Logic,
+        temperature: float = 1,
+        per_class_models=False,
+    ):
         super().__init__()
         self.emb_size = emb_size
         self.n_classes = n_classes
         self.logic = logic
-        self.filter_nn = torch.nn.Sequential(
-            torch.nn.Linear(emb_size, emb_size),
-            torch.nn.LeakyReLU(),
-            torch.nn.Linear(emb_size, n_classes),
-        )
-        self.sign_nn = torch.nn.Sequential(
-            torch.nn.Linear(emb_size, emb_size),
-            torch.nn.LeakyReLU(),
-            torch.nn.Linear(emb_size, n_classes),
-        )
+        self.per_class_models = per_class_models
+        if self.per_class_models:
+            self.filter_nn = torch.nn.ModuleList()
+            for _ in range(n_classes):
+                self.filter_nn.append(
+                    torch.nn.Sequential(
+                    torch.nn.Linear(emb_size, emb_size),
+                    torch.nn.LeakyReLU(),
+                    torch.nn.Linear(emb_size, 1),
+                ))
+        else:
+            self.filter_nn = torch.nn.Sequential(
+                torch.nn.Linear(emb_size, emb_size),
+                torch.nn.LeakyReLU(),
+                torch.nn.Linear(emb_size, n_classes),
+            )
+        if self.per_class_models:
+            self.sign_nn = torch.nn.ModuleList()
+            for _ in range(n_classes):
+                self.sign_nn.append(
+                    torch.nn.Sequential(
+                    torch.nn.Linear(emb_size, emb_size),
+                    torch.nn.LeakyReLU(),
+                    torch.nn.Linear(emb_size, 1),
+                ))
+        else:
+            self.sign_nn = torch.nn.Sequential(
+                torch.nn.Linear(emb_size, emb_size),
+                torch.nn.LeakyReLU(),
+                torch.nn.Linear(emb_size, n_classes),
+            )
         self.temperature = temperature
 
     def forward(self, x, c, return_attn=False, sign_attn=None, filter_attn=None):
@@ -34,7 +62,14 @@ class ConceptReasoningLayer(torch.nn.Module):
         if sign_attn is None:
             # compute attention scores to build logic sentence
             # each attention score will represent whether the concept should be active or not in the logic sentence
-            sign_attn = torch.sigmoid(self.sign_nn(x))  # TODO: might be independent of input x (but requires OR)
+            if self.per_class_models:
+                sign_attns = []
+                for sign_model in self.sign_nn:
+                    sign_attns.append(torch.sigmoid(sign_model(x)))
+                sign_attn = torch.cat(sign_attns, axis=-1)  # TODO: might be independent of input x (but requires OR)
+                
+            else:
+                sign_attn = torch.sigmoid(self.sign_nn(x))  # TODO: might be independent of input x (but requires OR)
 
         # attention scores need to be aligned with predicted concept truth values (attn <-> values)
         # (not A or V) and (A or not V) <-> (A <-> V)
@@ -42,7 +77,13 @@ class ConceptReasoningLayer(torch.nn.Module):
 
         if filter_attn is None:
             # compute attention scores to identify only relevant concepts for each class
-            filter_attn = softselect(self.filter_nn(x), self.temperature)
+            if self.per_class_models:
+                filter_attns = []
+                for filter_model in self.filter_nn:
+                    filter_attns.append(softselect(filter_model(x), self.temperature))
+                filter_attn = torch.cat(filter_attns, axis=-1)  # TODO: might be independent of input x (but requires OR)
+            else:
+                filter_attn = softselect(self.filter_nn(x), self.temperature)
 
         # filter values
         # filtered implemented as "or(a, not b)", corresponding to "b -> a"

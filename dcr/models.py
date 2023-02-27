@@ -7,26 +7,60 @@ from .semantics import Logic, GodelTNorm
 from cem.models.cbm import ConceptBottleneckModel
 
 class CemEmbedder(torch.nn.Module):
-    def __init__(self, cem, n_concepts):
+    def __init__(
+        self,
+        cem,
+        n_concepts,
+        freeze_model=True,
+        soft_concept_labels=True,
+        pass_pos_neg_embs=False,
+        intervention_idxs=None,
+        training_intervention_prob=0.25,
+        test_with_soft_labels=True,
+    ):
         super().__init__()
         self.cem = cem
+        self.cem.training_intervention_prob = training_intervention_prob
         self.n_concepts = n_concepts
-        # Entirely freeze the model!
-        for param in self.cem.parameters():
-            param.requires_grad = False
+        self.soft_concept_labels = soft_concept_labels
+        self.pass_pos_neg_embs = pass_pos_neg_embs
+        self.intervention_idxs = intervention_idxs
+        self.test_with_soft_labels = test_with_soft_labels
+        self.freeze_model = freeze_model
+        if freeze_model:
+            for param in self.cem.parameters():
+                param.requires_grad = False
 
     def forward(self, x, intervention_idxs=None, c=None, train=False):
+        if self.pass_pos_neg_embs and intervention_idxs is None:
+            # Then we will force the CEM to "intervene" in all concepts
+            # so that we get their corresponding positive or negative
+            # embeddings based on their predicted ground truth labels
+            intervention_idxs = list(range(self.n_concepts))
         c_pred, c_emb, _ = self.cem._forward(
             x=x,
             intervention_idxs=intervention_idxs,
             c=c,
-            train=train,
+            train=((not self.freeze_model) and train),
         )
+        c_used = c_pred
+        if (c is not None) and (not train):
+            if (not self.soft_concept_labels):
+                # Then we simply use the ground truth concept labels rather than
+                # their soft representations
+                c_used = c
+            elif self.intervention_idxs:
+                # Then we propagate the intervention change through the predicted
+                # probability
+                c_used = c_pred.copy()
+                c_used[:, intervention_idxs] = c[:, intervention_idxs]
+        elif (c is not None) and (not self.test_with_soft_labels):
+            c_used = c
         c_emb = torch.reshape(
             c_emb,
             (c_emb.shape[0], self.n_concepts, c_emb.shape[-1]//self.n_concepts)
         )
-        return c_emb, c_pred
+        return c_emb, c_pred, c_used
 
 class DefaultConceptEmbedder(torch.nn.Module):
     def __init__(
@@ -37,6 +71,7 @@ class DefaultConceptEmbedder(torch.nn.Module):
         intervention_idxs=None,
         training_intervention_prob=0.25,
         freeze_pretrain=False,
+        pretrain_model=True,
     ):
         super().__init__()
         self.intervention_idxs = intervention_idxs
@@ -45,18 +80,18 @@ class DefaultConceptEmbedder(torch.nn.Module):
         # Else we assume that it is a callable function which we will
         # need to instantiate here
         try:
-            self.laten_code_gen = c_extractor_arch(pretrained=pretrain_model)
-            n_features = self.laten_code_gen.fc.in_features
+            self.latent_code_gen = c_extractor_arch(pretrained=pretrain_model)
+            n_features = self.latent_code_gen.fc.in_features
             if freeze_pretrain:
-                for param in self.laten_code_gen.parameters():
+                for param in self.latent_code_gen.parameters():
                     param.requires_grad = False
-            self.laten_code_gen.fc = torch.nn.Sequential(
+            self.latent_code_gen.fc = torch.nn.Sequential(
                 torch.nn.Linear(n_features, n_features),
                 torch.nn.LeakyReLU(),
             )
         except Exception as e:
             n_features = n_concepts
-            self.laten_code_gen = c_extractor_arch(output_dim=n_concepts)
+            self.latent_code_gen = c_extractor_arch(output_dim=n_concepts)
 
         self.concept_embedder = ConceptEmbedding(
             in_features=n_features,
@@ -67,7 +102,7 @@ class DefaultConceptEmbedder(torch.nn.Module):
         )
 
     def forward(self, x, intervention_idxs=None, c=None, train=False):
-        h = self.laten_code_gen.forward(x)
+        h = self.latent_code_gen.forward(x)
         if intervention_idxs is not None:
             # This takes precedence over the model construction parameter
             c_emb, c_pred = self.concept_embedder(
@@ -110,6 +145,7 @@ class DeepConceptReasoner(ConceptBottleneckModel):
         training_intervention_prob=0.25,
         concept_embedder=None,
         c_extractor_arch=torchvision.models.resnet18,
+        per_class_models=False,
 
         momentum=0.9,
         learning_rate=0.01,
@@ -143,6 +179,7 @@ class DeepConceptReasoner(ConceptBottleneckModel):
                 n_tasks,
                 logic,
                 temperature,
+                per_class_models=per_class_models,
             )
         else:
             self.predictor = torch.nn.Sequential(
@@ -172,14 +209,21 @@ class DeepConceptReasoner(ConceptBottleneckModel):
         )
 
     def _forward(self, x, intervention_idxs=None, c=None, train=False):
-        c_emb, c_pred = self.concept_embedder(
+        if (self.intervention_idxs is not None) and (intervention_idxs is None):
+            intervention_idxs = self.intervention_idxs
+        embs_outputs = self.concept_embedder(
             x,
             intervention_idxs=intervention_idxs,
             c=c,
             train=train,
         )
-        if self.reasoner:
-            y_pred = self.predictor(c_emb, c_pred)
+        if len(embs_outputs) == 2:
+            c_emb, c_sem = embs_outputs
+            c_used = c_sem
         else:
-            y_pred = self.predictor(c_pred)
-        return c_pred, c_emb, y_pred
+            c_emb, c_sem, c_used = embs_outputs
+        if self.reasoner:
+            y_pred = self.predictor(c_emb, c_used)
+        else:
+            y_pred = self.predictor(c_sem)
+        return c_sem, c_emb, y_pred

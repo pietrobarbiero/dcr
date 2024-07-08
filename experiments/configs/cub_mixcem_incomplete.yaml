@@ -6,7 +6,7 @@ model_selection_groups:
   - ["^(Hybrid-CBM_).*(_Baseline_).*$", "Hybrid-CBM (Baseline)"]
   - ["^(CEM_Baseline_).*$", "CEM (Baseline)"]
   - ["^(IntCEM_).*(_Baseline).*$", "IntCEM (Baseline)"]
-  - ["^(MixCEM_).*_Baseline).*$", "MixCEM (Baseline)"]
+  - ["^(MixCEM_).*(_Baseline).*$", "MixCEM (Baseline)"]
 
 
 model_selection_metrics:
@@ -90,10 +90,10 @@ runs:
   - architecture: 'MixingConceptEmbeddingModel'
     run_name: "MixCEM_n_extra_{n_discovered_concepts}_entr_{discovered_probs_entropy}_dis_{intervention_task_discount}_ip_{training_intervention_prob}_dip_{dyn_training_intervention_prob}_cl_{contrastive_loss_weight}_mix_{mix_ground_truth_embs}_shared_{shared_emb_generator}_emb_size_{emb_size}_ml_{intermediate_task_concept_loss}_Baseline_cwl_{concept_loss_weight}"
     training_intervention_prob: [[0.25, 0.5, 0.75, 1]]
-    emb_size: [64, 32]
+    emb_size: [64] #, 32]
     embedding_activation: null
-    n_discovered_concepts: [50, 25]
-    concept_loss_weight: [10]
+    n_discovered_concepts: [50] #, 25]
+    concept_loss_weight: [10, 100, 5, 1]
     contrastive_loss_weight: [0]
     mix_ground_truth_embs: True
     shared_emb_generator: [True]
@@ -102,7 +102,37 @@ runs:
     cond_discovery: False
     intermediate_task_concept_loss: [0]
     task_concept_loss: 1
-    intervention_task_discount: [1.1] #, 1.5]
+    intervention_task_discount: [1.01, 1.05] #, 1.1, 1.5]
+    discovered_probs_entropy: 0
+    dyn_training_intervention_prob: [0.1, 0.25]
+    grid_variables:
+      - concept_loss_weight
+      - n_discovered_concepts
+      - contrastive_loss_weight
+      - shared_emb_generator
+      - emb_size
+      - intermediate_task_concept_loss
+      - intervention_task_discount
+      - training_intervention_prob
+      - dyn_training_intervention_prob
+    grid_search_mode: exhaustive
+
+  - architecture: 'MixingConceptEmbeddingModel'
+    run_name: "MixCEM_n_extra_{n_discovered_concepts}_entr_{discovered_probs_entropy}_dis_{intervention_task_discount}_ip_{training_intervention_prob}_dip_{dyn_training_intervention_prob}_cl_{contrastive_loss_weight}_mix_{mix_ground_truth_embs}_shared_{shared_emb_generator}_emb_size_{emb_size}_ml_{intermediate_task_concept_loss}_Baseline_cwl_{concept_loss_weight}"
+    training_intervention_prob: [[0.25, 0.5, 0.75, 1]]
+    emb_size: [1024, 512, 256] #, 32]
+    embedding_activation: null
+    n_discovered_concepts: [25, 10] #, 25]
+    concept_loss_weight: [0.1, 1, 10]
+    contrastive_loss_weight: [0]
+    mix_ground_truth_embs: True
+    shared_emb_generator: [True]
+    normalize_embs: False
+    sample_probs: False
+    cond_discovery: False
+    intermediate_task_concept_loss: [0]
+    task_concept_loss: 1
+    intervention_task_discount: [1.01] #, 1.05] #, 1.1, 1.5]
     discovered_probs_entropy: 0
     dyn_training_intervention_prob: [0.1, 0.25]
     grid_variables:

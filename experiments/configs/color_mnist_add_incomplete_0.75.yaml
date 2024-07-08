@@ -17,50 +17,13 @@ model_selection_groups:
   - ["^(IntCEM_).*(_Baseline).*$", "IntCEM (Baseline)"]
   - ["^(IntCEM_).*(_Concept_Spurious).*$", "IntCEM (Concept Spurious)"]
   - ["^(IntCEM_).*(_Downstream_Spurious).*$", "IntCEM (Downstream Spurious)"]
-  - ["^(H-CEM_).*(_Baseline).*$", "H-CEM (Baseline)"]
-  - ["^(H-CEM_).*(_Concept_Spurious).*$", "H-CEM (Concept Spurious)"]
-  - ["^(H-CEM_).*(_Downstream_Spurious).*$", "H-CEM (Downstream Spurious)"]
-  - ["^(Contrastive_H-CEM_).*_Baseline).*$", "Contrastive_H-CEM (Baseline)"]
-  - ["^(Contrastive_H-CEM_).*_Concept_Spurious).*$", "Contrastive_H-CEM (Concept Spurious)"]
-  - ["^(Contrastive_H-CEM_).*_Downstream_Spurious).*$", "Contrastive_H-CEM (Downstream Spurious)"]
-  - ["^(ResidualMixing-CEM_).*_Baseline).*$", "ResidualMixing-CEM (Baseline)"]
-  - ["^(ResidualMixing-CEM_).*_Concept_Spurious).*$", "ResidualMixing-CEM (Concept Spurious)"]
-  - ["^(ResidualMixing-CEM_).*_Downstream_Spurious).*$", "ResidualMixing-CEM (Downstream Spurious)"]
-  - ["^(Mixing-CEM_).*_Baseline).*$", "Mixing-CEM (Baseline)"]
-  - ["^(new_Mixing-CEM_).*_Baseline).*$", "new_Mixing-CEM (Baseline)"]
-  - ["^(Mixing-CEM_).*_Concept_Spurious).*$", "Mixing-CEM (Concept Spurious)"]
-  - ["^(new_Mixing-CEM_).*_Concept_Spurious).*$", "new_Mixing-CEM (Concept Spurious)"]
-  - ["^(Mixing-CEM_).*_Downstream_Spurious).*$", "Mixing-CEM (Downstream Spurious)"]
-  - ["^(new_Mixing-CEM_).*_Downstream_Spurious).*$", "new_Mixing-CEM (Downstream Spurious)"]
+  - ["^(ResidualMixing-CEM_).*(_Baseline).*$", "ResidualMixing-CEM (Baseline)"]
+  - ["^(ResidualMixing-CEM_).*(_Concept_Spurious).*$", "ResidualMixing-CEM (Concept Spurious)"]
+  - ["^(ResidualMixing-CEM_).*(_Downstream_Spurious).*$", "ResidualMixing-CEM (Downstream Spurious)"]
+  - ["^(Mixing-CEM_).*(_Baseline).*$", "Mixing-CEM (Baseline)"]
+  - ["^(Mixing-CEM_).*(_Concept_Spurious).*$", "Mixing-CEM (Concept Spurious)"]
+  - ["^(Mixing-CEM_).*(_Downstream_Spurious).*$", "Mixing-CEM (Downstream Spurious)"]
 
-  - ["^(OOD_CBM_Sigmoid_Baseline_).*$", "Joint CBM (OOD Baseline)"]
-  - ["^(OOD_CBM_Sigmoid_Downstream_Spurious_).*$", "Joint CBM (OOD Downstream Spurious)"]
-  - ["^(OOD_CBM_Sigmoid_Concept_Spurious_).*$", "Joint CBM (OOD Concept Spurious)"]
-  - ["^(OOD_Hybrid-CBM_).*(_Baseline_).*$", "Hybrid-CBM (OOD Baseline)"]
-  - ["^(OOD_Hybrid-CBM_).*(_Downstream_Spurious_).*$", "Hybrid-CBM (OOD Downstream Spurious)"]
-  - ["^(OOD_Hybrid-CBM_).*(_Concept_Spurious_).*$", "Hybrid-CBM (OOD Concept Spurious)"]
-  - ["^(OOD_CEM_Baseline_).*$", "CEM (OOD Baseline)"]
-  - ["^(OOD_CEM_Downstream_Spurious_).*$", "CEM (OOD Downstream Spurious)"]
-  - ["^(OOD_CEM_Concept_Spurious_).*$", "CEM (OOD Concept Spurious)"]
-  - ["^(OOD_Sigmoid_CEM_Baseline_).*$", "Sigmoidal CEM (OOD Baseline)"]
-  - ["^(OOD_Sigmoid_CEM_Downstream_Spurious_).*$", "Sigmoidal CEM (OOD Downstream Spurious)"]
-  - ["^(OOD_Sigmoid_CEM_Concept_Spurious_).*$", "Sigmoidal CEM (OOD Concept Spurious)"]
-  - ["^(OOD_IntCEM_).*(_Baseline).*$", "IntCEM (OOD Baseline)"]
-  - ["^(OOD_IntCEM_).*(_Concept_Spurious).*$", "IntCEM (OOD Concept Spurious)"]
-  - ["^(OOD_IntCEM_).*(_Downstream_Spurious).*$", "IntCEM (OOD Downstream Spurious)"]
-  - ["^(OOD_H-CEM_).*(_Baseline).*$", "H-CEM (OOD Baseline)"]
-  - ["^(OOD_H-CEM_).*(_Concept_Spurious).*$", "H-CEM (OOD Concept Spurious)"]
-  - ["^(OOD_H-CEM_).*(_Downstream_Spurious).*$", "H-CEM (OOD Downstream Spurious)"]
-  - ["^(OOD_Contrastive_H-CEM_).*_Baseline).*$", "Contrastive_H-CEM (OOD Baseline)"]
-  - ["^(OOD_Contrastive_H-CEM_).*_Concept_Spurious).*$", "Contrastive_H-CEM (OOD Concept Spurious)"]
-  - ["^(OOD_Contrastive_H-CEM_).*_Downstream_Spurious).*$", "Contrastive_H-CEM (OOD Downstream Spurious)"]
-  - ["^(OOD_ResidualMixing-CEM_).*_Baseline).*$", "ResidualMixing-CEM (OOD Baseline)"]
-  - ["^(OOD_Mixing-CEM_).*_Baseline).*$", "Mixing-CEM (OOD Baseline)"]
-  - ["^(OOD_new_Mixing-CEM_).*_Baseline).*$", "new_Mixing-CEM (OOD Baseline)"]
-  - ["^(OOD_Mixing-CEM_).*_Concept_Spurious).*$", "Mixing-CEM (OOD Concept Spurious)"]
-  - ["^(OOD_new_Mixing-CEM_).*_Concept_Spurious).*$", "new_Mixing-CEM (OOD Concept Spurious)"]
-  - ["^(OOD_Mixing-CEM_).*_Downstream_Spurious).*$", "Mixing-CEM (OOD Downstream Spurious)"]
-  - ["^(OOD_new_Mixing-CEM_).*_Downstream_Spurious).*$", "new_Mixing-CEM (OOD Downstream Spurious)"]
 
 model_selection_metrics:
   - val_acc_y_random_group_level_True_use_prior_False_int_auc
@@ -79,6 +42,17 @@ shared_params:
       - policy: "random"
         group_level: True
         use_prior: False
+
+  # Evaluation configuration
+  eval_config:
+    additional_test_sets:
+      - name: "OOD"
+        update_previous: True
+        dataset_config:
+          test_transformation_config:
+            name: random_noise
+            low_noise_level: 1
+            noise_level: 0.5
 
   # Representation metrics
   # Change to False if you want representation metrics to be included in the
@@ -470,9 +444,9 @@ runs:
 
 
   - architecture: 'ConceptEmbeddingModel'
-    run_name: "CEM_Baseline_{dataset_config[num_operands]}_cwl_{concept_loss_weight}"
+    run_name: "CEM_emb_size_{emb_size}_Baseline_{dataset_config[num_operands]}_cwl_{concept_loss_weight}"
     training_intervention_prob: 0.25
-    emb_size: 8
+    emb_size:  [8, 16, 32]
     embedding_activation: "leakyrelu"
     sigmoidal_prob: True
 
@@ -525,12 +499,13 @@ runs:
     grid_variables:
       - concept_loss_weight
       - dataset_config.num_operands
+      - emb_size
     grid_search_mode: exhaustive
 
   - architecture: 'ConceptEmbeddingModel'
-    run_name: "CEM_Downstream_Spurious_{dataset_config[num_operands]}_cwl_{concept_loss_weight}"
+    run_name: "CEM_emb_size_{emb_size}_Downstream_Spurious_{dataset_config[num_operands]}_cwl_{concept_loss_weight}"
     training_intervention_prob: 0.25
-    emb_size: 8
+    emb_size: [8, 16, 32]
     embedding_activation: "leakyrelu"
     sigmoidal_prob: True
 
@@ -583,13 +558,14 @@ runs:
     grid_variables:
       - concept_loss_weight
       - dataset_config.num_operands
+      - emb_size
     grid_search_mode: exhaustive
 
 
   - architecture: 'ConceptEmbeddingModel'
-    run_name: "CEM_Concept_Spurious_{dataset_config[num_operands]}_cwl_{concept_loss_weight}"
+    run_name: "CEM_emb_size_{emb_size}_Concept_Spurious_{dataset_config[num_operands]}_cwl_{concept_loss_weight}"
     training_intervention_prob: 0.25
-    emb_size: 8
+    emb_size: [8, 16, 32]
     embedding_activation: "leakyrelu"
     sigmoidal_prob: True
 
@@ -642,6 +618,7 @@ runs:
     grid_variables:
       - concept_loss_weight
       - dataset_config.num_operands
+      - emb_size
     grid_search_mode: exhaustive
 
 
@@ -652,7 +629,7 @@ runs:
 
 
   - architecture: 'IntAwareConceptEmbeddingModel'
-    run_name: "IntCEM_intervention_weight_{intervention_weight}_intervention_task_discount_{intervention_task_discount}_Baseline_{dataset_config[num_operands]}_cwl_{concept_loss_weight}"
+    run_name: "IntCEM_emb_size_{emb_size}_intervention_weight_{intervention_weight}_intervention_task_discount_{intervention_task_discount}_Baseline_{dataset_config[num_operands]}_cwl_{concept_loss_weight}"
     training_intervention_prob: 0.25
     intervention_weight: [0.1, 1, 5]
     intervention_task_discount: [1.5]
@@ -663,11 +640,13 @@ runs:
     max_horizon: 6
     horizon_rate: 1.005
     gradient_clip_val: 100
+    emb_size: [8, 16, 32]
     grid_variables:
       - concept_loss_weight
       - dataset_config.num_operands
       - intervention_task_discount
       - intervention_weight
+      - emb_size
     grid_search_mode: exhaustive
 
     # Dataset Configuration
@@ -718,7 +697,7 @@ runs:
         9: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
 
   - architecture: 'IntAwareConceptEmbeddingModel'
-    run_name: "IntCEM_intervention_weight_{intervention_weight}_intervention_task_discount_{intervention_task_discount}_Downstream_Spurious_{dataset_config[num_operands]}_cwl_{concept_loss_weight}"
+    run_name: "IntCEM_emb_size_{emb_size}_intervention_weight_{intervention_weight}_intervention_task_discount_{intervention_task_discount}_Downstream_Spurious_{dataset_config[num_operands]}_cwl_{concept_loss_weight}"
     training_intervention_prob: 0.25
     intervention_weight: [0.1, 1, 5]
     intervention_task_discount: [1.5]
@@ -729,11 +708,13 @@ runs:
     max_horizon: 6
     horizon_rate: 1.005
     gradient_clip_val: 100
+    emb_size: [8, 16, 32]
     grid_variables:
       - concept_loss_weight
       - dataset_config.num_operands
       - intervention_task_discount
       - intervention_weight
+      - emb_size
     grid_search_mode: exhaustive
 
     # Dataset Configuration
@@ -785,7 +766,7 @@ runs:
 
 
   - architecture: 'IntAwareConceptEmbeddingModel'
-    run_name: "IntCEM_intervention_weight_{intervention_weight}_intervention_task_discount_{intervention_task_discount}_Concept_Spurious_{dataset_config[num_operands]}_cwl_{concept_loss_weight}"
+    run_name: "IntCEM_emb_size_{emb_size}_intervention_weight_{intervention_weight}_intervention_task_discount_{intervention_task_discount}_Concept_Spurious_{dataset_config[num_operands]}_cwl_{concept_loss_weight}"
     training_intervention_prob: 0.25
     intervention_weight: [0.1, 1, 5]
     intervention_task_discount: [1.5]
@@ -796,11 +777,13 @@ runs:
     max_horizon: 6
     horizon_rate: 1.005
     gradient_clip_val: 100
+    emb_size: [8, 16, 32]
     grid_variables:
       - concept_loss_weight
       - dataset_config.num_operands
       - intervention_task_discount
       - intervention_weight
+      - emb_size
     grid_search_mode: exhaustive
 
     # Dataset Configuration
@@ -861,7 +844,7 @@ runs:
   - architecture: 'MixingConceptEmbeddingModel'
     run_name: "Mixing-CEM_n_extra_{n_discovered_concepts}_entr_{discovered_probs_entropy}_dis_{intervention_task_discount}_ip_{training_intervention_prob}_dip_{dyn_training_intervention_prob}_cl_{contrastive_loss_weight}_mix_{mix_ground_truth_embs}_shared_{shared_emb_generator}_emb_size_{emb_size}_ml_{intermediate_task_concept_loss}_Baseline_{dataset_config[num_operands]}_cwl_{concept_loss_weight}"
     training_intervention_prob: [[0.25, 0.5, 0.75, 1]] #[0.25, [0.25, 0.5], [0.25, 0.5, 0.75, 1]] #[0.25, [0.25, 0.5]]
-    emb_size: [128, 256]
+    emb_size: [32, 64, 128, 256]
     embedding_activation: null
     n_discovered_concepts: [5, 10]
     concept_loss_weight: [10]
@@ -940,7 +923,7 @@ runs:
   - architecture: 'MixingConceptEmbeddingModel'
     run_name: "ResidualMixing-CEM_n_extra_{n_discovered_concepts}_entr_{discovered_probs_entropy}_dis_{intervention_task_discount}_ip_{training_intervention_prob}_dip_{dyn_training_intervention_prob}_cl_{contrastive_loss_weight}_mix_{mix_ground_truth_embs}_shared_{shared_emb_generator}_emb_size_{emb_size}_ml_{intermediate_task_concept_loss}_Downstream_Spurious_{dataset_config[num_operands]}_cwl_{concept_loss_weight}"
     training_intervention_prob: [[0.25, 0.5, 0.75, 1]] #[0.25, [0.25, 0.5], [0.25, 0.5, 0.75, 1]] #[0.25, [0.25, 0.5]]
-    emb_size: [128, 256]
+    emb_size: [32, 64, 128, 256]
     embedding_activation: null
     n_discovered_concepts: [5, 10]
     concept_loss_weight: [10]
@@ -1019,7 +1002,7 @@ runs:
   - architecture: 'MixingConceptEmbeddingModel'
     run_name: "ResidualMixing-CEM_n_extra_{n_discovered_concepts}_entr_{discovered_probs_entropy}_dis_{intervention_task_discount}_ip_{training_intervention_prob}_dip_{dyn_training_intervention_prob}_cl_{contrastive_loss_weight}_mix_{mix_ground_truth_embs}_shared_{shared_emb_generator}_emb_size_{emb_size}_ml_{intermediate_task_concept_loss}_Concept_Spurious_{dataset_config[num_operands]}_cwl_{concept_loss_weight}"
     training_intervention_prob: [[0.25, 0.5, 0.75, 1]] #[0.25, [0.25, 0.5], [0.25, 0.5, 0.75, 1]] #[0.25, [0.25, 0.5]]
-    emb_size: [128, 256]
+    emb_size: [32, 64, 128, 256]
     embedding_activation: null
     n_discovered_concepts: [5, 10]
     concept_loss_weight: [10]

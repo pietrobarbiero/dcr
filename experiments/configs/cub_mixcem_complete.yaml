@@ -78,6 +78,13 @@ shared_params:
             name: random_noise
             low_noise_level: 1
             noise_level: 0.5
+      - name: "OOD_heavy"
+        update_previous: True
+        dataset_config:
+          test_transformation_config:
+            name: random_noise
+            low_noise_level: 1
+            noise_level: 0.75
 
 
 runs:

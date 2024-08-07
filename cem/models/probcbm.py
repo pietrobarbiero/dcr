@@ -19,7 +19,6 @@ from torchvision.models import resnet18
 
 from cem.metrics.accs import compute_accuracy
 from cem.models.cbm import ConceptBottleneckModel
-import cem.train.utils as utils
 
 
 
@@ -37,14 +36,23 @@ def weights_init(module):
 
 
 def sample_gaussian_tensors(mu, logsigma, num_samples):
-    eps = torch.randn(mu.size(0), mu.size(1), num_samples, mu.size(2), dtype=mu.dtype, device=mu.device)
+    eps = torch.randn(
+        mu.size(0),
+        mu.size(1),
+        num_samples,
+        mu.size(2),
+        dtype=mu.dtype,
+        device=mu.device,
+    )
     samples_sigma = eps.mul(torch.exp(logsigma.unsqueeze(2) * 0.5))
     samples = samples_sigma.add_(mu.unsqueeze(2))
     return samples
 
 def batchwise_cdist(samples1, samples2, eps=1e-6):
-    """Compute L2 distance between each pair of the two multi-head embeddings in batch-wise.
-    We may assume that samples have shape N x K x D, N: batch_size, K: number of embeddings, D: dimension of embeddings.
+    """Compute L2 distance between each pair of the two multi-head embeddings
+    in batch-wise.
+    We may assume that samples have shape N x K x D, N: batch_size,
+    K: number of embeddings, D: dimension of embeddings.
     The size of samples1 and samples2 (`N`) should be either
     - same (each sample-wise distance will be computed separately)
     - len(samples1) = 1 (samples1 will be broadcasted into samples2)
@@ -60,7 +68,10 @@ def batchwise_cdist(samples1, samples2, eps=1e-6):
     batchwise distance: N x Nc x K ** 2
     """
     if len(samples1.size()) not in [3, 4, 5] or len(samples2.size()) not in [3, 4, 5]:
-        raise RuntimeError('expected: 4-dim tensors, got: {}, {}'.format(samples1.size(), samples2.size()))
+        raise RuntimeError(
+            f'expected: 4-dim tensors, '
+            f'got: {samples1.size()}, {samples2.size()}'
+        )
 
     if samples1.size(0) == samples2.size(0):
         batch_size = samples1.size(0)
@@ -76,18 +87,24 @@ def batchwise_cdist(samples1, samples2, eps=1e-6):
         result = torch.sqrt(((samples1 - samples2) ** 2).sum(-1) + eps)
         return result.view(*result.shape[:-2], -1)
     else:
-        raise RuntimeError(f'samples1 ({samples1.size()}) and samples2 ({samples2.size()}) dimensionalities '
-                           'are non-broadcastable.')
+        raise RuntimeError(
+            f'samples1 ({samples1.size()}) and samples2 ({samples2.size()}) '
+            f'dimensionalities are non-broadcastable.'
+        )
     if len(samples1.size()) == 5:
         return torch.sqrt(((samples1 - samples2) ** 2).sum(-1) + eps)
     elif len(samples1.size()) == 4:
         samples1 = samples1.unsqueeze(2)
         samples2 = samples2.unsqueeze(3)
-        return torch.sqrt(((samples1 - samples2) ** 2).sum(-1) + eps).view(batch_size, samples1.size(1), -1)
+        return torch.sqrt(
+            ((samples1 - samples2) ** 2).sum(-1) + eps
+        ).view(batch_size, samples1.size(1), -1)
     else:
         samples1 = samples1.unsqueeze(1)
         samples2 = samples2.unsqueeze(2)
-        return torch.sqrt(((samples1 - samples2) ** 2).sum(-1) + eps).view(batch_size, -1)
+        return torch.sqrt(
+            ((samples1 - samples2) ** 2).sum(-1) + eps
+        ).view(batch_size, -1)
 
 
 def MC_dropout(act_vec, p=0.5, mask=True):
@@ -96,7 +113,8 @@ def MC_dropout(act_vec, p=0.5, mask=True):
 class MultiHeadSelfAttention(nn.Module):
     """
     Self-attention module by Lin, Zhouhan, et al. ICLR 2017
-    Code taken from Kim et al.'s https://github.com/ejkim47/prob-cbm/blob/main/models/module.py
+    Code taken from Kim et al.'s
+    https://github.com/ejkim47/prob-cbm/blob/main/models/module.py
     """
 
     def __init__(self, n_head, d_in, d_hidden):
@@ -130,7 +148,8 @@ class MultiHeadSelfAttention(nn.Module):
 class PIENet(nn.Module):
     """
     Polysemous Instance Embedding (PIE) module
-    Code taken from Kim et al.'s https://github.com/ejkim47/prob-cbm/blob/main/models/module.py
+    Code taken from Kim et al.'s
+    https://github.com/ejkim47/prob-cbm/blob/main/models/module.py
     """
 
     def __init__(self, n_embeds, d_in, d_out, d_h, dropout=0.0):
@@ -162,9 +181,11 @@ class PIENet(nn.Module):
 
 class MCBCELoss(nn.Module):
     """
-    Code adapted from Kim et al.'s https://github.com/ejkim47/prob-cbm/blob/main/utils/loss.py
+    Code adapted from Kim et al.'s
+    https://github.com/ejkim47/prob-cbm/blob/main/utils/loss.py
     """
-    def __init__(self, reduction='mean', criterion=None, weight=None, vib_beta=0.00005):
+    def __init__(
+        self, reduction='mean', criterion=None, weight=None, vib_beta=0.00005):
         super().__init__()
         if reduction not in {'mean', 'sum', None}:
             raise ValueError('unknown reduction {}'.format(reduction))
@@ -219,7 +240,8 @@ class MCBCELoss(nn.Module):
 
 class UncertaintyModuleImage(nn.Module):
     """
-    Code taken from Kim et al.'s https://github.com/ejkim47/prob-cbm/blob/main/models/module.py
+    Code taken from Kim et al.'s
+    https://github.com/ejkim47/prob-cbm/blob/main/models/module.py
     """
     def __init__(self, d_in, d_out, d_h):
         super().__init__()
@@ -250,7 +272,8 @@ class UncertaintyModuleImage(nn.Module):
 
 class ConceptConvModelBase(nn.Module):
     """
-    Code taken from Kim et al.'s https://github.com/ejkim47/prob-cbm/blob/main/models/build_model_resnset.py
+    Code taken from Kim et al.'s
+    https://github.com/ejkim47/prob-cbm/blob/main/models/build_model_resnset.py
     """
     def __init__(
         self,
@@ -330,7 +353,8 @@ class ProbConceptModel(ConceptConvModelBase):
         init_shift=5,
     ):
         """
-        Code adapted from Kim et al.'s https://github.com/ejkim47/prob-cbm/blob/main/models/build_model_resnset.py
+        Code adapted from Kim et al.'s
+        https://github.com/ejkim47/prob-cbm/blob/main/models/build_model_resnset.py
         """
         ConceptConvModelBase.__init__(
             self,
@@ -611,7 +635,8 @@ class ProbConceptModel(ConceptConvModelBase):
 
 class ProbCBM(ProbConceptModel, ConceptBottleneckModel):
     """
-    Code adapted from Kim et al.'s https://github.com/ejkim47/prob-cbm/blob/main/models/build_model_resnset.py
+    Code adapted from Kim et al.'s
+    https://github.com/ejkim47/prob-cbm/blob/main/models/build_model_resnset.py
     """
     def __init__(
         self,
@@ -657,14 +682,6 @@ class ProbCBM(ProbConceptModel, ConceptBottleneckModel):
 
         top_k_accuracy=None,
     ):
-        assert not output_latent, (
-            f'Currently we have not yet added support for '
-            'output_latent = False in ProbCBMs'
-        )
-        assert not output_interventions, (
-            f'Currently we have not yet added support for '
-            'output_interventions = False in ProbCBMs'
-        )
         pl.LightningModule.__init__(self)
         ProbConceptModel.__init__(
             self,
@@ -858,7 +875,7 @@ class ProbCBM(ProbConceptModel, ConceptBottleneckModel):
         train=False,
         intervention_idxs=None,
     ):
-        x, y, (c, competencies, prev_interventions) = self._unpack_batch(batch)
+        x, y, (c, g, competencies, prev_interventions) = self._unpack_batch(batch)
         c_sem, c_embs, y_probs, tail_outputs, _, _ = self._forward(
             x,
             intervention_idxs=intervention_idxs,
@@ -869,7 +886,6 @@ class ProbCBM(ProbConceptModel, ConceptBottleneckModel):
             prev_interventions=prev_interventions,
             output_embeddings=True,
             output_latent=True,
-            output_interventions=False,
         )
         loss, loss_iter_dict = self._train_step(
             stage=self.stage,
@@ -930,23 +946,29 @@ class ProbCBM(ProbConceptModel, ConceptBottleneckModel):
     def _forward(
         self,
         x,
-        intervention_idxs=None,
         c=None,
         y=None,
         train=False,
         latent=None,
+        intervention_idxs=None,
         competencies=None,
         prev_interventions=None,
         output_embeddings=False,
         output_latent=None,
-        output_interventions=False,
+        output_interventions=None,
         inference_with_sampling=False,
         n_samples_inference=50,
     ):
-        assert not output_interventions, (
-            f'Currently we have not yet added support for '
-            'output_interventions != None in ProbCBMs'
+        output_interventions = (
+            output_interventions if output_interventions is not None
+            else self.output_interventions
         )
+
+        output_latent = (
+            output_latent if output_latent is not None
+            else self.output_latent
+        )
+
         fwd_results = self.inner_forward(
             x=x,
             c=c,
@@ -954,13 +976,27 @@ class ProbCBM(ProbConceptModel, ConceptBottleneckModel):
             train=train,
             inference_with_sampling=inference_with_sampling,
             n_samples_inference=n_samples_inference,
+            intervention_idxs=intervention_idxs,
+            prev_interventions=prev_interventions,
+            competencies=competencies,
+            latent=latent,
         )
-        c_sem = fwd_results.pop('pred_concept_prob')
-        y_pred = fwd_results.pop('pred_class_prob')
-        c_pred = fwd_results.pop('pred_embeddings')
+        c_sem = fwd_results['pred_concept_prob']
+        y_pred = fwd_results['pred_class_prob']
+        c_pred = fwd_results['pred_embeddings']
         tail_results = []
         if output_interventions:
-            raise NotImplementedError('output_interventions')
+            intervention_idxs = fwd_results.pop(
+                'intervention_idxs',
+                intervention_idxs,
+            )
+            if intervention_idxs is None:
+                intervention_idxs = None
+            if isinstance(intervention_idxs, np.ndarray):
+                intervention_idxs = torch.FloatTensor(
+                    intervention_idxs
+                ).to(x.device)
+            tail_results.append(intervention_idxs)
         if output_latent:
             tail_results.append(fwd_results)
         if output_embeddings:
@@ -1007,74 +1043,96 @@ class ProbCBM(ProbConceptModel, ConceptBottleneckModel):
         c=None,
         y=None,
         train=False,
+        latent=None,
         inference_with_sampling=False,
         n_samples_inference=50,
+        intervention_idxs=None,
+        competencies=None,
+        prev_interventions=None,
     ):
-        pred_concept_mean, pred_concept_logsigma = self.predict_concept_dist(x)
-        concept_mean = F.normalize(self.concept_vectors, p=2, dim=-1)
+        if latent is None:
+            pred_concept_mean, pred_concept_logsigma = \
+                self.predict_concept_dist(x)
+            concept_mean = F.normalize(self.concept_vectors, p=2, dim=-1)
 
-        if self.use_neg_concept and concept_mean.shape[0] < 2:
-            concept_mean = torch.cat([-concept_mean, concept_mean])
-
-        if self.use_probabilistic_concept:
-            if train:
-                pred_embeddings = sample_gaussian_tensors(
-                    pred_concept_mean,
-                    pred_concept_logsigma,
-                    self.n_samples_inference,
-                )
-            else:
-                if not inference_with_sampling:
-                    pred_embeddings = pred_concept_mean.unsqueeze(2)
-                else:
-                    n_samples_inference = (
-                        self.n_samples_inference if n_samples_inference is None
-                        else n_samples_inference
-                    )
+            if self.use_neg_concept and concept_mean.shape[0] < 2:
+                concept_mean = torch.cat([-concept_mean, concept_mean])
+            if self.use_probabilistic_concept:
+                if train:
                     pred_embeddings = sample_gaussian_tensors(
                         pred_concept_mean,
                         pred_concept_logsigma,
-                        n_samples_inference,
+                        self.n_samples_inference,
                     )
+                else:
+                    if not inference_with_sampling:
+                        pred_embeddings = pred_concept_mean.unsqueeze(2)
+                    else:
+                        n_samples_inference = (
+                            self.n_samples_inference if n_samples_inference is None
+                            else n_samples_inference
+                        )
+                        pred_embeddings = sample_gaussian_tensors(
+                            pred_concept_mean,
+                            pred_concept_logsigma,
+                            n_samples_inference,
+                        )
+            else:
+                pred_embeddings = pred_concept_mean.unsqueeze(2)
+
+            concept_embeddings = concept_mean.unsqueeze(-2)
+            concept_logit, concept_prob = self.match_prob(
+                pred_embeddings,
+                concept_embeddings,
+                reduction='none',
+            )
+
+            out_concept_prob = (
+                concept_prob[..., 1].mean(dim=-1) if self.use_neg_concept
+                else concept_prob.mean(dim=-1)
+            )
+            if self.use_probabilistic_concept:
+                concept_uncertainty = self.get_uncertainty(pred_concept_logsigma)
+
+        elif self.use_probabilistic_concept:
+            out_concept_prob = latent['pred_concept_prob']
+            concept_uncertainty = latent['pred_concept_uncertainty']
+            concept_logit = latent['pred_concept_logit']
+            pred_embeddings = latent['pred_embeddings']
+            concept_embeddings = latent['concept_embeddings']
+            pred_concept_mean = latent['pred_mean']
+            pred_concept_logsigma = latent['pred_logsigma']
+            concept_mean = latent['concept_mean']
         else:
-            pred_embeddings = pred_concept_mean.unsqueeze(2)
-
-        concept_embeddings = concept_mean.unsqueeze(-2)
-        concept_logit, concept_prob = self.match_prob(
-            pred_embeddings,
-            concept_embeddings,
-            reduction='none',
-        )
-
-        out_concept_prob = (
-            concept_prob[..., 1].mean(dim=-1) if self.use_neg_concept
-            else concept_prob.mean(dim=-1)
-        )
+            out_concept_prob = latent['pred_concept_prob']
+            pred_embeddings = latent['pred_embeddings']
+            concept_embeddings = latent['concept_embeddings']
+            pred_concept_mean = latent['pred_mean']
+            concept_mean = latent['concept_mean']
 
         if self.use_probabilistic_concept:
-            concept_uncertainty = self.get_uncertainty(pred_concept_logsigma)
-            out_dict = {
-                'pred_concept_prob': out_concept_prob,
-                'pred_concept_uncertainty': concept_uncertainty,
-                'pred_concept_logit': concept_logit,
-                'pred_embeddings': pred_embeddings,
-                'concept_embeddings': concept_embeddings,
-                'pred_mean': pred_concept_mean,
-                'pred_logsigma': pred_concept_logsigma,
-                'concept_mean': concept_mean,
-                'shift': self.shift,
-                'negative_scale': self.negative_scale,
-            }
+            out_dict = dict(
+                pred_concept_prob=out_concept_prob,
+                pred_concept_uncertainty=concept_uncertainty,
+                pred_concept_logit=concept_logit,
+                pred_embeddings=pred_embeddings,
+                concept_embeddings=concept_embeddings,
+                pred_mean=pred_concept_mean,
+                pred_logsigma=pred_concept_logsigma,
+                concept_mean=concept_mean,
+                shift=self.shift,
+                negative_scale=self.negative_scale,
+            )
         else:
-            out_dict = {
-                'pred_concept_prob': out_concept_prob,
-                'pred_embeddings': pred_embeddings,
-                'concept_embeddings': concept_embeddings,
-                'pred_mean': pred_concept_mean,
-                'concept_mean': concept_mean,
-                'shift': self.shift,
-                'negative_scale': self.negative_scale,
-            }
+            out_dict = dict(
+                pred_concept_prob=out_concept_prob,
+                pred_embeddings=pred_embeddings,
+                concept_embeddings=concept_embeddings,
+                pred_mean=pred_concept_mean,
+                concept_mean=concept_mean,
+                shift=self.shift,
+                negative_scale=self.negative_scale,
+            )
 
         if self.pred_class:
             if self.train_class_mode in ['sequential', 'independent']:
@@ -1087,9 +1145,28 @@ class ProbCBM(ProbConceptModel, ConceptBottleneckModel):
                     'train_class_mode should be one of [sequential, joint]'
                 )
 
-            if train:
+            # Now consider any interventions that we may want to include
+            if (intervention_idxs is None) and (c is not None) and (
+                self.intervention_policy is not None
+            ):
+                intervention_idxs, c_int = self.intervention_policy(
+                    x=x,
+                    c=c,
+                    pred_c=out_concept_prob,
+                    y=y,
+                    competencies=competencies,
+                    prev_interventions=prev_interventions,
+                    prior_distribution=None,
+                )
+
+            else:
+                c_int = c
+
+            if train or (self.intervention_policy is not None) or (
+                intervention_idxs is not None
+            ):
                 target_concept_onehot = F.one_hot(
-                    c.long(),
+                    c_int.long(),
                     num_classes=2,
                 )
                 gt_concept_embedddings = (
@@ -1113,11 +1190,31 @@ class ProbCBM(ProbConceptModel, ConceptBottleneckModel):
                     )
                 gt_concept_embedddings = \
                     gt_concept_embedddings.permute(0, 2, 1, 3).detach()
+
+                if train:
+                    # Then we randomly replace with the ground-truth concept
+                    # depending on self.intervention_prob
+                    pred_embeddings_for_class = torch.where(
+                        torch.rand_like(gt_concept_embedddings[..., :1, :1]) < self.intervention_prob,
+                        gt_concept_embedddings,
+                        pred_embeddings_for_class,
+                    )
+
+            if intervention_idxs is not None:
+                # Then we perform the actual intervention here!
+                intervention_idxs = self._standardize_indices(
+                    intervention_idxs=intervention_idxs,
+                    batch_size=out_concept_prob.shape[0],
+                )
+                intervention_idxs = intervention_idxs.to(
+                    pred_embeddings_for_class.device
+                )
                 pred_embeddings_for_class = torch.where(
-                    torch.rand_like(gt_concept_embedddings[..., :1, :1]) < self.intervention_prob,
-                    gt_concept_embedddings,
+                    (intervention_idxs == 1).unsqueeze(1).unsqueeze(-1),
+                    gt_concept_embedddings[:, :1, :, :],
                     pred_embeddings_for_class,
                 )
+                out_dict['intervention_idxs'] = intervention_idxs
 
             pred_embeddings_for_class = pred_embeddings_for_class.contiguous().view(
                 *pred_embeddings_for_class.shape[:2],

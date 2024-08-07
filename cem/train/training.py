@@ -1211,9 +1211,14 @@ def train_prob_cbm(
                     model_saved_path.replace(".pt", "_training_times.npy"),
                     np.array([training_time, num_epochs]),
                 )
+    eval_trainer = pl.Trainer(
+        accelerator=accelerator,
+        devices=devices,
+        logger=False,
+    )
     eval_results = evaluate.evaluate_cbm(
         model=model,
-        trainer=task_trainer,
+        trainer=eval_trainer,
         config=config,
         run_name=run_name,
         old_results=old_results,

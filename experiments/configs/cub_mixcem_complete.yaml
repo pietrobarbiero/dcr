@@ -6,7 +6,7 @@ model_selection_groups:
   - ["^(Hybrid-CBM_).*(_Baseline_).*$", "Hybrid-CBM (Baseline)"]
   - ["^(CEM_Baseline_).*$", "CEM (Baseline)"]
   - ["^(IntCEM_).*(_Baseline).*$", "IntCEM (Baseline)"]
-  - ["^(MixCEM_).*_Baseline).*$", "MixCEM (Baseline)"]
+  - ["^(MixCEM_).*(_Baseline).*$", "MixCEM (Baseline)"]
 
 
 model_selection_metrics:
@@ -85,9 +85,60 @@ shared_params:
             name: random_noise
             low_noise_level: 1
             noise_level: 0.75
+      - name: "OOD_heavier"
+        update_previous: True
+        dataset_config:
+          test_transformation_config:
+            name: random_noise
+            low_noise_level: 1
+            noise_level: 0.95
 
 
 runs:
+  - architecture: 'ProbabilisticConceptBottleneckModel'
+    run_name: "ProbCBM_cwl_{concept_loss_weight}"
+    n_samples_inference: 50
+    use_neg_concept: True
+    pred_class: True
+    init_negative_scale: 5
+    init_shift: 5
+    pretrained: True
+    hidden_dim: 16
+    class_hidden_dim: 128
+    intervention_prob: 0.5
+    gradient_clip_val: 2.0
+    max_concept_epochs: 50
+    warmup_epochs: 5
+    max_task_epochs: 20
+    vib_beta: 0.00005
+    concept_loss_weight: [1]
+    learning_rate: 0.001
+    lr_ratio: 10
+    weight_decay: 0
+    weight_loss: False
+    optimizer: adam
+    grid_variables:
+      - concept_loss_weight
+    grid_search_mode: exhaustive
+
+  - architecture: "IntAwareConceptEmbeddingModel"
+    run_name: "IntCEM_intervention_weight_{intervention_weight}_intervention_task_discount_{intervention_task_discount}_Baseline_cwl_{concept_loss_weight}"
+    training_intervention_prob: 0.25
+    intervention_weight: [0.1, 1, 5]
+    intervention_task_discount: [1.1, 1.5]
+    use_concept_groups: True
+    int_model_use_bn: True
+    int_model_layers: [128, 128, 64, 64]
+    embedding_activation: "leakyrelu"
+    max_horizon: 6
+    horizon_rate: 1.005
+    gradient_clip_val: 100
+    grid_variables:
+        - concept_loss_weight
+        - intervention_task_discount
+        - intervention_weight
+    grid_search_mode: exhaustive
+
   - architecture: 'ConceptEmbeddingModel'
     run_name: "CEM_Baseline_cwl_{concept_loss_weight}"
     sigmoidal_prob: True
@@ -163,24 +214,6 @@ runs:
     grid_variables:
       - concept_loss_weight
       - extra_dims
-    grid_search_mode: exhaustive
-
-  - architecture: "IntAwareConceptEmbeddingModel"
-    run_name: "IntCEM_intervention_weight_{intervention_weight}_intervention_task_discount_{intervention_task_discount}_Baseline_cwl_{concept_loss_weight}"
-    training_intervention_prob: 0.25
-    intervention_weight: [0.1, 1, 5]
-    intervention_task_discount: [1.1, 1.5]
-    use_concept_groups: True
-    int_model_use_bn: True
-    int_model_layers: [128, 128, 64, 64]
-    embedding_activation: "leakyrelu"
-    max_horizon: 6
-    horizon_rate: 1.005
-    gradient_clip_val: 100
-    grid_variables:
-        - concept_loss_weight
-        - intervention_task_discount
-        - intervention_weight
     grid_search_mode: exhaustive
 
   - architecture: 'ConceptBottleneckModel'

@@ -1056,7 +1056,7 @@ def train_prob_cbm(
                     print(
                         f"\tWarming up ProbCBM for {warmup_epochs} epochs"
                     )
-                    for p in model.cnn_module.parameters():
+                    for p in model.extractor.parameters():
                         p.requires_grad = False
                     warmup_trainer = pl.Trainer(
                         max_epochs=config.get(
@@ -1083,7 +1083,7 @@ def train_prob_cbm(
                                 'Experiment execution was manually '
                                 'interrupted!'
                             )
-                    for p in model.cnn_module.parameters():
+                    for p in model.extractor.parameters():
                         p.requires_grad = True
                     print("\t\tDone with warmup!")
                 print("\tTraining ProbCBM's concept model")

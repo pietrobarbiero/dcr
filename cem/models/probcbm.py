@@ -19,6 +19,7 @@ from torchvision.models import resnet18
 
 from cem.metrics.accs import compute_accuracy
 from cem.models.cbm import ConceptBottleneckModel
+import cem.train.utils as utils
 
 
 
@@ -277,68 +278,86 @@ class ConceptConvModelBase(nn.Module):
     """
     def __init__(
         self,
-        c_extractor_arch=resnet18,
+        output_dim,
+        c_extractor_arch=utils.wrap_pretrained_model(resnet18),
         pretrained=True,
         train_class_mode='sequential',
+        image_size=16,
     ):
         nn.Module.__init__(self)
         self.train_class_mode = train_class_mode
-        self.use_dropout = False
+        # NEW!!!!!!!!!!!!!!!!!!!!!!!!
+        self.extractor = nn.Sequential(
+            c_extractor_arch(
+                output_dim=output_dim*image_size*image_size
+            ),
+            torch.nn.Unflatten(-1, (output_dim, image_size, image_size)),
+        )
+        self.d_model = output_dim
+        self.avgpool = torch.nn.AvgPool2d((image_size, image_size))
 
-        base_model = c_extractor_arch(output_dim=1000)
-        self.conv1 = base_model.conv1
-        self.bn1 = base_model.bn1
-        self.relu = base_model.relu
-        self.maxpool = base_model.maxpool
-        self.avgpool = base_model.avgpool
-        self.layer1 = base_model.layer1
-        self.layer2 = base_model.layer2
-        self.layer3 = base_model.layer3
-        self.layer4 = base_model.layer4
+        # BEFORE!!!!!!!!!!!!!!!!!!!!!!!!
+        # self.use_dropout = False
 
-        self.d_model = self.layer4[-1].conv2.out_channels
+        # base_model = c_extractor_arch(output_dim=1000)
+        # self.conv1 = base_model.conv1
+        # self.bn1 = base_model.bn1
+        # self.relu = base_model.relu
+        # self.maxpool = base_model.maxpool
+        # self.avgpool = base_model.avgpool
+        # self.layer1 = base_model.layer1
+        # self.layer2 = base_model.layer2
+        # self.layer3 = base_model.layer3
+        # self.layer4 = base_model.layer4
 
-        self.cnn_module = nn.ModuleList([
-            self.conv1,
-            self.bn1,
-            self.layer1,
-            self.layer2,
-            self.layer3,
-            self.layer4,
-        ])
+        # self.d_model = self.layer4[-1].conv2.out_channels
+
+        # self.cnn_module = nn.ModuleList([
+        #     self.conv1,
+        #     self.bn1,
+        #     self.layer1,
+        #     self.layer2,
+        #     self.layer3,
+        #     self.layer4,
+        # ])
 
     def forward_basic(self, x, avgpool=True, sample=False):
-        if hasattr(self, 'features'):
-            x = self.features(x)
-            return x
-        x = self.conv1(x)
-        x = self.bn1(x)
-        x = self.relu(x)
-        if self.use_dropout:
-            x = MC_dropout(x, p=0.2, mask=sample)
-        x = self.maxpool(x)
+        # NEW!!!!!!!!!!!!!!!!!!!!!!!!
+        return self.extractor(x)
 
-        x = self.layer1(x)
-        if self.use_dropout:
-            x = MC_dropout(x, p=0.2, mask=sample)
-        x = self.layer2(x)
-        if self.use_dropout:
-            x = MC_dropout(x, p=0.2, mask=sample)
-        x = self.layer3(x)
-        if self.use_dropout:
-            x = MC_dropout(x, p=0.2, mask=sample)
-        x = self.layer4(x)
+        # BEFORE!!!!!!!!!!!!!!!!!!!!!!!!
+        # if hasattr(self, 'features'):
+        #     x = self.features(x)
+        #     return x
+        # x = self.conv1(x)
+        # x = self.bn1(x)
+        # x = self.relu(x)
+        # if self.use_dropout:
+        #     x = MC_dropout(x, p=0.2, mask=sample)
+        # x = self.maxpool(x)
 
-        if avgpool:
-            return self.avgpool(x)
-        return x
+        # x = self.layer1(x)
+        # if self.use_dropout:
+        #     x = MC_dropout(x, p=0.2, mask=sample)
+        # x = self.layer2(x)
+        # if self.use_dropout:
+        #     x = MC_dropout(x, p=0.2, mask=sample)
+        # x = self.layer3(x)
+        # if self.use_dropout:
+        #     x = MC_dropout(x, p=0.2, mask=sample)
+        # x = self.layer4(x)
+
+        # if avgpool:
+        #     return self.avgpool(x)
+        # return x
 
 
 class ProbConceptModel(ConceptConvModelBase):
     def __init__(
         self,
         n_concepts,
-        c_extractor_arch=resnet18,
+        c_extractor_arch=utils.wrap_pretrained_model(resnet18),
+        latent_dim=512,
         pretrained=True,
         n_tasks=200,
         hidden_dim=16,
@@ -358,6 +377,7 @@ class ProbConceptModel(ConceptConvModelBase):
         """
         ConceptConvModelBase.__init__(
             self,
+            output_dim=latent_dim,
             c_extractor_arch=c_extractor_arch,
             pretrained=pretrained,
         )
@@ -652,7 +672,7 @@ class ProbCBM(ProbConceptModel, ConceptBottleneckModel):
         use_class_emb_from_concept=False,
         use_probabilistic_concept=True,
 
-        c_extractor_arch=resnet18,
+        c_extractor_arch=utils.wrap_pretrained_model(resnet18),
         pretrained=True,
         n_samples_inference=50,
         use_neg_concept=True,
@@ -663,7 +683,7 @@ class ProbCBM(ProbConceptModel, ConceptBottleneckModel):
         train_class_mode='sequential',
         init_negative_scale=5,
         init_shift=5,
-
+        latent_dim=512, # Latent dimension to use for the underlying backbone
 
         optimizer="adam",
         momentum=0.9,
@@ -688,6 +708,7 @@ class ProbCBM(ProbConceptModel, ConceptBottleneckModel):
             n_concepts=n_concepts,
             hidden_dim=hidden_dim,
             n_tasks=n_tasks,
+            latent_dim=latent_dim,
             c_extractor_arch=c_extractor_arch,
             pretrained=pretrained,
             n_samples_inference=n_samples_inference,
@@ -754,11 +775,17 @@ class ProbCBM(ProbConceptModel, ConceptBottleneckModel):
 
         del self.mean_head
 
+        # BEFORE!!!!!!!!!!!!!!!!!!!!!!!!
         self.stem = nn.Sequential(
             nn.Conv2d(self.d_model, hidden_dim * n_concepts, kernel_size=1),
             nn.BatchNorm2d(hidden_dim * n_concepts),
             nn.ReLU(),
         )
+        # NEW!!!!!!!!!!!!!!!!!!!!!!!!
+        # self.stem = nn.Sequential(
+        #     torch.nn.Linear(self.d_model, hidden_dim * n_concepts),
+        #     nn.ReLU(),
+        # )
         weights_init(self.stem)
         self.mean_head = nn.ModuleList([
             PIENet(1, hidden_dim, hidden_dim, hidden_dim)
@@ -1008,7 +1035,10 @@ class ProbCBM(ProbConceptModel, ConceptBottleneckModel):
         B = x.shape[0]
         feature = self.forward_basic(x, avgpool=False)
         feature = self.stem(feature)
+        # BEFORE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
         feature_avg = self.avgpool(feature).flatten(1)
+        # NEW!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+        # feature_avg = feature.flatten(1)
         feature = feature.view(
             B,
             self.n_concepts,

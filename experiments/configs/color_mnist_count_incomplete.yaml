@@ -35,6 +35,9 @@ model_selection_groups:
   - ["^(new_Mixing-CEM_).*(Noisy_Count_Concept_Spurious).*$", "new_Mixing-CEM (Concept Spurious)"]
   - ["^(Mixing-CEM_).*(Noisy_Count_Downstream_Spurious).*$", "Mixing-CEM (Downstream Spurious)"]
   - ["^(new_Mixing-CEM_).*(Noisy_Count_Downstream_Spurious).*$", "new_Mixing-CEM (Downstream Spurious)"]
+  - ["^(ProbCBM).*(_Noisy_Count_Baseline_).*$", "ProbCBM (Baseline)"]
+  - ["^(ProbCBM).*(_Noisy_Count_Downstream_Spurious_).*$", "ProbCBM (Downstream Spurious)"]
+  - ["^(ProbCBM).*(_Noisy_Count_Concept_Spurious_).*$", "ProbCBM (Concept Spurious)"]
 
 model_selection_metrics:
   - val_acc_y_random_group_level_True_use_prior_False_int_auc
@@ -1456,3 +1459,237 @@ runs:
 
 
 
+
+
+
+
+
+  - architecture: 'ProbabilisticConceptBottleneckModel'
+    run_name: "ProbCBM_cwl_class_hidden_dim_{class_hidden_dim}_hidden_dim_{hidden_dim}_n_samples_inference_{n_samples_inference}_Noisy_Count_Baseline_{dataset_config[num_operands]}_cwl_{concept_loss_weight}"
+    n_samples_inference: 50
+    use_neg_concept: True
+    pred_class: True
+    init_negative_scale: 5
+    init_shift: 5
+    pretrained: True
+    hidden_dim: [16, 32]
+    class_hidden_dim: [128, 256]
+    intervention_prob: 0.5
+    gradient_clip_val: 2.0
+    max_concept_epochs: 250
+    warmup_epochs: 5
+    max_task_epochs: 250
+    vib_beta: 0.00005
+    concept_loss_weight: [1]
+    learning_rate: 0.001
+    lr_ratio: 10
+    weight_decay: 0
+    weight_loss: False
+    optimizer: adam
+
+    # Dataset Configuration
+    dataset_config:
+      dataset: color_mnist_add
+      root_dir: data/
+      num_workers: 8
+      batch_size: 256 #2048 # CHANGING CAUSE GPU MEMORY IS NOT ENOUGH
+      num_operands: [20] #[10, 20]
+      selected_digits: [3, 8]
+      count_labels: True
+      low_noise_level: 1
+      noise_level: 0.25
+      test_low_noise_level: 1
+      test_noise_level: 0.25
+      train_dataset_size: 5000
+      test_dataset_size: 5000
+      sampling_percent: 0.5
+      sampling_groups: True
+      test_subsampling: 1
+      weight_loss: False
+
+      spurious_strength: 0.1
+      color_by_label: False
+      colors: ["random_1", "random_2", "random_3", "random_4", "random_5", "random_6", "random_7", "random_8", "random_9", "random_10"]
+      digit_color_distribution:
+        0: ["spurious", null, null, null, null, null, null, null, null, null]
+        1: [null, "spurious", null, null, null, null, null, null, null, null]
+        2: [null, null, "spurious", null, null, null, null, null, null, null]
+        3: [null, null, null, "spurious", null, null, null, null, null, null]
+        4: [null, null, null, null, "spurious", null, null, null, null, null]
+        5: [null, null, null, null, null, "spurious", null, null, null, null]
+        6: [null, null, null, null, null, null, "spurious", null, null, null]
+        7: [null, null, null, null, null, null, null, "spurious", null, null]
+        8: [null, null, null, null, null, null, null, null, "spurious", null]
+        9: [null, null, null, null, null, null, null, null, null, "spurious"]
+
+      test_digit_color_distribution:
+        0: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        1: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        2: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        3: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        4: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        5: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        6: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        7: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        8: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        9: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+    grid_variables:
+      - dataset_config.num_operands
+      - concept_loss_weight
+      - hidden_dim
+      - class_hidden_dim
+    grid_search_mode: exhaustive
+
+
+  - architecture: 'ProbabilisticConceptBottleneckModel'
+    run_name: "ProbCBM_cwl_class_hidden_dim_{class_hidden_dim}_hidden_dim_{hidden_dim}_n_samples_inference_{n_samples_inference}_Noisy_Count_Downstream_Spurious_{dataset_config[num_operands]}_cwl_{concept_loss_weight}"
+    n_samples_inference: 50
+    use_neg_concept: True
+    pred_class: True
+    init_negative_scale: 5
+    init_shift: 5
+    pretrained: True
+    hidden_dim: [16, 32]
+    class_hidden_dim: [128, 256]
+    intervention_prob: 0.5
+    gradient_clip_val: 2.0
+    max_concept_epochs: 250
+    warmup_epochs: 5
+    max_task_epochs: 250
+    vib_beta: 0.00005
+    concept_loss_weight: [1]
+    learning_rate: 0.001
+    lr_ratio: 10
+    weight_decay: 0
+    weight_loss: False
+    optimizer: adam
+
+    # Dataset Configuration
+    dataset_config:
+      dataset: color_mnist_add
+      root_dir: data/
+      num_workers: 8
+      batch_size: 256 #2048 # CHANGING CAUSE GPU MEMORY IS NOT ENOUGH
+      num_operands: [20] #[10, 20]
+      selected_digits: [3, 8]
+      count_labels: True
+      low_noise_level: 1
+      noise_level: 0.25
+      test_low_noise_level: 1
+      test_noise_level: 0.25
+      train_dataset_size: 5000
+      test_dataset_size: 5000
+      sampling_percent: 0.5
+      sampling_groups: True
+      test_subsampling: 1
+      weight_loss: False
+
+      spurious_strength: 0.95
+      color_by_label: True    # So that the spurious correlation is label-based!
+      colors: ["random_1", "random_2", "random_3", "random_4", "random_5", "random_6", "random_7", "random_8", "random_9", "random_10"]
+      digit_color_distribution:
+        0: ["spurious", null, null, null, null, null, null, null, null, null]
+        1: [null, "spurious", null, null, null, null, null, null, null, null]
+        2: [null, null, "spurious", null, null, null, null, null, null, null]
+        3: [null, null, null, "spurious", null, null, null, null, null, null]
+        4: [null, null, null, null, "spurious", null, null, null, null, null]
+        5: [null, null, null, null, null, "spurious", null, null, null, null]
+        6: [null, null, null, null, null, null, "spurious", null, null, null]
+        7: [null, null, null, null, null, null, null, "spurious", null, null]
+        8: [null, null, null, null, null, null, null, null, "spurious", null]
+        9: [null, null, null, null, null, null, null, null, null, "spurious"]
+
+      test_digit_color_distribution:
+        0: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        1: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        2: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        3: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        4: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        5: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        6: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        7: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        8: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        9: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+    grid_variables:
+      - dataset_config.num_operands
+      - concept_loss_weight
+      - hidden_dim
+      - class_hidden_dim
+    grid_search_mode: exhaustive
+
+
+  - architecture: 'ProbabilisticConceptBottleneckModel'
+    run_name: "ProbCBM_cwl_class_hidden_dim_{class_hidden_dim}_hidden_dim_{hidden_dim}_n_samples_inference_{n_samples_inference}_Noisy_Count_Concept_Spurious_{dataset_config[num_operands]}_cwl_{concept_loss_weight}"
+    n_samples_inference: 50
+    use_neg_concept: True
+    pred_class: True
+    init_negative_scale: 5
+    init_shift: 5
+    pretrained: True
+    hidden_dim: [16, 32]
+    class_hidden_dim: [128, 256]
+    intervention_prob: 0.5
+    gradient_clip_val: 2.0
+    max_concept_epochs: 250
+    warmup_epochs: 5
+    max_task_epochs: 250
+    vib_beta: 0.00005
+    concept_loss_weight: [1]
+    learning_rate: 0.001
+    lr_ratio: 10
+    weight_decay: 0
+    weight_loss: False
+    optimizer: adam
+
+    # Dataset Configuration
+    dataset_config:
+      dataset: color_mnist_add
+      root_dir: data/
+      num_workers: 8
+      batch_size: 256 #2048 # CHANGING CAUSE GPU MEMORY IS NOT ENOUGH
+      num_operands: [20] #[10, 20]
+      selected_digits: [3, 8]
+      count_labels: True
+      low_noise_level: 1
+      noise_level: 0.25
+      test_low_noise_level: 1
+      test_noise_level: 0.25
+      train_dataset_size: 5000
+      test_dataset_size: 5000
+      sampling_percent: 0.5
+      sampling_groups: True
+      test_subsampling: 1
+      weight_loss: False
+
+      spurious_strength: 0.95
+      color_by_label: False    # So that the spurious correlation is concept-based!
+      colors: ["random_1", "random_2", "random_3", "random_4", "random_5", "random_6", "random_7", "random_8", "random_9", "random_10"]
+      digit_color_distribution:
+        0: ["spurious", null, null, null, null, null, null, null, null, null]
+        1: [null, "spurious", null, null, null, null, null, null, null, null]
+        2: [null, null, "spurious", null, null, null, null, null, null, null]
+        3: [null, null, null, "spurious", null, null, null, null, null, null]
+        4: [null, null, null, null, "spurious", null, null, null, null, null]
+        5: [null, null, null, null, null, "spurious", null, null, null, null]
+        6: [null, null, null, null, null, null, "spurious", null, null, null]
+        7: [null, null, null, null, null, null, null, "spurious", null, null]
+        8: [null, null, null, null, null, null, null, null, "spurious", null]
+        9: [null, null, null, null, null, null, null, null, null, "spurious"]
+
+      test_digit_color_distribution:
+        0: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        1: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        2: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        3: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        4: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        5: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        6: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        7: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        8: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        9: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+    grid_variables:
+      - dataset_config.num_operands
+      - concept_loss_weight
+      - hidden_dim
+      - class_hidden_dim
+    grid_search_mode: exhaustive

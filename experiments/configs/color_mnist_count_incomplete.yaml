@@ -1225,7 +1225,7 @@ runs:
     emb_size: [128, 64] #[256, 128] # CHANGING CAUSE GPU MEMORY IS NOT ENOUGH
     embedding_activation: null
     n_discovered_concepts: [5, 2, 0] #[10, 5, 0] # CHANGING CAUSE GPU MEMORY IS NOT ENOUGH
-    concept_loss_weight: [10]
+    concept_loss_weight: [0.1, 1, 10]
     contrastive_loss_weight: [0] #, 1]
     mix_ground_truth_embs: True
     shared_emb_generator: [True] #[True, False]

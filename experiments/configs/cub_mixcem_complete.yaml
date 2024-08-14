@@ -7,6 +7,7 @@ model_selection_groups:
   - ["^(CEM_Baseline_).*$", "CEM (Baseline)"]
   - ["^(IntCEM_).*(_Baseline).*$", "IntCEM (Baseline)"]
   - ["^(MixCEM_).*(_Baseline).*$", "MixCEM (Baseline)"]
+  - ["^(ProbCBM_).*$", "ProbCBM (Baseline)"]
 
 
 model_selection_metrics:
@@ -96,20 +97,20 @@ shared_params:
 
 runs:
   - architecture: 'ProbabilisticConceptBottleneckModel'
-    run_name: "ProbCBM_cwl_{concept_loss_weight}"
+    run_name: "ProbCBM_cwl_class_hidden_dim_{class_hidden_dim}_hidden_dim_{hidden_dim}_n_samples_inference_{n_samples_inference}_max_concept_epochs_{max_concept_epochs}_max_task_epochs_{max_task_epochs}"
     n_samples_inference: 50
     use_neg_concept: True
     pred_class: True
     init_negative_scale: 5
     init_shift: 5
     pretrained: True
-    hidden_dim: 16
-    class_hidden_dim: 128
+    hidden_dim: [16]
+    class_hidden_dim: [128]
     intervention_prob: 0.5
     gradient_clip_val: 2.0
-    max_concept_epochs: 50
+    max_concept_epochs: 70
     warmup_epochs: 5
-    max_task_epochs: 20
+    max_task_epochs: 75
     vib_beta: 0.00005
     concept_loss_weight: [1]
     learning_rate: 0.001
@@ -119,6 +120,8 @@ runs:
     optimizer: adam
     grid_variables:
       - concept_loss_weight
+      - class_hidden_dim
+      - hidden_dim
     grid_search_mode: exhaustive
 
   - architecture: "IntAwareConceptEmbeddingModel"
@@ -145,13 +148,20 @@ runs:
     training_intervention_prob: 0.25
     embedding_activation: "leakyrelu"
 
+  - architecture: 'ConceptEmbeddingModel'
+    run_name: "DNN"
+    sigmoidal_prob: True
+    training_intervention_prob: 0
+    concept_loss_weight: [0]
+    embedding_activation: "leakyrelu"
+
   - architecture: 'MixingConceptEmbeddingModel'
     run_name: "MixCEM_n_extra_{n_discovered_concepts}_entr_{discovered_probs_entropy}_dis_{intervention_task_discount}_ip_{training_intervention_prob}_dip_{dyn_training_intervention_prob}_cl_{contrastive_loss_weight}_mix_{mix_ground_truth_embs}_shared_{shared_emb_generator}_emb_size_{emb_size}_ml_{intermediate_task_concept_loss}_Baseline_cwl_{concept_loss_weight}"
     training_intervention_prob: [[0.25, 0.5, 0.75, 1]]
-    emb_size: [64, 32]
+    emb_size: [256, 64, 32]
     embedding_activation: null
     n_discovered_concepts: [50, 25]
-    concept_loss_weight: [10]
+    concept_loss_weight: [10, 1]
     contrastive_loss_weight: [0]
     mix_ground_truth_embs: True
     shared_emb_generator: [True]
@@ -181,7 +191,7 @@ runs:
     emb_size: [1024, 512, 256, 128]
     embedding_activation: null
     n_discovered_concepts: [0]
-    concept_loss_weight: [10, 5]
+    concept_loss_weight: [10, 5, 1]
     contrastive_loss_weight: [0]
     mix_ground_truth_embs: True
     shared_emb_generator: [True]

@@ -1225,7 +1225,7 @@ class MixingConceptEmbeddingModel(ConceptEmbeddingModel):
         current_loss = 0.0
         if (self.intermediate_task_concept_loss != 0) and (
             self._current_pred_concepts is not None
-        ):
+        ) and (self.n_discovered_concepts > 0):
             centers = []
             for i in range(self.n_discovered_concepts):
                 # [Shape: (1, emb_size)]

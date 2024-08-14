@@ -88,8 +88,7 @@ import cem.data.celeba_loader as celeba_data_module
 import cem.data.color_mnist_add as color_mnist_data_module
 import cem.data.CUB200.cub_loader as cub_data_module
 import cem.data.mnist_add as mnist_data_module
-import cem.interventions.utils as intervention_utils
-import cem.train.evaluate as evaluation
+import cem.data.waterbirds_loader as waterbirds_data_module
 import cem.train.training as training
 import cem.train.utils as utils
 
@@ -334,6 +333,8 @@ def _generate_dataset_and_update_config(
     intervention_config = experiment_config.get('intervention_config', {})
     if dataset_config["dataset"] == "cub":
         data_module = cub_data_module
+    elif dataset_config["dataset"] == "waterbirds":
+        data_module = waterbirds_data_module
     elif dataset_config["dataset"] == "celeba":
         data_module = celeba_data_module
     elif dataset_config["dataset"] in ["xor", "vector", "dot", "trig"]:

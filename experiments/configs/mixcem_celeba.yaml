@@ -148,7 +148,7 @@ runs:
     cond_discovery: False
     intermediate_task_concept_loss: [0]
     task_concept_loss: 1
-    intervention_task_discount: [1.01, 1.05] #, 1.5]
+    intervention_task_discount: [1.01, 1.05, 1.5] #, 1.5]
     discovered_probs_entropy: 0
     dyn_training_intervention_prob: [0.1, 0.25]
     grid_variables:

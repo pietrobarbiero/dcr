@@ -882,8 +882,23 @@ class ProbCBM(ProbConceptModel, ConceptBottleneckModel):
                 pred_class = F.softmax(pred_class, dim=-1)
             else:
                 assert pred_class_prob is not None
+                if (len(pred_class_prob.shape) == 1) or (
+                    pred_class_prob.shape[-1] == 1
+                ):
+                    if len(pred_class_prob.shape) == 2 and (
+                        len(y.shape) == 1
+                    ):
+                        used_pred_class_prob = pred_class_prob.squeeze(-1)
+                    else:
+                        used_pred_class_prob = pred_class_prob
+                    loss_class = F.binary_cross_entropy(
+                        used_pred_class_prob,
+                        y,
+                        reduction='mean',
+                    )
+                else:
+                    loss_class = F.nll_loss(pred_class.log(), y, reduction='mean')
                 pred_class = pred_class_prob
-                loss_class = F.nll_loss(pred_class.log(), y, reduction='mean')
             loss_iter_dict['class'] = loss_class
 
             if stage != 'concept':
@@ -903,7 +918,7 @@ class ProbCBM(ProbConceptModel, ConceptBottleneckModel):
         intervention_idxs=None,
     ):
         x, y, (c, g, competencies, prev_interventions) = self._unpack_batch(batch)
-        c_sem, c_embs, y_probs, tail_outputs, _, _ = self._forward(
+        outputs = self._forward(
             x,
             intervention_idxs=intervention_idxs,
             c=c,
@@ -914,6 +929,11 @@ class ProbCBM(ProbConceptModel, ConceptBottleneckModel):
             output_embeddings=True,
             output_latent=True,
         )
+        c_sem, c_embs, y_probs = outputs[:3]
+        if self.output_interventions:
+            tail_outputs = outputs[4]
+        else:
+            tail_outputs = outputs[3]
         loss, loss_iter_dict = self._train_step(
             stage=self.stage,
             c=c,

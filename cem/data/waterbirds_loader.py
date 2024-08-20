@@ -21,7 +21,7 @@ from cem.data.CUB200.cub_loader import CONCEPT_GROUP_MAP, SELECTED_CONCEPTS
 ## GENERAL DATASET GLOBAL VARIABLES
 ########################################################
 
-N_CLASSES = 2
+N_CLASSES = 1
 
 
 # IMPORANT NOTE: THIS DATASET NEEDS TO BE DOWNLOADED FIRST BEFORE BEING ABLE
@@ -44,6 +44,11 @@ def get_sample_attributes(idx, lines):
         attr_line_to_val(lines[x]) for x in range((idx - 1) * 312, idx * 312)
     ])
 
+def get_sample_species(idx, lines):
+    output = np.zeros((200,))
+    class_idx = int(lines[idx - 1].split(" ")[1])
+    output[class_idx - 1] = 1
+    return output
 
 class WaterbirdsDataset(Dataset):
     """
@@ -58,16 +63,18 @@ class WaterbirdsDataset(Dataset):
         augment_data=False,
         split='train',
         image_size=224,
-        class_dtype=float,
         use_attributes=True,
+        use_bird_species=False,
         concept_transform=None,
+        n_classes=2,
     ):
         self.root_dir = root_dir
         self.augment_data = augment_data
         self.split = split
-        self.class_dtype = class_dtype
+        self.class_dtype = float if n_classes == 2 else int
         self.cub_root_dir = cub_root_dir
         self.use_attributes = use_attributes
+        self.use_bird_species = use_bird_species
         self.concept_transform = concept_transform
 
         if not os.path.exists(self.root_dir):
@@ -83,7 +90,7 @@ class WaterbirdsDataset(Dataset):
 
         # Get the y values
         self.y_array = self.metadata_df['y'].values.astype(np.float32)
-        self.n_classes = N_CLASSES
+        self.n_classes = n_classes
 
         # We only support one confounder for CUB for now
         self.group_array = self.metadata_df['place'].values.astype(
@@ -94,22 +101,39 @@ class WaterbirdsDataset(Dataset):
         self.filename_array = self.metadata_df['img_filename'].values
         if self.cub_root_dir is not None:
             image_true_idx = self.metadata_df['img_id'].values
-            with open(
-                os.path.join(
-                    self.cub_root_dir,
-                    'CUB_200_2011/attributes/image_attribute_labels.txt',
-                ),
-                'r',
-            ) as f:
-                lines = [x.rstrip() for x in f]
-
-            self.attributes = np.array([
-                get_sample_attributes(idx, lines)[SELECTED_CONCEPTS] for idx in image_true_idx
-            ])
-        elif self.use_attributes:
+            if self.use_attributes and self.use_bird_species:
+                raise ValueError(
+                    'Only one of use_attributes or use_bird_species can be '
+                    'set to True for Waterbirds.'
+                )
+            if self.use_attributes:
+                with open(
+                    os.path.join(
+                        self.cub_root_dir,
+                        'CUB_200_2011/attributes/image_attribute_labels.txt',
+                    ),
+                    'r',
+                ) as f:
+                    lines = [x.rstrip() for x in f]
+                self.attributes = np.array([
+                    get_sample_attributes(idx, lines)[SELECTED_CONCEPTS] for idx in image_true_idx
+                ])
+            elif self.use_bird_species:
+                with open(
+                    os.path.join(
+                        self.cub_root_dir,
+                        'CUB_200_2011/image_class_labels.txt',
+                    ),
+                    'r',
+                ) as f:
+                    lines = [x.rstrip() for x in f]
+                self.attributes = np.array([
+                    get_sample_species(idx, lines) for idx in image_true_idx
+                ])
+        elif self.use_attributes or self.use_bird_species:
             raise ValueError(
                 'Unless cub_root_dir is provided, we cannot use image '
-                'attributes for Waterbirds.'
+                'attributes or bird species for Waterbirds.'
             )
 
         self.split_array_map = []
@@ -141,7 +165,7 @@ class WaterbirdsDataset(Dataset):
     def __getitem__(self, idx):
         real_idx = self.split_array_map[idx]
         y = self.class_dtype(self.y_array[real_idx])
-        if self.use_attributes:
+        if self.use_attributes or self.use_bird_species:
             c = self.attributes[real_idx, :]
         else:
             c = np.array([self.group_array[real_idx]])
@@ -155,6 +179,8 @@ class WaterbirdsDataset(Dataset):
         img = Image.open(img_filename).convert('RGB')
         img = self.transform(img)
         c = torch.FloatTensor(c)
+        if self.class_dtype == float:
+            y = torch.FloatTensor([y]).squeeze(-1)
         return img, y, c
 
 
@@ -209,8 +235,9 @@ def load_data(
     dataset_transform=lambda x: x,
     dataset_size=None,
     augment_data=False,
-    class_dtype=None,
+    n_classes=2,
     use_attributes=True,
+    use_bird_species=False,
     cub_root_dir=None,
     concept_transform=None,
 ):
@@ -250,8 +277,9 @@ def load_data(
         cub_root_dir=cub_root_dir,
         augment_data=augment_data,
         image_size=image_size,
-        class_dtype=class_dtype,
+        n_classes=n_classes,
         use_attributes=use_attributes,
+        use_bird_species=use_bird_species,
         concept_transform=concept_transform,
     )
     if dataset_size is not None:
@@ -302,7 +330,7 @@ def get_num_labels(*args, **kwargs):
     Returns:
         int: the number of class labels used in the waterbirds dataset.
     """
-    return N_CLASSES
+    return kwargs.get('n_classes', 2)
 
 def get_num_attributes(*args, **kwargs):
     """
@@ -321,17 +349,11 @@ def generate_data(
     output_dataset_vars=False,
     rerun=False,
     dataset_transform=lambda x: x,
-    val_subsample=None,
-    class_dtype=None,
+    n_classes=2,
     training_transform=None,
 ):
     if root_dir is None:
         root_dir = DATASET_DIR
-    output_classes = 2
-    if not (class_dtype is None):
-        class_dtype = getattr(np, class_dtype)
-    else:
-        class_dtype =  (int if output_classes > 1 else float)
     seed_everything(seed)
 
     training_transform = (
@@ -341,6 +363,7 @@ def generate_data(
 
     sampling_groups = config.get("sampling_groups", False)
 
+    val_subsample = config.get('val_subsample', None)
     sampling_percent = config.get("sampling_percent", 1)
     sampling_groups = config.get("sampling_groups", False)
     image_size = config.get('image_size', 224)
@@ -348,11 +371,15 @@ def generate_data(
     dataset_size = config.get('dataset_size', None)
     augment_data = config.get('augment_data', False)
     use_attributes = config.get('use_attributes', True)
+    use_bird_species = config.get('use_bird_species', False)
     batch_size = config.get('batch_size', 32)
 
     if use_attributes:
         n_concepts = len(SELECTED_CONCEPTS)
         concept_group_map = CONCEPT_GROUP_MAP.copy()
+    elif use_bird_species:
+        n_concepts = 200
+        concept_group_map = None
     else:
         # Then the background is used as an actual concept
         n_concepts = 2
@@ -440,9 +467,10 @@ def generate_data(
         ),
         dataset_size=dataset_size,
         augment_data=augment_data,
-        class_dtype=class_dtype,
+        n_classes=n_classes,
         cub_root_dir=config.get('cub_root_dir', None),
         use_attributes=use_attributes,
+        use_bird_species=use_bird_species,
         concept_transform=concept_transform,
     )
 
@@ -467,9 +495,10 @@ def generate_data(
             dataset_transform=dataset_transform,
             dataset_size=dataset_size,
             augment_data=False,
-            class_dtype=class_dtype,
+            n_classes=n_classes,
             cub_root_dir=config.get('cub_root_dir', None),
             use_attributes=use_attributes,
+            use_bird_species=use_bird_species,
             concept_transform=concept_transform,
         )
     else:
@@ -568,9 +597,10 @@ def generate_data(
         dataset_transform=dataset_transform,
         dataset_size=dataset_size,
         augment_data=False,
-        class_dtype=class_dtype,
+        n_classes=n_classes,
         cub_root_dir=config.get('cub_root_dir', None),
         use_attributes=use_attributes,
+        use_bird_species=use_bird_species,
         concept_transform=concept_transform,
     )
 
@@ -581,5 +611,5 @@ def generate_data(
         val_dl,
         test_dl,
         imbalance,
-        (n_concepts, get_num_labels(), concept_group_map),
+        (n_concepts, get_num_labels(**config), concept_group_map),
     )

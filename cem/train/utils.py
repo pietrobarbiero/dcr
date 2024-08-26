@@ -172,6 +172,8 @@ def compute_accuracy(
 
 def wrap_pretrained_model(c_extractor_arch, pretrain_model=True):
     def _result_x2c_fun(output_dim):
+        if c_extractor_arch == "identity":
+            return "identity"
         try:
             model = c_extractor_arch(pretrained=pretrain_model)
             if output_dim:

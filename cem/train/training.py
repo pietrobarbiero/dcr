@@ -7,6 +7,7 @@ import time
 import torch
 
 from pytorch_lightning import seed_everything
+from pytorch_lightning.callbacks import ModelCheckpoint
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from pytorch_lightning.loggers import WandbLogger
 
@@ -19,7 +20,7 @@ from cem.models.construction import (
 )
 import cem.train.evaluate as evaluate
 
-def _make_callbacks(config):
+def _make_callbacks(config, result_dir, full_run_name):
     callbacks = []
     if 'early_stopping_monitor' in config:
         callbacks.append(
@@ -31,6 +32,19 @@ def _make_callbacks(config):
                 mode=config.get("early_stopping_mode", "min"),
             )
         )
+        if config.get('early_stopping_best_model', False):
+            best_model_path = os.path.join(
+                result_dir,
+                f'checkpoints_{full_run_name}/',
+            )
+            callbacks.append(
+                ModelCheckpoint(
+                    save_top_k=1,
+                    monitor=config["early_stopping_monitor"],
+                    mode=config.get("early_stopping_mode", "min"),
+                    dirpath=best_model_path,
+                )
+            )
 
     return callbacks
 
@@ -75,7 +89,7 @@ def train_end_to_end_model(
         full_run_name = (
             f"{run_name}"
         )
-    print(f"[Training {run_name}]")
+    print(f"[Training {run_name} (trial {split + 1})]")
     print("config:")
     for key, val in config.items():
         print(f"\t{key} -> {val}")
@@ -122,7 +136,7 @@ def train_end_to_end_model(
         enter_obj = utils.EmptyEnter()
 
     with enter_obj as run:
-        callbacks = _make_callbacks(config)
+        callbacks = _make_callbacks(config, result_dir, full_run_name)
         trainer = pl.Trainer(
             accelerator=accelerator,
             devices=devices,
@@ -190,6 +204,12 @@ def train_end_to_end_model(
                     )
             training_time = time.time() - start_time
             num_epochs = fit_trainer.current_epoch
+            if config.get('early_stopping_best_model', False) and (
+                num_epochs != config['max_epochs']
+            ):
+                # Then restore the best validation model
+                model.load_from_checkpoint(callbacks[-1].best_model_path)
+
             if save_model and (result_dir is not None):
                 torch.save(
                     model.state_dict(),
@@ -279,7 +299,7 @@ def train_sequential_model(
         )
     else:
         full_run_name = run_name
-    print(f"[Training {full_run_name}]")
+    print(f"[Training {full_run_name} (trial {split + 1})]")
     print("config:")
     for key, val in config.items():
         print(f"\t{key} -> {val}")
@@ -345,13 +365,14 @@ def train_sequential_model(
     else:
         enter_obj = utils.EmptyEnter()
     with enter_obj as run:
+        callbacks = _make_callbacks(config, result_dir, full_run_name)
         trainer = pl.Trainer(
             accelerator=accelerator,
             devices=devices,
             # We will distribute half epochs in one model and half on the other
             max_epochs=config['max_epochs'],
             check_val_every_n_epoch=config.get("check_val_every_n_epoch", 5),
-            callbacks=_make_callbacks(config),
+            callbacks=callbacks,
             # Only use the wandb logger when it is a fresh run
             logger=(
                 logger or
@@ -410,6 +431,11 @@ def train_sequential_model(
                     )
             training_time += time.time() - start_time
             num_epochs += x2c_trainer.current_epoch
+            if config.get('early_stopping_best_model', False) and (
+                x2c_trainer.current_epoch != config['max_epochs']
+            ):
+                # Then restore the best validation model
+                model.load_from_checkpoint(callbacks[-1].best_model_path)
             if val_dl is not None:
                 print(
                     "Validation results for x2c model:",
@@ -480,6 +506,7 @@ def train_sequential_model(
 
             # Train the sequential concept to label model
             print("[Training sequential concept to label model]")
+            callbacks = _make_callbacks(config, result_dir, full_run_name)
             seq_c2y_trainer = pl.Trainer(
                 accelerator=accelerator,
                 devices=devices,
@@ -492,7 +519,7 @@ def train_sequential_model(
                     "check_val_every_n_epoch",
                     5,
                 ),
-                callbacks=_make_callbacks(config),
+                callbacks=callbacks,
                 # Only use the wandb logger when it is a fresh run
                 logger=(
                     logger or
@@ -527,6 +554,11 @@ def train_sequential_model(
                     )
             seq_training_time = training_time + time.time() - start_time
             seq_num_epochs = num_epochs + seq_c2y_trainer.current_epoch
+            if config.get('early_stopping_best_model', False) and (
+                seq_c2y_trainer.current_epoch != config['max_epochs']
+            ):
+                # Then restore the best validation model
+                model.load_from_checkpoint(callbacks[-1].best_model_path)
             if seq_c2y_val_dl is not None:
                 print(
                     "Sequential validation results for c2y model:",
@@ -631,7 +663,7 @@ def train_independent_model(
         )
     else:
         full_run_name = run_name
-    print(f"[Training {full_run_name}]")
+    print(f"[Training {full_run_name} (trial {split + 1})]")
     print("config:")
     for key, val in config.items():
         print(f"\t{key} -> {val}")
@@ -700,13 +732,14 @@ def train_independent_model(
     else:
         enter_obj = utils.EmptyEnter()
     with enter_obj as run:
+        callbacks = _make_callbacks(config, result_dir, full_run_name)
         trainer = pl.Trainer(
             accelerator=accelerator,
             devices=devices,
             # We will distribute half epochs in one model and half on the other
             max_epochs=config['max_epochs'],
             check_val_every_n_epoch=config.get("check_val_every_n_epoch", 5),
-            callbacks=_make_callbacks(config),
+            callbacks=callbacks,
             # Only use the wandb logger when it is a fresh run
             logger=(
                 logger or
@@ -767,6 +800,11 @@ def train_independent_model(
                     )
             training_time += time.time() - start_time
             num_epochs += x2c_trainer.current_epoch
+            if config.get('early_stopping_best_model', False) and (
+                x2c_trainer.current_epoch != config['max_epochs']
+            ):
+                # Then restore the best validation model
+                model.load_from_checkpoint(callbacks[-1].best_model_path)
             if val_dl is not None:
                 print(
                     "Validation results for x2c model:",
@@ -804,6 +842,7 @@ def train_independent_model(
 
             # Train the independent concept to label model
             print("[Training independent concept to label model]")
+            callbacks = _make_callbacks(config, result_dir, full_run_name)
             ind_c2y_trainer = pl.Trainer(
                 accelerator=accelerator,
                 devices=devices,
@@ -816,7 +855,7 @@ def train_independent_model(
                     "check_val_every_n_epoch",
                     5,
                 ),
-                callbacks=_make_callbacks(config),
+                callbacks=callbacks,
                 # Only use the wandb logger when it is a fresh run
                 logger=(
                     logger or
@@ -851,6 +890,11 @@ def train_independent_model(
                     )
             ind_training_time = training_time + time.time() - start_time
             ind_num_epochs = num_epochs + ind_c2y_trainer.current_epoch
+            if config.get('early_stopping_best_model', False) and (
+                ind_c2y_trainer.current_epoch != config['max_epochs']
+            ):
+                # Then restore the best validation model
+                model.load_from_checkpoint(callbacks[-1].best_model_path)
             if ind_c2y_val_dl is not None:
                 print(
                     "Independent validation results for c2y model:",
@@ -958,7 +1002,7 @@ def train_prob_cbm(
         full_run_name = (
             f"{run_name}"
         )
-    print(f"[Training {run_name}]")
+    print(f"[Training {run_name} (trial {split + 1})]")
     print("config:")
     for key, val in config.items():
         print(f"\t{key} -> {val}")
@@ -1014,11 +1058,12 @@ def train_prob_cbm(
         result_dir,
         f'{full_run_name}.pt'
     )
+    callbacks = _make_callbacks(config, result_dir, full_run_name)
     trainer_args = dict(
         accelerator=accelerator,
         devices=devices,
         check_val_every_n_epoch=config.get("check_val_every_n_epoch", 5),
-        callbacks=_make_callbacks(config),
+        callbacks=callbacks,
         enable_checkpointing=enable_checkpointing,
         gradient_clip_val=gradient_clip_val,
         # Only use the wandb logger when it is a fresh run
@@ -1098,11 +1143,12 @@ def train_prob_cbm(
                         parameter.requires_grad = False
                     elif name in trainable_params:
                         parameter.requires_grad = True
-                concept_trainer = pl.Trainer(
-                    max_epochs=config.get(
+                max_epochs = config.get(
                         'max_concept_epochs',
                         config.get('max_epochs', None),
-                    ) - config.get('warmup_epochs', 5),
+                    ) - config.get('warmup_epochs', 5)
+                concept_trainer = pl.Trainer(
+                    max_epochs=max_epochs,
                     **trainer_args,
                 )
                 concept_trainer.fit(model, train_dl, val_dl)
@@ -1120,6 +1166,11 @@ def train_prob_cbm(
                             'Experiment execution was manually interrupted!'
                         )
                 num_epochs = concept_trainer.current_epoch
+                if config.get('early_stopping_best_model', False) and (
+                    concept_trainer.current_epoch != max_epochs
+                ):
+                    # Then restore the best validation model
+                    model.load_from_checkpoint(callbacks[-1].best_model_path)
                 print("\tTraining ProbCBM's task model")
                 model.stage = 'class'
                 params_to_train = [
@@ -1138,11 +1189,12 @@ def train_prob_cbm(
                     old_lrs,
                 ):
                     g['lr'] = old_lr
+                max_epochs = config.get(
+                    'max_task_epochs',
+                    config.get('max_epochs', None),
+                )
                 task_trainer = pl.Trainer(
-                    max_epochs=config.get(
-                        'max_task_epochs',
-                        config.get('max_epochs', None),
-                    ),
+                    max_epochs=max_epochs,
                     **trainer_args,
                 )
                 task_trainer.fit(model, train_dl, val_dl)
@@ -1160,11 +1212,17 @@ def train_prob_cbm(
                             'Experiment execution was manually interrupted!'
                         )
                 num_epochs += task_trainer.current_epoch
+                if config.get('early_stopping_best_model', False) and (
+                    task_trainer.current_epoch != max_epochs
+                ):
+                    # Then restore the best validation model
+                    model.load_from_checkpoint(callbacks[-1].best_model_path)
                 training_time = time.time() - start_time
             elif model.train_class_mode == 'joint':
                 print("\tTraining ProbCBM jointly")
+                max_epochs = config['max_epochs']
                 task_trainer = pl.Trainer(
-                    max_epochs=config['max_epochs'],
+                    max_epochs=max_epochs,
                     **trainer_args,
                 )
                 model.stage = 'joint'
@@ -1183,6 +1241,11 @@ def train_prob_cbm(
                             'Experiment execution was manually interrupted!'
                         )
                 num_epochs = task_trainer.current_epoch
+                if config.get('early_stopping_best_model', False) and (
+                    task_trainer.current_epoch != max_epochs
+                ):
+                    # Then restore the best validation model
+                    model.load_from_checkpoint(callbacks[-1].best_model_path)
                 training_time = time.time() - start_time
             else:
                 raise ValueError(

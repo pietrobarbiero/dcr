@@ -881,6 +881,7 @@ class ProbCBM(ProbConceptModel, ConceptBottleneckModel):
                 loss_class = self.loss_task(pred_class, y)
                 pred_class = F.softmax(pred_class, dim=-1)
             else:
+                pred_class = pred_class_prob
                 assert pred_class_prob is not None
                 if (len(pred_class_prob.shape) == 1) or (
                     pred_class_prob.shape[-1] == 1
@@ -898,7 +899,6 @@ class ProbCBM(ProbConceptModel, ConceptBottleneckModel):
                     )
                 else:
                     loss_class = F.nll_loss(pred_class.log(), y, reduction='mean')
-                pred_class = pred_class_prob
             loss_iter_dict['class'] = loss_class
 
             if stage != 'concept':

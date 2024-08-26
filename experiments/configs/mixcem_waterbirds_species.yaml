@@ -8,10 +8,12 @@ model_selection_groups:
   - ["^(DNN_).*$", "DNN (Baseline)"]
   - ["^(IntCEM_).*(_Baseline).*$", "IntCEM (Baseline)"]
   - ["^(MixCEM_).*(_Baseline).*$", "MixCEM (Baseline)"]
+  - ["^(ProbCBM_).*$", "ProbCBM (Baseline)"]
 
 
 model_selection_metrics:
   - val_acc_y_random_group_level_True_use_prior_False_int_auc
+  - val_acc_y
 
 shared_params:
   # Dataset Configuration
@@ -158,7 +160,7 @@ runs:
     init_shift: 5
     pretrained: True
     hidden_dim: [8] #, 32]
-    class_hidden_dim: [4] #32, 64] #128
+    class_hidden_dim: [8] #32, 64] #128
     intervention_prob: 0.5
     gradient_clip_val: 2.0
     max_concept_epochs: 50
@@ -180,7 +182,7 @@ runs:
     dataset_config:
       dataset: "waterbirds"
       num_workers: 8
-      batch_size: 64 #256
+      batch_size: 256
       n_classes: 1
 
       # DATASET VARIABLES

@@ -3,12 +3,72 @@ import pytorch_lightning as pl
 import scipy
 import sklearn.metrics
 import torch
+import math
 
 from torchvision.models import resnet50
 
 from cem.metrics.accs import compute_accuracy
 from cem.models.cem import ConceptEmbeddingModel
 import cem.train.utils as utils
+
+class TransposeLayer(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, input):
+        return torch.transpose(input, -2, -1)
+
+class VectorLinear(torch.nn.Module):
+
+    def __init__(
+        self,
+        in_embs: int,
+        emb_size: int,
+        dim,
+        bias: bool = True,
+        device=None,
+        dtype=None,
+    ) -> None:
+        factory_kwargs = {"device": device, "dtype": dtype}
+        super().__init__()
+        self.in_embs = in_embs
+        self.dim = dim
+        self.emb_size = emb_size
+        self.weight = torch.nn.Parameter(
+            torch.empty((in_embs, 1), **factory_kwargs)
+        )
+        if bias:
+            self.bias = torch.nn.Parameter(torch.empty((emb_size,), **factory_kwargs))
+        else:
+            self.register_parameter("bias", None)
+        self.reset_parameters()
+
+    def reset_parameters(self) -> None:
+        # Setting a=sqrt(5) in kaiming_uniform is the same as initializing with
+        # uniform(-1/sqrt(in_features), 1/sqrt(in_features)). For details, see
+        # https://github.com/pytorch/pytorch/issues/57109
+        torch.nn.init.kaiming_uniform_(self.weight, a=math.sqrt(5))
+        if self.bias is not None:
+            fan_in = self.emb_size
+            bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
+            torch.nn.init.uniform_(self.bias, -bound, bound)
+
+    def forward(self, input):
+        if self.dim in [1, -2]:
+            result = input[:, 0, :] * self.weight[0, 0]
+            for i in range(1, self.in_embs):
+                result += input[:, i, :] * self.weight[i, 0]
+        else:
+            result = input[:, :, 0] * self.weight[0, 0]
+            for i in range(1, self.in_embs):
+                result += input[:, :, i] * self.weight[i, 0]
+        if self.bias is not None:
+            result += self.bias
+        return result
+
+    def extra_repr(self) -> str:
+        return f"in_embs={self.in_embs}, emb_size={self.emb_size}, bias={self.bias is not None}"
+
 
 
 
@@ -944,6 +1004,36 @@ def Gaussian_CDF(x): #change from erf function
 def _binary_entropy(probs):
     return -probs * torch.log2(probs) - (1 - probs) * torch.log2(1 - probs)
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+################################################################################
+## Final Version
+################################################################################
+
 class MixingConceptEmbeddingModel(ConceptEmbeddingModel):
     def __init__(
         self,
@@ -967,6 +1057,12 @@ class MixingConceptEmbeddingModel(ConceptEmbeddingModel):
         sample_probs=False,
         cov_mat=None,
         cond_discovery=False,
+
+        fixed_embeddings=False,
+        initial_concept_embeddings=None,
+        use_cosine_similarity=False,
+        use_linear_emb_layer=False,
+        fixed_scale=None,
 
         c2y_model=None,
         c2y_layers=None,
@@ -993,7 +1089,14 @@ class MixingConceptEmbeddingModel(ConceptEmbeddingModel):
         self.n_concepts = n_concepts
         self.output_interventions = output_interventions
         self.intervention_policy = intervention_policy
-        self.pre_concept_model = c_extractor_arch(output_dim=None)
+        if c_extractor_arch == "identity":
+            self.pre_concept_model = lambda x: x
+        else:
+            self.pre_concept_model = c_extractor_arch(output_dim=None)
+        if self.pre_concept_model == "identity":
+            c_extractor_arch = "identity"
+            self.pre_concept_model = lambda x: x
+
         self.training_intervention_prob = training_intervention_prob
         self.dyn_training_intervention_prob = dyn_training_intervention_prob
         self.output_latent = output_latent
@@ -1044,9 +1147,24 @@ class MixingConceptEmbeddingModel(ConceptEmbeddingModel):
         # self.contrastive_loss_fn = lambda x1, x2, *args, **kwargs: (x1 - x2).pow(2).sum(-1)
         self.top_k_accuracy = top_k_accuracy
 
+        if (initial_concept_embeddings is False) or (
+            initial_concept_embeddings is None
+        ):
+            initial_concept_embeddings = torch.rand(
+                self.n_concepts,
+                2,
+                emb_size,
+            )
+        else:
+            if isinstance(initial_concept_embeddings, np.ndarray):
+                initial_concept_embeddings = torch.FloatTensor(
+                    initial_concept_embeddings
+                )
+            emb_size = initial_concept_embeddings.shape[-1]
         self.emb_size = emb_size
         self.concept_embeddings = torch.nn.Parameter(
-            torch.rand(self.n_concepts, 2, self.emb_size),
+            initial_concept_embeddings,
+            requires_grad=(not fixed_embeddings),
         )
         self.n_discovered_concepts = n_discovered_concepts
         if self.n_discovered_concepts != 0:
@@ -1055,18 +1173,35 @@ class MixingConceptEmbeddingModel(ConceptEmbeddingModel):
                 2,
                 self.emb_size,
             ))
-            self.discovered_contrastive_scale = torch.nn.Parameter(
-                torch.rand((self.n_discovered_concepts,))
+            if fixed_scale is not None:
+                    self.discovered_contrastive_scale = torch.nn.Parameter(
+                        fixed_scale * torch.ones((self.n_discovered_concepts,)),
+                        requires_grad=False,
+                )
+            else:
+                self.discovered_contrastive_scale = torch.nn.Parameter(
+                    torch.rand((self.n_discovered_concepts,)),
+                    requires_grad=True,
+                )
+        if fixed_scale is not None:
+            self.contrastive_scale = torch.nn.Parameter(
+                fixed_scale * torch.ones((self.n_concepts,)),
+                requires_grad=False,
             )
-        self.contrastive_scale = torch.nn.Parameter(
-            torch.rand((self.n_concepts,))
-        )
+        else:
+            self.contrastive_scale = torch.nn.Parameter(
+                torch.rand((self.n_concepts,)),
+                requires_grad=True,
+            )
 
         self.concept_emb_generators = torch.nn.ModuleList()
         self.discovered_concept_emb_generators = torch.nn.ModuleList()
         self.shared_emb_generator = shared_emb_generator
         self.cond_discovery = cond_discovery
         for i in range(n_concepts):
+            if c_extractor_arch == "identity":
+                self.concept_emb_generators.append(torch.nn.Identity())
+                continue
             if embedding_activation is None:
                 emb_act = torch.nn.Identity()
             elif embedding_activation == "sigmoid":
@@ -1119,6 +1254,9 @@ class MixingConceptEmbeddingModel(ConceptEmbeddingModel):
                     ])
                 )
         for i in range(n_discovered_concepts):
+            if c_extractor_arch == "identity":
+                self.discovered_concept_emb_generators.append(torch.nn.Identity())
+                continue
             if self.cond_discovery:
                 if self.shared_emb_generator:
                     if len(self.discovered_concept_emb_generators) == 0:
@@ -1176,19 +1314,35 @@ class MixingConceptEmbeddingModel(ConceptEmbeddingModel):
                         emb_act,
                     ]))
 
+        self.use_linear_emb_layer = use_linear_emb_layer
+
         if c2y_model is None:
             # Else we construct it here directly
-            units = [
-                (self.n_concepts + self.n_discovered_concepts) * self.emb_size
-            ] + (c2y_layers or []) + [n_tasks]
-            layers = []
-            for i in range(1, len(units)):
-                layers.append(torch.nn.Linear(units[i-1], units[i]))
-                if i != len(units) - 1:
-                    layers.append(torch.nn.LeakyReLU())
-            self.c2y_model = torch.nn.Sequential(*layers)
+            if self.use_linear_emb_layer:
+                units = [self.emb_size] + (c2y_layers or []) + [n_tasks]
+                layers = [
+                    torch.nn.Unflatten(-1, (self.n_concepts + self.n_discovered_concepts, self.emb_size)),
+                    VectorLinear(in_embs=(self.n_concepts + self.n_discovered_concepts), emb_size=self.emb_size, dim=1),
+                    torch.nn.LeakyReLU(),
+                ]
+                for i in range(1, len(units)):
+                    layers.append(torch.nn.Linear(units[i-1], units[i]))
+                    if i != len(units) - 1:
+                        layers.append(torch.nn.LeakyReLU())
+                self.c2y_model = torch.nn.Sequential(*layers)
+            else:
+                units = [
+                    (self.n_concepts + self.n_discovered_concepts) * self.emb_size
+                ] + (c2y_layers or []) + [n_tasks]
+                layers = []
+                for i in range(1, len(units)):
+                    layers.append(torch.nn.Linear(units[i-1], units[i]))
+                    if i != len(units) - 1:
+                        layers.append(torch.nn.LeakyReLU())
+                self.c2y_model = torch.nn.Sequential(*layers)
         else:
             self.c2y_model = c2y_model
+
 
         self.sig = torch.nn.Sigmoid()
 
@@ -1210,6 +1364,12 @@ class MixingConceptEmbeddingModel(ConceptEmbeddingModel):
         self.use_concept_groups = use_concept_groups
         self._current_pred_concepts = None
         self._c_discovered_sem = None
+
+        self.use_cosine_similarity = use_cosine_similarity
+        if self.use_cosine_similarity:
+            self._cos_similarity = torch.nn.CosineSimilarity(dim=-1, eps=1e-08)
+        else:
+            self._cos_similarity = None
 
     def _extra_losses(
         self,
@@ -1639,6 +1799,11 @@ class MixingConceptEmbeddingModel(ConceptEmbeddingModel):
             )
         return output, intervention_idxs, bottleneck
 
+    def _distance_metric(self, anchor, latent):
+        if self.use_cosine_similarity:
+            return self._cos_similarity(anchor, latent)
+        return (anchor - latent).pow(2).sum(-1).sqrt()
+
     def _generate_concept_embeddings(
         self,
         x,
@@ -1661,7 +1826,7 @@ class MixingConceptEmbeddingModel(ConceptEmbeddingModel):
                 if self.normalize_embs:
                     pred_concept_embeddings = torch.nn.functional.normalize(
                         pred_concept_embeddings,
-                        dim=0,
+                        dim=-1,
                     )
                 # [Shape: (1, emb_size)]
                 anchor_concept_pos_emb = torch.unsqueeze(
@@ -1671,7 +1836,7 @@ class MixingConceptEmbeddingModel(ConceptEmbeddingModel):
                 if self.normalize_embs:
                     anchor_concept_pos_emb = torch.nn.functional.normalize(
                         anchor_concept_pos_emb,
-                        dim=0,
+                        dim=-1,
                     )
                 # [Shape: (1, emb_size)]
                 anchor_concept_neg_emb = torch.unsqueeze(
@@ -1681,13 +1846,13 @@ class MixingConceptEmbeddingModel(ConceptEmbeddingModel):
                 if self.normalize_embs:
                     anchor_concept_neg_emb = torch.nn.functional.normalize(
                         anchor_concept_neg_emb,
-                        dim=0,
+                        dim=-1,
                     )
                 # [Shape: (B)]
                 prob = self.sig(
                     self.contrastive_scale[i] * (
-                        (anchor_concept_neg_emb - pred_concept_embeddings).pow(2).sum(-1).sqrt() -
-                        (anchor_concept_pos_emb - pred_concept_embeddings).pow(2).sum(-1).sqrt()
+                        self._distance_metric(anchor_concept_neg_emb, pred_concept_embeddings) -
+                        self._distance_metric(anchor_concept_pos_emb, pred_concept_embeddings)
                     )
                 )
                 # [Shape: (B, 1)]
@@ -1724,7 +1889,7 @@ class MixingConceptEmbeddingModel(ConceptEmbeddingModel):
                 if self.normalize_embs:
                     pred_discovered_concept_embs = torch.nn.functional.normalize(
                         pred_discovered_concept_embs,
-                        dim=0,
+                        dim=-1,
                     )
                 # [Shape: (1, emb_size)]
                 anchor_concept_pos_emb = torch.unsqueeze(
@@ -1734,7 +1899,7 @@ class MixingConceptEmbeddingModel(ConceptEmbeddingModel):
                 if self.normalize_embs:
                     anchor_concept_pos_emb = torch.nn.functional.normalize(
                         anchor_concept_pos_emb,
-                        dim=0,
+                        dim=-1,
                     )
                 # [Shape: (1, emb_size)]
                 anchor_concept_neg_emb = torch.unsqueeze(
@@ -1744,13 +1909,13 @@ class MixingConceptEmbeddingModel(ConceptEmbeddingModel):
                 if self.normalize_embs:
                     anchor_concept_neg_emb = torch.nn.functional.normalize(
                         anchor_concept_neg_emb,
-                        dim=0,
+                        dim=-1,
                     )
                 # [Shape: (B)]
                 prob = self.sig(
                     self.discovered_contrastive_scale[i] * (
-                        (anchor_concept_neg_emb - pred_discovered_concept_embs).pow(2).sum(-1).sqrt() -
-                        (anchor_concept_pos_emb - pred_discovered_concept_embs).pow(2).sum(-1).sqrt()
+                        self._distance_metric(anchor_concept_neg_emb, pred_discovered_concept_embs) -
+                        self._distance_metric(anchor_concept_pos_emb, pred_discovered_concept_embs)
                     )
                 )
                 # [Shape: (B, 1)]

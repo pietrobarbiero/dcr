@@ -197,6 +197,15 @@ def construct_model(
             ),
             "c2y_model": c2y_model,
             "c2y_layers": config.get("c2y_layers", []),
+
+            "fixed_embeddings": config.get('fixed_embeddings', False),
+            "initial_concept_embeddings": config.get(
+                'initial_concept_embeddings',
+                None,
+            ),
+            "use_cosine_similarity": config.get('use_cosine_similarity', False),
+            "use_linear_emb_layer": config.get('use_linear_emb_layer', False),
+            "fixed_scale": config.get('fixed_scale', None),
         }
 
     elif config["architecture"] in [
@@ -397,6 +406,8 @@ def construct_model(
             c_extractor_arch = resnet50
         elif config["c_extractor_arch"] == "densenet121":
             c_extractor_arch = densenet121
+        elif  config["c_extractor_arch"] == "identity":
+            c_extractor_arch = "identity"
         else:
             raise ValueError(f'Invalid model_to_use "{config["model_to_use"]}"')
     else:

@@ -3,13 +3,15 @@ General utils for training, evaluation and data loading
 
 Adapted from: https://github.com/yewsiang/ConceptBottleneck/blob/master/CUB/cub_loader.py
 """
-import os
-import torch
-import pickle
+import clip
 import numpy as np
+import os
+import pickle
+import torch
 import torchvision.transforms as transforms
-from pytorch_lightning import seed_everything
+
 from collections import defaultdict
+from pytorch_lightning import seed_everything
 
 from PIL import Image
 from torch.utils.data import Dataset, DataLoader
@@ -670,6 +672,744 @@ CONCEPT_SEMANTICS = [
     "has_wing_pattern::multi-colored",
 ]
 
+UNSUPERVISED_SELECTED_CONCEPTS = [
+    "has_wing_color::blue",
+    "has_wing_color::brown",
+    "has_wing_color::yellow",
+    "has_wing_color::green",
+    "has_wing_color::orange",
+    "has_wing_color::black",
+    "has_wing_color::white",
+    "has_wing_color::red",
+    "has_back_color::blue",
+    "has_back_color::brown",
+    "has_back_color::yellow",
+    "has_back_color::green",
+    "has_back_color::orange",
+    "has_back_color::black",
+    "has_back_color::white",
+    "has_back_color::red",
+    "has_tail_shape::forked_tail",
+    "has_tail_shape::rounded_tail",
+    "has_tail_shape::notched_tail",
+    "has_tail_shape::fan-shaped_tail",
+    "has_tail_shape::pointed_tail",
+    "has_tail_shape::squared_tail",
+    "has_breast_color::blue",
+    "has_breast_color::brown",
+    "has_breast_color::yellow",
+    "has_breast_color::green",
+    "has_breast_color::orange",
+    "has_breast_color::black",
+    "has_breast_color::white",
+    "has_breast_color::red",
+    "has_throat_color::blue",
+    "has_throat_color::brown",
+    "has_throat_color::yellow",
+    "has_throat_color::green",
+    "has_throat_color::orange",
+    "has_throat_color::black",
+    "has_throat_color::white",
+    "has_throat_color::red",
+    "has_forehead_color::blue",
+    "has_forehead_color::brown",
+    "has_forehead_color::yellow",
+    "has_forehead_color::green",
+    "has_forehead_color::orange",
+    "has_forehead_color::black",
+    "has_forehead_color::white",
+    "has_forehead_color::red",
+    # "has_nape_color::blue",
+    # "has_nape_color::brown",
+    # "has_nape_color::yellow",
+    # "has_nape_color::green",
+    # "has_nape_color::orange",
+    # "has_nape_color::black",
+    # "has_nape_color::white",
+    # "has_nape_color::red",
+    "has_belly_color::blue",
+    "has_belly_color::brown",
+    "has_belly_color::yellow",
+    "has_belly_color::green",
+    "has_belly_color::orange",
+    "has_belly_color::black",
+    "has_belly_color::white",
+    "has_belly_color::red",
+    "has_wing_shape::rounded-wings",
+    "has_wing_shape::pointed-wings",
+    "has_wing_shape::broad-wings",
+    "has_wing_shape::tapered-wings",
+    "has_wing_shape::long-wings",
+    # "has_primary_color::blue",
+    # "has_primary_color::brown",
+    # "has_primary_color::yellow",
+    # "has_primary_color::green",
+    # "has_primary_color::orange",
+    # "has_primary_color::black",
+    # "has_primary_color::white",
+    # "has_primary_color::red",
+]
+
+UNSUPERVISED_SELECTED_CONCEPTS_IDXS = [
+    CONCEPT_SEMANTICS.index(x) for x in UNSUPERVISED_SELECTED_CONCEPTS
+]
+
+CONCEPT_SEMANTICS_SENTENCE = [
+    "a bird with a curved bill",
+    "a bird with a dagger bill",
+    "a bird with a hooked bill",
+    "a bird with a needle bill",
+    "a seabird with a hooked bill",
+    "a bird with a spatulate bill",
+    "a bird with a all-purpose bill",
+    "a bird with a cone bill",
+    "a bird with a specialized bill",
+    "a bird with blue wings",
+    "a bird with brown wings",
+    "a bird with iridescent wings",
+    "a bird with purple wings",
+    "a bird with rufous wings",
+    "a bird with grey wings",
+    "a bird with yellow wings",
+    "a bird with olive wings",
+    "a bird with green wings",
+    "a bird with pink wings",
+    "a bird with orange wings",
+    "a bird with black wings",
+    "a bird with white wings",
+    "a bird with red wings",
+    "a bird with buff wings",
+    "a bird with a blue upperpart",
+    "a bird with a brown upperpart",
+    "a bird with an iridescent upperpart",
+    "a bird with a purple upperpart",
+    "a bird with a rufous upperpart",
+    "a bird with a grey upperpart",
+    "a bird with a yellow upperpart",
+    "a bird with an olive upperpart",
+    "a bird with a green upperpart",
+    "a bird with a pink upperpart",
+    "a bird with an orange upperpart",
+    "a bird with a black upperpart",
+    "a bird with a white upperpart",
+    "a bird with a red upperpart",
+    "a bird with a buff upperpart",
+    "a bird with a blue underpart",
+    "a bird with a brown underpart",
+    "a bird with an iridescent underpart",
+    "a bird with a purple underpart",
+    "a bird with a rufous underpart",
+    "a bird with a grey underpart",
+    "a bird with a yellow underpart",
+    "a bird with an olive underpart",
+    "a bird with a green underpart",
+    "a bird with a pink underpart",
+    "a bird with an orange underpart",
+    "a bird with a black underpart",
+    "a bird with a white underpart",
+    "a bird with a red underpart",
+    "a bird with a buff underpart",
+    "a bird with a solid breast pattern",
+    "a bird with a spotted breast pattern",
+    "a bird with a striped breast pattern",
+    "a bird with a multi-colored breast pattern",
+    "a bird with a blue back",
+    "a bird with a brown back",
+    "a bird with an iridescent back",
+    "a bird with a purple back",
+    "a bird with a rufous back",
+    "a bird with a grey back",
+    "a bird with a yellow back",
+    "a bird with an olive back",
+    "a bird with a green back",
+    "a bird with a pink back",
+    "a bird with an orange back",
+    "a bird with a black back",
+    "a bird with a white back",
+    "a bird with a red back",
+    "a bird with a buff back",
+    "a bird with a forked tail",
+    "a bird with a rounded tail",
+    "a bird with a notched tail",
+    "a bird with a fan-shaped tail",
+    "a bird with a pointed tail",
+    "a bird with a squared tail",
+    "a bird with a blue upper tail",
+    "a bird with a brown upper tail",
+    "a bird with an iridescent upper tail",
+    "a bird with a purple upper tail",
+    "a bird with a rufous upper tail",
+    "a bird with a grey upper tail",
+    "a bird with a yellow upper tail",
+    "a bird with an olive upper tail",
+    "a bird with a green upper tail",
+    "a bird with a pink upper tail",
+    "a bird with an orange upper tail",
+    "a bird with a black upper tail",
+    "a bird with a white upper tail",
+    "a bird with a red upper tail",
+    "a bird with a buff upper tail",
+    "a bird with a spotted head",
+    "a bird with a malar head",
+    "a bird with a crested head",
+    "a bird with a masked head",
+    "a bird with a unique head",
+    "a bird with an eyebrow head",
+    "a bird with an eyering head",
+    "a bird with a plain head",
+    "a bird with an eyeline head",
+    "a bird with a striped head",
+    "a bird with a capped head",
+    "a bird with a blue breast",
+    "a bird with a brown breast",
+    "a bird with an iridescent breast",
+    "a bird with a purple breast",
+    "a bird with a rufous breast",
+    "a bird with a grey breast",
+    "a bird with a yellow breast",
+    "a bird with an olive breast",
+    "a bird with a green breast",
+    "a bird with a pink breast",
+    "a bird with an orange breast",
+    "a bird with a black breast",
+    "a bird with a white breast",
+    "a bird with a red breast",
+    "a bird with a buff breast",
+    "a bird with a blue throat",
+    "a bird with a brown throat",
+    "a bird with an iridescent throat",
+    "a bird with a purple throat",
+    "a bird with a rufous throat",
+    "a bird with a grey throat",
+    "a bird with a yellow throat",
+    "a bird with an olive throat",
+    "a bird with a green throat",
+    "a bird with a pink throat",
+    "a bird with an orange throat",
+    "a bird with a black throat",
+    "a bird with a white throat",
+    "a bird with a red throat",
+    "a bird with a buff throat",
+    "a bird with blue eyes",
+    "a bird with brown eyes",
+    "a bird with purple eyes",
+    "a bird with rufous eyes",
+    "a bird with grey eyes",
+    "a bird with yellow eyes",
+    "a bird with olive eyes",
+    "a bird with green eyes",
+    "a bird with pink eyes",
+    "a bird with orange eyes",
+    "a bird with black eyes",
+    "a bird with white eyes",
+    "a bird with red eyes",
+    "a bird with buff eyes",
+    "a bird with a bill about the same length as its head",
+    "a bird with a bill longer than its head",
+    "a bird with a bill shorter than its head",
+    "a bird with a blue forehead",
+    "a bird with a brown forehead",
+    "a bird with an iridescent forehead",
+    "a bird with a purple forehead",
+    "a bird with a rufous forehead",
+    "a bird with a grey forehead",
+    "a bird with a yellow forehead",
+    "a bird with an olive forehead",
+    "a bird with a green forehead",
+    "a bird with a pink forehead",
+    "a bird with an orange forehead",
+    "a bird with a black forehead",
+    "a bird with a white forehead",
+    "a bird with a red forehead",
+    "a bird with a buff forehead",
+    "a bird with a blue undertail",
+    "a bird with a brown undertail",
+    "a bird with an iridescent undertail",
+    "a bird with a purple undertail",
+    "a bird with a rufous undertail",
+    "a bird with a grey undertail",
+    "a bird with a yellow undertail",
+    "a bird with an olive undertail",
+    "a bird with a green undertail",
+    "a bird with a pink undertail",
+    "a bird with an orange undertail",
+    "a bird with a black undertail",
+    "a bird with a white undertail",
+    "a bird with a red undertail",
+    "a bird with a buff undertail",
+    "a bird with a blue nape",
+    "a bird with a brown nape",
+    "a bird with an iridescent nape",
+    "a bird with a purple nape",
+    "a bird with a rufous nape",
+    "a bird with a grey nape",
+    "a bird with a yellow nape",
+    "a bird with an olive nape",
+    "a bird with a green nape",
+    "a bird with a pink nape",
+    "a bird with an orange nape",
+    "a bird with a black nape",
+    "a bird with a white nape",
+    "a bird with a red nape",
+    "a bird with a buff nape",
+    "a bird with a blue belly",
+    "a bird with a brown belly",
+    "a bird with an iridescent belly",
+    "a bird with a purple belly",
+    "a bird with a rufous belly",
+    "a bird with a grey belly",
+    "a bird with a yellow belly",
+    "a bird with an olive belly",
+    "a bird with a green belly",
+    "a bird with a pink belly",
+    "a bird with an orange belly",
+    "a bird with a black belly",
+    "a bird with a white belly",
+    "a bird with a red belly",
+    "a bird with a buff belly",
+    "a bird with rounded wings",
+    "a bird with pointed wings",
+    "a bird with broad wings",
+    "a bird with tapered wings",
+    "a bird with long wings",
+    "a large bird (between 16 to 32 inches)",
+    "a small bird (between 5 to 9 inches)",
+    "a very large bird (between 32 to 72 inches)",
+    "a medium-sized bird (between 9 to 16 inches)",
+    "a very small bird (between 3 to 5 inches)",
+    "an upright-perching-like waterbird",
+    "a chicken-like bird",
+    "a long-legged bird",
+    "a duck-like bird",
+    "an owl-like bird",
+    "a gull-like bird",
+    "a hummingbird-like bird",
+    "a pigeon-like bird",
+    "a tree-clinging bird",
+    "a hawk-like bird",
+    "a sandpiper-like bird",
+    "an upland-ground-like bird",
+    "a swallow-like bird",
+    "a perching-like bird",
+    "a bird with a solid back pattern",
+    "a bird with a spotted back pattern",
+    "a bird with a striped back pattern",
+    "a bird with a multi-colored back pattern",
+    "a bird with a solid tail pattern",
+    "a bird with a spotted tail pattern",
+    "a bird with a striped tail pattern",
+    "a bird with a multi-colored tail pattern",
+    "a bird with a solid belly pattern",
+    "a bird with a spotted belly pattern",
+    "a bird with a striped belly pattern",
+    "a bird with a multi-colored belly pattern",
+    "a primarily blue bird",
+    "a primarily brown bird",
+    "a primarily iridescent bird",
+    "a primarily purple bird",
+    "a primarily rufous bird",
+    "a primarily grey bird",
+    "a primarily yellow bird",
+    "a primarily olive bird",
+    "a primarily green bird",
+    "a primarily pink bird",
+    "a primarily orange bird",
+    "a primarily black bird",
+    "a primarily white bird",
+    "a primarily red bird",
+    "a primarily buff bird",
+    "a bird with blue legs",
+    "a bird with brown legs",
+    "a bird with iridescent legs",
+    "a bird with purple legs",
+    "a bird with rufous legs",
+    "a bird with grey legs",
+    "a bird with yellow legs",
+    "a bird with olive legs",
+    "a bird with green legs",
+    "a bird with pink legs",
+    "a bird with orange legs",
+    "a bird with black legs",
+    "a bird with white legs",
+    "a bird with red legs",
+    "a bird with buff legs",
+    "a bird with a blue bill",
+    "a bird with a brown bill",
+    "a bird with an iridescent bill",
+    "a bird with a purple bill",
+    "a bird with a rufous bill",
+    "a bird with a grey bill",
+    "a bird with a yellow bill",
+    "a bird with an olive bill",
+    "a bird with a green bill",
+    "a bird with a pink bill",
+    "a bird with an orange bill",
+    "a bird with a black bill",
+    "a bird with a white bill",
+    "a bird with a red bill",
+    "a bird with a buff bill",
+    "a bird with a blue crown",
+    "a bird with a brown crown",
+    "a bird with an iridescent crown",
+    "a bird with a purple crown",
+    "a bird with a rufous crown",
+    "a bird with a grey crown",
+    "a bird with a yellow crown",
+    "a bird with an olive crown",
+    "a bird with a green crown",
+    "a bird with a pink crown",
+    "a bird with an orange crown",
+    "a bird with a black crown",
+    "a bird with a white crown",
+    "a bird with a red crown",
+    "a bird with a buff crown",
+    "a bird with a solid wing pattern",
+    "a bird with a spotted wing pattern",
+    "a bird with a striped wing pattern",
+    "a bird with a multi-colored wing pattern",
+]
+
+
+
+CONCEPT_SEMANTICS_NEGATION = [
+    "a bird whose bill is not a curved bill",
+    "a bird whose bill is not a dagger bill",
+    "a bird whose bill is not a hooked bill",
+    "a bird whose bill is not a needle bill",
+    "a seabird whose bill is not a hooked bill",
+    "a bird whose bill is not a spatulate bill",
+    "a bird whose bill is not a all-purpose bill",
+    "a bird whose bill is not a cone bill",
+    "a bird whose bill is not a specialized bill",
+    "a bird with wings that do not have any blue in them",
+    "a bird with wings that do not have any brown in them",
+    "a bird with wings that do not have any iridescent in them",
+    "a bird with wings that do not have any purple in them",
+    "a bird with wings that do not have any rufous in them",
+    "a bird with wings that do not have any grey in them",
+    "a bird with wings that do not have any yellow in them",
+    "a bird with wings that do not have any olive in them",
+    "a bird with wings that do not have any green in them",
+    "a bird with wings that do not have any pink in them",
+    "a bird with wings that do not have any orange in them",
+    "a bird with wings that do not have any black in them",
+    "a bird with wings that do not have any white in them",
+    "a bird with wings that do not have any red in them",
+    "a bird with wings that do not have any buff in them",
+    "a bird with an upperpart that does not have any blue in it",
+    "a bird with an upperpart that does not have any brown in it",
+    "a bird with an upperpart that does not have any iridescent in it",
+    "a bird with an upperpart that does not have any purple in it",
+    "a bird with an upperpart that does not have any rufous in it",
+    "a bird with an upperpart that does not have any grey in it",
+    "a bird with an upperpart that does not have any yellow in it",
+    "a bird with an upperpart that does not have any olive in it",
+    "a bird with an upperpart that does not have any green in it",
+    "a bird with an upperpart that does not have any pink in it",
+    "a bird with an upperpart that does not have any orange in it",
+    "a bird with an upperpart that does not have any black in it",
+    "a bird with an upperpart that does not have any white in it",
+    "a bird with an upperpart that does not have any red in it",
+    "a bird with an upperpart that does not have any buff in it",
+    "a bird with an underpart that does not have any blue in it",
+    "a bird with an underpart that does not have any brown in it",
+    "a bird with an underpart that does not have any iridescent in it",
+    "a bird with an underpart that does not have any purple in it",
+    "a bird with an underpart that does not have any rufous in it",
+    "a bird with an underpart that does not have any grey in it",
+    "a bird with an underpart that does not have any yellow in it",
+    "a bird with an underpart that does not have any olive in it",
+    "a bird with an underpart that does not have any green in it",
+    "a bird with an underpart that does not have any pink in it",
+    "a bird with an underpart that does not have any orange in it",
+    "a bird with an underpart that does not have any black in it",
+    "a bird with an underpart that does not have any white in it",
+    "a bird with an underpart that does not have any red in it",
+    "a bird with an underpart that does not have any buff in it",
+    "a bird whose breast pattern is not solid",
+    "a bird whose breast pattern is not spotted",
+    "a bird whose breast pattern is not striped",
+    "a bird whose breast pattern is not multi-colored",
+    "a bird whose tail does not have any blue",
+    "a bird whose tail does not have any brown",
+    "a bird whose tail does not have any iridescent",
+    "a bird whose tail does not have any purple",
+    "a bird whose tail does not have any rufous",
+    "a bird whose tail does not have any grey",
+    "a bird whose tail does not have any yellow",
+    "a bird whose tail does not have any olive",
+    "a bird whose tail does not have any green",
+    "a bird whose tail does not have any pink",
+    "a bird whose tail does not have any orange",
+    "a bird whose tail does not have any black",
+    "a bird whose tail does not have any white",
+    "a bird whose tail does not have any red",
+    "a bird whose tail does not have any buff",
+    "a bird whose tail is not a forked tail",
+    "a bird whose tail is not a rounded tail",
+    "a bird whose tail is not a notched tail",
+    "a bird whose tail is not a fan-shaped tail",
+    "a bird whose tail is not a pointed tail",
+    "a bird whose tail is not a squared tail",
+    "a bird whose upper tail does not have any blue",
+    "a bird whose upper tail does not have any brown",
+    "a bird whose upper tail does not have any iridescent",
+    "a bird whose upper tail does not have any purple",
+    "a bird whose upper tail does not have any rufous",
+    "a bird whose upper tail does not have any grey",
+    "a bird whose upper tail does not have any yellow",
+    "a bird whose upper tail does not have any olive",
+    "a bird whose upper tail does not have any green",
+    "a bird whose upper tail does not have any pink",
+    "a bird whose upper tail does not have any orange",
+    "a bird whose upper tail does not have any black",
+    "a bird whose upper tail does not have any white",
+    "a bird whose upper tail does not have any red",
+    "a bird whose upper tail does not have any buff",
+    "a bird whose head is not a spotted head",
+    "a bird whose head is not a malar head",
+    "a bird whose head is not a crested head",
+    "a bird whose head is not a masked head",
+    "a bird whose head is not a unique head",
+    "a bird whose head is not an eyebrow head",
+    "a bird whose head is not an eyering head",
+    "a bird whose head is not a plain head",
+    "a bird whose head is not an eyeline head",
+    "a bird whose head is not a striped head",
+    "a bird whose head is not a capped head",
+    "a bird whose breast deos not have any blue",
+    "a bird whose breast deos not have any brown",
+    "a bird whose breast deos not have any iridescent",
+    "a bird whose breast deos not have any purple",
+    "a bird whose breast deos not have any rufous",
+    "a bird whose breast deos not have any grey",
+    "a bird whose breast deos not have any yellow",
+    "a bird whose breast deos not have any olive",
+    "a bird whose breast deos not have any green",
+    "a bird whose breast deos not have any pink",
+    "a bird whose breast deos not have any orange",
+    "a bird whose breast deos not have any black",
+    "a bird whose breast deos not have any white",
+    "a bird whose breast deos not have any red",
+    "a bird whose breast deos not have any buff",
+    "a bird whose throat does not have any blue",
+    "a bird whose throat does not have any brown",
+    "a bird whose throat does not have any iridescent",
+    "a bird whose throat does not have any purple",
+    "a bird whose throat does not have any rufous",
+    "a bird whose throat does not have any grey",
+    "a bird whose throat does not have any yellow",
+    "a bird whose throat does not have any olive",
+    "a bird whose throat does not have any green",
+    "a bird whose throat does not have any pink",
+    "a bird whose throat does not have any orange",
+    "a bird whose throat does not have any black",
+    "a bird whose throat does not have any white",
+    "a bird whose throat does not have any red",
+    "a bird whose throat does not have any buff",
+    "a bird whose eyes are not blue",
+    "a bird whose eyes are not brown",
+    "a bird whose eyes are not purple",
+    "a bird whose eyes are not rufous",
+    "a bird whose eyes are not grey",
+    "a bird whose eyes are not yellow",
+    "a bird whose eyes are not olive",
+    "a bird whose eyes are not green",
+    "a bird whose eyes are not pink",
+    "a bird whose eyes are not orange",
+    "a bird whose eyes are not black",
+    "a bird whose eyes are not white",
+    "a bird whose eyes are not red",
+    "a bird whose eyes are not buff",
+    "a bird whose bill is not about the same length as its head",
+    "a bird whose bill is not longer than its head",
+    "a bird whose bill is not shorter than its head",
+    "a bird whose forehead does not have any blue",
+    "a bird whose forehead does not have any brown",
+    "a bird whose forehead does not have any iridescent",
+    "a bird whose forehead does not have any purple",
+    "a bird whose forehead does not have any rufous",
+    "a bird whose forehead does not have any grey",
+    "a bird whose forehead does not have any yellow",
+    "a bird whose forehead does not have any olive",
+    "a bird whose forehead does not have any green",
+    "a bird whose forehead does not have any pink",
+    "a bird whose forehead does not have any orange",
+    "a bird whose forehead does not have any black",
+    "a bird whose forehead does not have any white",
+    "a bird whose forehead does not have any red",
+    "a bird whose forehead does not have any buff",
+    "a bird whose undertail does not have any blue",
+    "a bird whose undertail does not have any brown",
+    "a bird whose undertail does not have any iridescent",
+    "a bird whose undertail does not have any purple",
+    "a bird whose undertail does not have any rufous",
+    "a bird whose undertail does not have any grey",
+    "a bird whose undertail does not have any yellow",
+    "a bird whose undertail does not have any olive",
+    "a bird whose undertail does not have any green",
+    "a bird whose undertail does not have any pink",
+    "a bird whose undertail does not have any orange",
+    "a bird whose undertail does not have any black",
+    "a bird whose undertail does not have any white",
+    "a bird whose undertail does not have any red",
+    "a bird whose undertail does not have any buff",
+    "a bird whose nape does not have any blue",
+    "a bird whose nape does not have any brown",
+    "a bird whose nape does not have any iridescent",
+    "a bird whose nape does not have any purple",
+    "a bird whose nape does not have any rufous",
+    "a bird whose nape does not have any grey",
+    "a bird whose nape does not have any yellow",
+    "a bird whose nape does not have any olive",
+    "a bird whose nape does not have any green",
+    "a bird whose nape does not have any pink",
+    "a bird whose nape does not have any orange",
+    "a bird whose nape does not have any black",
+    "a bird whose nape does not have any white",
+    "a bird whose nape does not have any red",
+    "a bird whose nape does not have any buff",
+    "a bird whose belly does not have any blue",
+    "a bird whose belly does not have any brown",
+    "a bird whose belly does not have any iridescent",
+    "a bird whose belly does not have any purple",
+    "a bird whose belly does not have any rufous",
+    "a bird whose belly does not have any grey",
+    "a bird whose belly does not have any yellow",
+    "a bird whose belly does not have any olive",
+    "a bird whose belly does not have any green",
+    "a bird whose belly does not have any pink",
+    "a bird whose belly does not have any orange",
+    "a bird whose belly does not have any black",
+    "a bird whose belly does not have any white",
+    "a bird whose belly does not have any red",
+    "a bird whose belly does not have any buff",
+    "a bird whose wings are not rounded",
+    "a bird whose wings are not pointed",
+    "a bird whose wings are not broad",
+    "a bird whose wings are not tapered",
+    "a bird whose wings are not long",
+    "a bird that is not a large bird (below 16 inches or above 32 inches)",
+    "a bird that is not a small bird (below 5 inches or above 9 inches)",
+    "a bird that is not a very large bird (below 32 inches or above 72 inches)",
+    "a bird that is not a medium-sized bird (below 9 inches or above 16 inches)",
+    "a bird that is not a very small bird (below 3 inches or above 5 inches)",
+    "a bird that is not an upright-perching-like waterbird",
+    "a bird that is not a chicken-like bird",
+    "a bird that is not a long-legged bird",
+    "a bird that is not a duck-like bird",
+    "a bird that is not an owl-like bird",
+    "a bird that is not a gull-like bird",
+    "a bird that is not a hummingbird-like bird",
+    "a bird that is not a pigeon-like bird",
+    "a bird that is not a tree-clinging bird",
+    "a bird that is not a hawk-like bird",
+    "a bird that is not a sandpiper-like bird",
+    "a bird that is not an upland-ground-like bird",
+    "a bird that is not a swallow-like bird",
+    "a bird that is not a perching-like bird",
+    "a bird whose back is not solid",
+    "a bird whose back is not spotted",
+    "a bird whose back is not striped",
+    "a bird whose back is not multi-colored",
+    "a bird whose tail is not solid",
+    "a bird whose tail is not spotted",
+    "a bird whose tail is not striped",
+    "a bird whose tail is not multi-colored",
+    "a bird whose belly is not solid",
+    "a bird whose belly is not spotted",
+    "a bird whose belly is not striped",
+    "a bird whose belly is not multi-colored",
+    "a bird whose primary color is different from blue",
+    "a bird whose primary color is different from brown",
+    "a bird whose primary color is different from iridescent",
+    "a bird whose primary color is different from purple",
+    "a bird whose primary color is different from rufous",
+    "a bird whose primary color is different from grey",
+    "a bird whose primary color is different from yellow",
+    "a bird whose primary color is different from olive",
+    "a bird whose primary color is different from green",
+    "a bird whose primary color is different from pink",
+    "a bird whose primary color is different from orange",
+    "a bird whose primary color is different from black",
+    "a bird whose primary color is different from white",
+    "a bird whose primary color is different from red",
+    "a bird whose primary color is different from buff",
+    "a bird whose legs do not have any blue",
+    "a bird whose legs do not have any brown",
+    "a bird whose legs do not have any iridescent",
+    "a bird whose legs do not have any purple",
+    "a bird whose legs do not have any rufous",
+    "a bird whose legs do not have any grey",
+    "a bird whose legs do not have any yellow",
+    "a bird whose legs do not have any olive",
+    "a bird whose legs do not have any green",
+    "a bird whose legs do not have any pink",
+    "a bird whose legs do not have any orange",
+    "a bird whose legs do not have any black",
+    "a bird whose legs do not have any white",
+    "a bird whose legs do not have any red",
+    "a bird whose legs do not have any buff",
+    "a bird whose bill does not have any blue",
+    "a bird whose bill does not have any brown",
+    "a bird whose bill does not have any iridescent",
+    "a bird whose bill does not have any purple",
+    "a bird whose bill does not have any rufous",
+    "a bird whose bill does not have any grey",
+    "a bird whose bill does not have any yellow",
+    "a bird whose bill does not have any olive",
+    "a bird whose bill does not have any green",
+    "a bird whose bill does not have any pink",
+    "a bird whose bill does not have any orange",
+    "a bird whose bill does not have any black",
+    "a bird whose bill does not have any white",
+    "a bird whose bill does not have any red",
+    "a bird whose bill does not have any buff",
+    "a bird whose crown does not have any blue",
+    "a bird whose crown does not have any brown",
+    "a bird whose crown does not have any iridescent",
+    "a bird whose crown does not have any purple",
+    "a bird whose crown does not have any rufous",
+    "a bird whose crown does not have any grey",
+    "a bird whose crown does not have any yellow",
+    "a bird whose crown does not have any olive",
+    "a bird whose crown does not have any green",
+    "a bird whose crown does not have any pink",
+    "a bird whose crown does not have any orange",
+    "a bird whose crown does not have any black",
+    "a bird whose crown does not have any white",
+    "a bird whose crown does not have any red",
+    "a bird whose crown does not have any buff",
+    "a bird whose wings are not solid",
+    "a bird whose wings are not spotted",
+    "a bird whose wings are not striped",
+    "a bird whose wings are not multi-colored",
+]
+
+# Generate a mapping containing all concept groups in CUB generated
+# using a simple prefix tree
+UNSUPERVISED_CONCEPT_GROUP_MAP = defaultdict(list)
+for i, concept_name in enumerate(list(
+    np.array(CONCEPT_SEMANTICS)[UNSUPERVISED_SELECTED_CONCEPTS_IDXS]
+)):
+    group = concept_name[:concept_name.find("::")]
+    UNSUPERVISED_CONCEPT_GROUP_MAP[group].append(i)
+
+def generate_clip_concept_embeddings(clip_model="ViT-B/32", device="cpu"):
+    model, preprocess = clip.load(clip_model, device=device)
+    embeddings = []
+    with torch.no_grad():
+        for pos_descr, neg_descr in zip(CONCEPT_SEMANTICS_SENTENCE, CONCEPT_SEMANTICS_NEGATION):
+            pos_text = clip.tokenize([pos_descr]).to(device)
+            pos_emb = model.encode_text(pos_text)
+            neg_text = clip.tokenize([neg_descr]).to(device)
+            neg_emb = model.encode_text(neg_text)
+            embeddings.append((pos_emb, neg_emb))
+    return np.array([
+        np.concatenate(x, axis=0)
+        for x in embeddings
+    ])
+
 # Generate a mapping containing all concept groups in CUB generated
 # using a simple prefix tree
 CONCEPT_GROUP_MAP = defaultdict(list)
@@ -742,7 +1482,7 @@ class CUBDataset(Dataset):
     Returns a compatible Torch Dataset object customized for the CUB dataset
     """
 
-    def __init__(self, pkl_file_paths, use_attr, no_img, uncertain_label, image_dir, n_class_attr, root_dir='../data/CUB200/', path_transform=None, transform=None, concept_transform=None, label_transform=None):
+    def __init__(self, pkl_file_paths, use_attr, no_img, uncertain_label, image_dir, n_class_attr, root_dir='../data/CUB200/', path_transform=None, transform=None, concept_transform=None, label_transform=None, from_clip_embedding=False, zero_shot_clip_attrs=False, clip_concept_embbedings_path=None, clip_model=None):
         """
         Arguments:
         pkl_file_paths: list of full path to all the pkl data
@@ -770,6 +1510,27 @@ class CUBDataset(Dataset):
         self.n_class_attr = n_class_attr
         self.root_dir = root_dir
         self.path_transform = path_transform
+        self.from_clip_embedding = from_clip_embedding
+        self.zero_shot_clip_attrs = zero_shot_clip_attrs
+        self.clip_model = clip_model
+        if zero_shot_clip_attrs:
+            embeddings_file = (
+                clip_concept_embbedings_path or
+                os.path.join(
+                    root_dir,
+                    f'cub_{clip_model.replace("/", "_")}_concept_embeddings.npy'
+                )
+            )
+            if os.path.exists(embeddings_file):
+                self.clip_concept_embeddings = np.load(embeddings_file)
+            else:
+                self.clip_concept_embeddings = generate_clip_concept_embeddings(
+                    clip_model=clip_model,
+                    device='cpu',
+                )
+            self.clip_concept_embeddings = torch.tensor(
+                self.clip_concept_embeddings[UNSUPERVISED_SELECTED_CONCEPTS_IDXS, :, :]
+            )
 
     def __len__(self):
         return len(self.data)
@@ -785,29 +1546,39 @@ class CUBDataset(Dataset):
             # Trim unnecessary paths
             try:
                 idx = img_path.split('/').index('CUB_200_2011')
-                # if self.image_dir != 'images':
-                #     img_path = '/'.join([self.image_dir] + img_path.split('/')[idx+1:])
-                #     img_path = img_path.replace('images/', '')
-                # else:
-                # img_path = self.root_dir + '/' + '/'.join(img_path.split('/')[idx:])
                 img_path = self.root_dir + '/'.join(img_path.split('/')[idx:])
-                img = None
-                for _ in range(5):
-                    try:
-                        img = Image.open(img_path).convert('RGB')
-                        break
-                    except:
-                        pass
-                if img is None:
-                    raise ValueError(f"Failed to fetch {img_path} after 5 trials!")
+                if self.from_clip_embedding:
+                    emb_path = img_path.replace('/images/', f'/clip_{self.clip_model.replace("/", "_")}_embeddings/')
+                    emb_path = emb_path.replace('.jpg', '.npy')
+                    img = torch.FloatTensor(np.load(emb_path))
+                else:
+                    img = None
+                    for _ in range(5):
+                        try:
+                            img = Image.open(img_path).convert('RGB')
+                            break
+                        except:
+                            pass
+                    if img is None:
+                        raise ValueError(f"Failed to fetch {img_path} after 5 trials!")
             except:
                 img_path_split = img_path.split('/')
                 split = 'train' if self.is_train else 'test'
                 img_path = '/'.join(img_path_split[:2] + [split] + img_path_split[2:])
-                img = Image.open(img_path).convert('RGB')
+                if self.from_clip_embedding:
+                    emb_path = img_path.replace('/images/', f'/clip_{self.clip_model.replace("/", "_")}_embeddings/')
+                    emb_path = emb_path.replace('.jpg', '.npy')
+                    img = torch.FloatTensor(np.load(emb_path))
+                else:
+                    img = Image.open(img_path).convert('RGB')
         else:
             img_path = self.path_transform(img_path)
-            img = Image.open(img_path).convert('RGB')
+            if self.from_clip_embedding:
+                emb_path = img_path.replace('/images/', f'/clip_{self.clip_model.replace("/", "_")}_embeddings/')
+                emb_path = emb_path.replace('.jpg', '.npy')
+                img = torch.FloatTensor(np.load(emb_path))
+            else:
+                img = Image.open(img_path).convert('RGB')
 
         class_label = img_data['class_label']
         if self.label_transform:
@@ -818,6 +1589,28 @@ class CUBDataset(Dataset):
         if self.use_attr:
             if self.uncertain_label:
                 attr_label = img_data['uncertain_attribute_label']
+            elif self.zero_shot_clip_attrs:
+                zero_shot_attr_path = img_path.replace('/images/', f'/clip_{self.clip_model.replace("/", "_")}_zero_shot_attrs/')
+                zero_shot_attr_path = zero_shot_attr_path.replace('.jpg', '.npy')
+                if os.path.exists(zero_shot_attr_path):
+                    attr_label = torch.FloatTensor(np.load(zero_shot_attr_path)[UNSUPERVISED_SELECTED_CONCEPTS_IDXS] >= 0.5)
+                else:
+                    # Otherwise we compute it on the fly
+                    if self.from_clip_embedding:
+                        img_clip_emb = img
+                    else:
+                        emb_path = img_path.replace('/images/', f'/clip_{self.clip_model.replace("/", "_")}_embeddings/')
+                        emb_path = emb_path.replace('.jpg', '.npy')
+                        img_clip_emb = torch.FloatTensor(np.load(emb_path))
+                    img_clip_emb = img_clip_emb / img_clip_emb.norm(dim=-1, keepdim=True)
+                    attr_label = torch.FloatTensor(torch.zeros((self.clip_concept_embeddings.shape[0],)))
+                    for concept_idx in range(self.clip_concept_embeddings.shape[0]):
+                        pos_emb = self.clip_concept_embeddings[concept_idx, 0, :]
+                        neg_emb = self.clip_concept_embeddings[concept_idx, 1, :]
+                        score_pos = (pos_emb @ img_clip_emb.t()).unsqueeze(-1)
+                        score_neg = (neg_emb @ img_clip_emb.t()).unsqueeze(-1)
+                        cos_probs = (100 * torch.concat([score_neg, score_pos], dim=0)).softmax(dim=0)
+                        attr_label[concept_idx] = int(cos_probs[1] >= 0.5)
             else:
                 attr_label = img_data['attribute_label']
             if self.concept_transform is not None:
@@ -897,6 +1690,10 @@ def load_data(
     label_transform=None,
     path_transform=None,
     is_chexpert=False,
+    from_clip_embedding=False,
+    clip_model=None,
+    zero_shot_clip_attrs=False,
+    clip_concept_embbedings_path=None,
 ):
     """
     Note: Inception needs (299,299,3) images with inputs scaled between -1 and 1
@@ -907,7 +1704,9 @@ def load_data(
     """
     resized_resol = int(resol * 256/224)
     is_training = any(['train.pkl' in f for f in pkl_paths])
-    if is_training:
+    if from_clip_embedding:
+        transform = None
+    elif is_training:
         if is_chexpert:
             transform = transforms.Compose([
                 transforms.CenterCrop((320, 320)),
@@ -948,6 +1747,10 @@ def load_data(
         concept_transform=concept_transform,
         label_transform=label_transform,
         path_transform=path_transform,
+        from_clip_embedding=from_clip_embedding,
+        clip_model=clip_model,
+        zero_shot_clip_attrs=zero_shot_clip_attrs,
+        clip_concept_embbedings_path=clip_concept_embbedings_path,
     )
     if is_training:
         drop_last = True
@@ -1004,6 +1807,31 @@ def find_class_imbalance(pkl_file, multiple_attr=False, attr_idx=-1):
 ## SIMPLIFIED LOADER FUNCTION FOR STANDARDIZATION
 ##########################################################
 
+def get_concept_embeddings(
+    config,
+    root_dir=DATASET_DIR,
+    device="gpu",
+):
+    if root_dir is None:
+        root_dir = DATASET_DIR
+    clip_model = config.get('clip_model', "ViT-B/32")
+    embeddings_file = config.get(
+        'embeddings_file',
+        os.path.join(
+            root_dir,
+            f'cub_{clip_model.replace("/", "_")}_concept_embeddings.npy'
+        ),
+    )
+    if os.path.exists(embeddings_file):
+        embs = np.load(embeddings_file)
+    else:
+        embs = generate_clip_concept_embeddings(
+            clip_model=clip_model,
+            device=device,
+        )
+    if config['dataset_config'].get('zero_shot_clip_attrs', False):
+        return embs[UNSUPERVISED_SELECTED_CONCEPTS_IDXS, :, :]
+    return embs[SELECTED_CONCEPTS, :, :]
 
 def generate_data(
     config,
@@ -1026,9 +1854,17 @@ def generate_data(
     test_data_path = train_data_path.replace('train.pkl', 'test.pkl')
     sampling_percent = config.get("sampling_percent", 1)
     sampling_groups = config.get("sampling_groups", False)
+    from_clip_embedding = config.get('from_clip_embedding', False)
+    zero_shot_clip_attrs = config.get('zero_shot_clip_attrs', False)
+    clip_concept_embbedings_path = config.get('clip_concept_embbedings_path', None)
+    clip_model = config.get('clip_model', 'ViT-B/32')
 
-    concept_group_map = CONCEPT_GROUP_MAP.copy()
-    n_concepts = len(SELECTED_CONCEPTS)
+    if zero_shot_clip_attrs:
+        concept_group_map = UNSUPERVISED_CONCEPT_GROUP_MAP.copy()
+        n_concepts = len(UNSUPERVISED_SELECTED_CONCEPTS)
+    else:
+        concept_group_map = CONCEPT_GROUP_MAP.copy()
+        n_concepts = len(SELECTED_CONCEPTS)
     if sampling_percent != 1:
         # Do the subsampling
         if sampling_groups:
@@ -1115,6 +1951,10 @@ def generate_data(
         root_dir=root_dir,
         num_workers=config['num_workers'],
         concept_transform=concept_transform,
+        from_clip_embedding=from_clip_embedding,
+        clip_model=clip_model,
+        zero_shot_clip_attrs=zero_shot_clip_attrs,
+        clip_concept_embbedings_path=clip_concept_embbedings_path,
     )
     val_dl = load_data(
         pkl_paths=[val_data_path],
@@ -1128,6 +1968,10 @@ def generate_data(
         root_dir=root_dir,
         num_workers=config['num_workers'],
         concept_transform=concept_transform,
+        from_clip_embedding=from_clip_embedding,
+        clip_model=clip_model,
+        zero_shot_clip_attrs=zero_shot_clip_attrs,
+        clip_concept_embbedings_path=clip_concept_embbedings_path,
     )
 
     test_dl = load_data(
@@ -1142,6 +1986,10 @@ def generate_data(
         root_dir=root_dir,
         num_workers=config['num_workers'],
         concept_transform=concept_transform,
+        from_clip_embedding=from_clip_embedding,
+        clip_model=clip_model,
+        zero_shot_clip_attrs=zero_shot_clip_attrs,
+        clip_concept_embbedings_path=clip_concept_embbedings_path,
     )
     if not output_dataset_vars:
         return train_dl, val_dl, test_dl, imbalance

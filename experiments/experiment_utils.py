@@ -109,9 +109,15 @@ def perform_model_selection(
     model_groupings,
     selection_metric,
     name_filters=None,
+    included_models=None,
 ):
     name_filters = name_filters or []
-    un_select_method = lambda x: np.any([
+    if included_models:
+        exclude_model_filter = lambda x: x not in included_models
+    else:
+        exclude_model_filter = lambda x: False
+
+    un_select_method = lambda x: np.any([exclude_model_filter(x)] + [
         re.search(reg, x) for reg in name_filters
     ])
     new_results = defaultdict(lambda: defaultdict(dict))

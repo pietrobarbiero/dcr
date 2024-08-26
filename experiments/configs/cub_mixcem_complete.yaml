@@ -1,4 +1,5 @@
 trials: 3
+model_selection_trials: 1
 results_dir: /anfs/bigdisc/me466/mixcem_results/cub_complete/
 
 model_selection_groups:
@@ -12,6 +13,7 @@ model_selection_groups:
 
 model_selection_metrics:
   - val_acc_y_random_group_level_True_use_prior_False_int_auc
+  - val_acc_y
 
 shared_params:
   # Dataset Configuration
@@ -185,6 +187,37 @@ runs:
       - dyn_training_intervention_prob
     grid_search_mode: exhaustive
 
+
+  - architecture: 'MixingConceptEmbeddingModel'
+    run_name: "MixCEM_n_extra_{n_discovered_concepts}_entr_{discovered_probs_entropy}_dis_{intervention_task_discount}_ip_{training_intervention_prob}_dip_{dyn_training_intervention_prob}_cl_{contrastive_loss_weight}_mix_{mix_ground_truth_embs}_shared_{shared_emb_generator}_emb_size_{emb_size}_ml_{intermediate_task_concept_loss}_Baseline_cwl_{concept_loss_weight}"
+    training_intervention_prob: [[0.25, 0.5, 0.75, 1]]
+    emb_size: [512]
+    embedding_activation: null
+    n_discovered_concepts: [10, 5]
+    concept_loss_weight: [1, 5] #[10, 1]
+    contrastive_loss_weight: [0]
+    mix_ground_truth_embs: True
+    shared_emb_generator: [True]
+    normalize_embs: False
+    sample_probs: False
+    cond_discovery: False
+    intermediate_task_concept_loss: [0]
+    task_concept_loss: 1
+    intervention_task_discount: [1.01] #, 1.05] #, 1.5]
+    discovered_probs_entropy: 0
+    dyn_training_intervention_prob: [0.1, 0.25]
+    grid_variables:
+      - concept_loss_weight
+      - n_discovered_concepts
+      - contrastive_loss_weight
+      - shared_emb_generator
+      - emb_size
+      - intermediate_task_concept_loss
+      - intervention_task_discount
+      - training_intervention_prob
+      - dyn_training_intervention_prob
+    grid_search_mode: exhaustive
+
   - architecture: 'MixingConceptEmbeddingModel'
     run_name: "MixCEM_n_extra_{n_discovered_concepts}_entr_{discovered_probs_entropy}_dis_{intervention_task_discount}_ip_{training_intervention_prob}_dip_{dyn_training_intervention_prob}_cl_{contrastive_loss_weight}_mix_{mix_ground_truth_embs}_shared_{shared_emb_generator}_emb_size_{emb_size}_ml_{intermediate_task_concept_loss}_Baseline_cwl_{concept_loss_weight}"
     training_intervention_prob: [[0.25, 0.5, 0.75, 1]]
@@ -214,6 +247,131 @@ runs:
       - training_intervention_prob
       - dyn_training_intervention_prob
     grid_search_mode: exhaustive
+
+  - architecture: 'ConceptEmbeddingModel'
+    run_name: "CEM_clip_Baseline_emb_size_{emb_size}_cwl_{concept_loss_weight}"
+    sigmoidal_prob: True
+    emb_size: 16
+    training_intervention_prob: 0.25
+    embedding_activation: "leakyrelu"
+
+    dataset_config:
+      dataset: "cub"
+      num_workers: 8
+      batch_size: 64 # DIFFERENCE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      # from_clip_embedding: True # DIFFERENCE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      clip_model: 'ViT-B/32' # DIFFERENCE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      # input_features: 512 # DIFFERENCE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      zero_shot_clip_attrs: True # DIFFERENCE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+      # DATASET VARIABLES
+      root_dir: /homes/me466/data/CUB200/
+      sampling_percent: 1
+      sampling_groups: True
+      test_subsampling: 1
+      weight_loss: False # DIFFERENCE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+
+  - architecture: 'MixingConceptEmbeddingModel'
+    run_name: "MixCEM_clip_fe_{fixed_embeddings}_i_{initial_concept_embeddings}_n_{normalize_embs}_cos_{use_cosine_similarity}_e_{use_linear_emb_layer}_s_{fixed_scale}_n_extra_{n_discovered_concepts}_entr_{discovered_probs_entropy}_dis_{intervention_task_discount}_ip_{training_intervention_prob}_dip_{dyn_training_intervention_prob}_cl_{contrastive_loss_weight}_emb_size_{emb_size}_ml_{intermediate_task_concept_loss}_cwl_{concept_loss_weight}"
+    training_intervention_prob: [[0.25, 0.5, 0.75, 1]]
+    emb_size: [512]
+    embedding_activation: null
+    n_discovered_concepts: [25, 0]
+    concept_loss_weight: [10]
+    contrastive_loss_weight: [0]
+    mix_ground_truth_embs: True
+    shared_emb_generator: [True]
+    normalize_embs: False
+    sample_probs: False
+    cond_discovery: False
+    intermediate_task_concept_loss: [0]
+    task_concept_loss: 1
+    intervention_task_discount: [1.01, 1.05] #, 1.5]
+    discovered_probs_entropy: 0
+    dyn_training_intervention_prob: [0.1] #, 0.25]
+    initial_concept_embeddings: [null]  # DIFFERENCE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    fixed_embeddings: [False]  # DIFFERENCE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    use_cosine_similarity: [False]
+    # c_extractor_arch: "identity" # DIFFERENCE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    # c_extractor_arch: "mlp" # DIFFERENCE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    # c_extractor_arch_layers: [512, 512] # DIFFERENCE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    use_linear_emb_layer: [False] #, True]  # DIFFERENCE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    fixed_scale: [null] # DIFFERENCE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    # learning_rate: 0.001 # DIFFERENCE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    grid_variables:
+      - concept_loss_weight
+      - n_discovered_concepts
+      - contrastive_loss_weight
+      - shared_emb_generator
+      - emb_size
+      - intermediate_task_concept_loss
+      - intervention_task_discount
+      - training_intervention_prob
+      - dyn_training_intervention_prob
+      - fixed_embeddings
+      - use_cosine_similarity
+      - use_linear_emb_layer
+      - fixed_scale
+      - initial_concept_embeddings
+    grid_search_mode: exhaustive
+
+    dataset_config:
+      dataset: "cub"
+      num_workers: 8
+      batch_size: 64 # DIFFERENCE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      # from_clip_embedding: True # DIFFERENCE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      clip_model: 'ViT-B/32' # DIFFERENCE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      # input_features: 512 # DIFFERENCE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+      zero_shot_clip_attrs: True # DIFFERENCE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+      # DATASET VARIABLES
+      root_dir: /homes/me466/data/CUB200/
+      sampling_percent: 1
+      sampling_groups: True
+      test_subsampling: 1
+      weight_loss: False # DIFFERENCE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+  # - architecture: 'MixingConceptEmbeddingModel'
+  #   run_name: "MixCEM_esup_fe_{fixed_embeddings}_i_{initial_concept_embeddings}_n_{normalize_embs}_cos_{use_cosine_similarity}_e_{use_linear_emb_layer}_s_{fixed_scale}_n_extra_{n_discovered_concepts}_entr_{discovered_probs_entropy}_dis_{intervention_task_discount}_ip_{training_intervention_prob}_dip_{dyn_training_intervention_prob}_cl_{contrastive_loss_weight}_emb_size_{emb_size}_ml_{intermediate_task_concept_loss}_cwl_{concept_loss_weight}"
+  #   training_intervention_prob: [[0.25, 0.5, 0.75, 1]]
+  #   emb_size: [512]
+  #   embedding_activation: null
+  #   n_discovered_concepts: [0]
+  #   concept_loss_weight: [10]
+  #   contrastive_loss_weight: [0]
+  #   mix_ground_truth_embs: True
+  #   shared_emb_generator: [True]
+  #   normalize_embs: True
+  #   sample_probs: False
+  #   cond_discovery: False
+  #   intermediate_task_concept_loss: [0]
+  #   task_concept_loss: 1
+  #   intervention_task_discount: [1.01, 1.05] #, 1.5]
+  #   discovered_probs_entropy: 0
+  #   dyn_training_intervention_prob: [0.1] #, 0.25]
+  #   initial_concept_embeddings: [True]  # DIFFERENCE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  #   fixed_embeddings: [True] #, False]  # DIFFERENCE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  #   use_cosine_similarity: [False]
+  #   use_linear_emb_layer: [True] #, True]  # DIFFERENCE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  #   fixed_scale: [null] #, 100] # DIFFERENCE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  #   grid_variables:
+  #     - concept_loss_weight
+  #     - n_discovered_concepts
+  #     - contrastive_loss_weight
+  #     - shared_emb_generator
+  #     - emb_size
+  #     - intermediate_task_concept_loss
+  #     - intervention_task_discount
+  #     - training_intervention_prob
+  #     - dyn_training_intervention_prob
+  #     - fixed_embeddings
+  #     - use_cosine_similarity
+  #     - use_linear_emb_layer
+  #     - fixed_scale
+  #     - initial_concept_embeddings
+  #   grid_search_mode: exhaustive
+
 
   - architecture: 'ConceptBottleneckModel'
     run_name: "Hybrid-CBM_Sigmoid_extra_dims_{extra_dims}_Baseline_cwl_{concept_loss_weight}"

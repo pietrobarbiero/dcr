@@ -71,7 +71,7 @@ class WaterbirdsDataset(Dataset):
         self.root_dir = root_dir
         self.augment_data = augment_data
         self.split = split
-        self.class_dtype = float if n_classes == 2 else int
+        self.class_dtype = int if n_classes == 2 else float
         self.cub_root_dir = cub_root_dir
         self.use_attributes = use_attributes
         self.use_bird_species = use_bird_species
@@ -391,7 +391,7 @@ def generate_data(
         if sampling_groups:
             new_n_groups = int(np.ceil(len(concept_group_map) * sampling_percent))
             selected_groups_file = os.path.join(
-                DATASET_DIR,
+                root_dir,
                 f"selected_groups_sampling_{sampling_percent}.npy",
             )
             if (not rerun) and os.path.exists(selected_groups_file):
@@ -409,7 +409,7 @@ def generate_data(
         else:
             new_n_concepts = int(np.ceil(n_concepts * sampling_percent))
             selected_concepts_file = os.path.join(
-                DATASET_DIR,
+                root_dir,
                 f"selected_concepts_sampling_{sampling_percent}.npy",
             )
             if (not rerun) and os.path.exists(selected_concepts_file):

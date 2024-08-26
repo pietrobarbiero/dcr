@@ -116,6 +116,7 @@ def produce_addition_set(
     even_labels=False,
     count_labels=False,
     threshold_labels=None,
+    range_labels=None,
     concept_transform=None,
     noise_level=0.0,
     low_noise_level=0.0,
@@ -210,6 +211,13 @@ def produce_addition_set(
             sum_train_labels[-1] = int(
                 sum_train_labels[-1] >= threshold_labels
             )
+        elif range_labels is not None:
+            found_bucket = 0
+            for bucket_right_lim in range_labels:
+                if sum_train_labels[-1] < bucket_right_lim:
+                    break
+                found_bucket += 1
+            sum_train_labels[-1] = found_bucket
 
         for operand_idx, img in enumerate(operands):
             img, color = _color_digit(
@@ -276,6 +284,7 @@ def load_color_mnist_addition(
     count_labels=False,
     count_digit=None,
     threshold_labels=None,
+    range_labels=None,
     concept_transform=None,
     low_noise_level=0.0,
     noise_level=0.0,
@@ -374,6 +383,7 @@ def load_color_mnist_addition(
         count_labels=count_labels,
         count_digit=count_digit,
         threshold_labels=threshold_labels,
+        range_labels=range_labels,
         concept_transform=concept_transform,
         noise_level=test_noise_level,
         low_noise_level=test_low_noise_level,
@@ -383,7 +393,9 @@ def load_color_mnist_addition(
         color_by_label=color_by_label,
     )
     x_test = torch.FloatTensor(x_test)
-    if even_labels or (threshold_labels is not None) or (
+    if (range_labels is not None) and (len(range_labels) > 1):
+        y_test = torch.LongTensor(y_test)
+    elif even_labels or (threshold_labels is not None) or (
         count_labels and (len(selected_digits) == 2)
     ):
         y_test = torch.FloatTensor(y_test)
@@ -453,6 +465,7 @@ def load_color_mnist_addition(
             count_labels=count_labels,
             count_digit=count_digit,
             threshold_labels=threshold_labels,
+            range_labels=range_labels,
             concept_transform=concept_transform,
             noise_level=noise_level,
             low_noise_level=low_noise_level,
@@ -462,7 +475,9 @@ def load_color_mnist_addition(
             color_by_label=color_by_label,
         )
         x_val = torch.FloatTensor(x_val)
-        if even_labels or (threshold_labels is not None) or (
+        if (range_labels is not None) and (len(range_labels) > 1):
+            y_val = torch.LongTensor(y_val)
+        elif even_labels or (threshold_labels is not None) or (
             count_labels and (len(selected_digits) == 2)
         ):
             y_val = torch.FloatTensor(y_val)
@@ -493,6 +508,7 @@ def load_color_mnist_addition(
         count_labels=count_labels,
         count_digit=count_digit,
         threshold_labels=threshold_labels,
+        range_labels=range_labels,
         concept_transform=concept_transform,
         noise_level=noise_level,
         low_noise_level=low_noise_level,
@@ -502,7 +518,9 @@ def load_color_mnist_addition(
         color_by_label=color_by_label,
     )
     x_train = torch.FloatTensor(x_train)
-    if even_labels or (threshold_labels is not None) or (
+    if (range_labels is not None) and (len(range_labels) > 1):
+        y_train = torch.LongTensor(y_train)
+    elif even_labels or (threshold_labels is not None) or (
         count_labels and (len(selected_digits) == 2)
     ):
         y_train = torch.FloatTensor(y_train)
@@ -547,6 +565,7 @@ def generate_data(
     even_labels = config.get("even_labels", False)
     count_labels = config.get('count_labels', False)
     threshold_labels = config.get("threshold_labels", None)
+    range_labels = config.get("range_labels", None)
 
     if even_concepts:
         num_concepts = num_operands
@@ -565,6 +584,8 @@ def generate_data(
 
     if even_labels or (threshold_labels is not None):
         n_tasks = 1
+    elif range_labels is not None:
+        n_tasks = len(range_labels) + 1
     elif count_labels:
         n_tasks = num_operands + 1
 
@@ -657,6 +678,7 @@ def generate_data(
         count_labels=count_labels,
         count_digit=config.get('count_digit', None),
         threshold_labels=threshold_labels,
+        range_labels=range_labels,
         even_concepts=even_concepts,
         concept_transform=concept_transform,
         noise_level=config.get("noise_level", 0),

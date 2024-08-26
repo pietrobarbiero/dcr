@@ -269,6 +269,7 @@ def _update_config_with_dataset(
     n_concepts,
     n_tasks,
     concept_map,
+    data_module=None,
 ):
     config["n_concepts"] = config.get(
         "n_concepts",
@@ -387,6 +388,23 @@ def _generate_dataset_and_update_config(
             ])
         experiment_config["c_extractor_arch"] = synth_c_extractor_arch
 
+    elif isinstance(experiment_config['c_extractor_arch'], str) and (experiment_config['c_extractor_arch'].lower() == 'mlp'):
+        input_features = dataset_config["input_features"]
+        def synth_c_extractor_arch(
+            output_dim,
+            pretrained=False,
+        ):
+            if output_dim is None:
+                output_dim = 128
+            layer_units = [input_features] + experiment_config.get('c_extractor_arch_layers', []) + [output_dim]
+            used_layers = [torch.nn.Linear(input_features, layer_units[1])]
+            for i, num_units in enumerate(layer_units[1:], start=1):
+                used_layers.append(torch.nn.LeakyReLU())
+                used_layers.append(torch.nn.Linear(layer_units[i - 1], num_units))
+            return torch.nn.Sequential(*used_layers)
+
+        experiment_config["c_extractor_arch"] = synth_c_extractor_arch
+
     train_dl, val_dl, test_dl, imbalance, (n_concepts, n_tasks, concept_map) = \
         data_module.generate_data(
             config=dataset_config,
@@ -445,6 +463,17 @@ def _generate_dataset_and_update_config(
         n_tasks=n_tasks,
         concept_map=concept_map,
     )
+
+    if (data_module is not None) and (experiment_config.get(
+        'initial_concept_embeddings',
+        None,
+    ) is not None):
+        experiment_config['initial_concept_embeddings'] = \
+            data_module.get_concept_embeddings(
+                config=experiment_config,
+                root_dir=dataset_config.get('root_dir', None),
+            )
+
     return (
         train_dl,
         val_dl,
@@ -464,6 +493,7 @@ def _perform_model_selection(
     split,
     summary_table_metrics=None,
     config=None,
+    included_models=None,
 ):
     ############################################################################
     ## Automatic Model Selection
@@ -473,12 +503,15 @@ def _perform_model_selection(
         model_selection_metrics is not None
     ):
         prev_selected_results = []
-        for model_selection_metric in model_selection_metrics:
+        for idx, model_selection_metric in enumerate(model_selection_metrics):
             model_selection_results, selection_map = \
                 experiment_utils.perform_model_selection(
                     results=results,
                     selection_metric=model_selection_metric,
                     model_groupings=model_selection_groups,
+                    included_models=(
+                        included_models[idx] if included_models else None
+                    ),
                 )
             print(
                 f"********** Results after model selection "
@@ -509,7 +542,7 @@ def _perform_model_selection(
             ) as f:
                 joblib.dump(selection_map, f)
             prev_selected_results.append(
-                (model_selection_results, model_selection_metric)
+                (model_selection_results, selection_map, model_selection_metric)
             )
     return prev_selected_results
 
@@ -734,6 +767,14 @@ def main(
     loglevel = os.environ['LOGLEVEL']
     logging.info(f'Setting log level to: "{loglevel}"')
 
+    # Things regarding model selection
+    model_selection_trials = shared_params.get(
+        'model_selection_trials',
+        shared_params["trials"],
+    )
+    models_selected_to_continue = None
+    included_models = None
+
     os.makedirs(result_dir, exist_ok=True)
     results = {}
     for split in range(
@@ -753,7 +794,9 @@ def main(
             trial_config = copy.deepcopy(shared_params)
             trial_config.update(current_config)
             # Time to try as many seeds as requested
-            for run_config in experiment_utils.generate_hyperparameter_configs(trial_config):
+            for run_config in experiment_utils.generate_hyperparameter_configs(
+                trial_config
+            ):
                 run_config = copy.deepcopy(run_config)
                 run_config['result_dir'] = result_dir
                 experiment_utils.evaluate_expressions(run_config, soft=True)
@@ -803,6 +846,16 @@ def main(
                             f'did not match any filter-in regexes'
                         )
                         continue
+
+                if models_selected_to_continue and (
+                    run_name not in models_selected_to_continue
+                ):
+                    logging.info(
+                        f'Skipping run {f"{run_name}_split_{split}"} it was '
+                        f'not selected based on any of the model-selection '
+                        f'metrics measured after fold {model_selection_trials}'
+                    )
+                    continue
 
                 # Determine training rerun or not
                 current_results_path = os.path.join(
@@ -962,8 +1015,34 @@ def main(
                 result_dir=None,
                 split=split,
             )
+        if (model_selection_groups is not None) and (
+            model_selection_metrics is not None
+        ) and (
+            models_selected_to_continue is None
+        ) and (
+            (split + 1) >= model_selection_trials
+        ):
+            # Then time to do model selection to avoid running every
+            # iteration on every seed
+            model_selection_results = _perform_model_selection(
+                model_selection_groups=model_selection_groups,
+                model_selection_metrics=model_selection_metrics,
+                results=results,
+                result_dir=result_dir,
+                split=split,
+                summary_table_metrics=summary_table_metrics,
+                config=experiment_config,
+            )
+            models_selected_to_continue = set()
+            included_models = []
+            for _, selection_map, _ in model_selection_results:
+                included_models.append(set())
+                for _, group_selected_method in selection_map.items():
+                    included_models[-1].add(group_selected_method)
+                    models_selected_to_continue.add(group_selected_method)
+
             logging.debug(f"\t\tDone with trial {split + 1}")
-    print(f"********** Results after trial {split + 1} **********")
+    print(f"********** End Experiment Results **********")
     experiment_utils.print_table(
         config=experiment_config,
         results=results,
@@ -972,7 +1051,8 @@ def main(
         result_dir=result_dir,
         split=split,
     )
-    logging.debug(f"\t\tDone with trial {split + 1}")
+    # And repring the final model selection table after all other folds have
+    # been computed
     _perform_model_selection(
         model_selection_groups=model_selection_groups,
         model_selection_metrics=model_selection_metrics,
@@ -981,8 +1061,9 @@ def main(
         split=split,
         summary_table_metrics=summary_table_metrics,
         config=experiment_config,
+        included_models=included_models,
     )
-        # Locally serialize the results of this trial
+    logging.debug(f"\t\tDone complete experiment after {split + 1} trials")
     return results
 
 
@@ -1224,13 +1305,28 @@ if __name__ == '__main__':
         command_args = [
             arg if " " not in arg else f'"{arg}"' for arg in sys.argv
         ]
-        f.write("python " + " ".join(command_args))
+        command = "python " + " ".join(command_args) + "\n"
+        f.write(command)
+    with open(
+        os.path.join(loaded_config['results_dir'], f"last_run_command.txt"),
+        "w",
+    ) as f:
+        f.write(command)
 
     # Also save the current experiment configuration
     with open(
         os.path.join(
             loaded_config['results_dir'],
             f"experiment_{dt_string}_config.yaml")
+        ,
+        "w"
+    ) as f:
+        yaml.dump(loaded_config, f)
+
+    with open(
+        os.path.join(
+            loaded_config['results_dir'],
+            f"last_run_experiment_config.yaml")
         ,
         "w"
     ) as f:

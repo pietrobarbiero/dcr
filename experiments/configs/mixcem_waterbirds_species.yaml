@@ -201,7 +201,7 @@ runs:
     emb_size: [16, 8]
     training_intervention_prob: 0.25
     embedding_activation: "leakyrelu"
-    concept_loss_weight: [0.1, 1, 10]
+    concept_loss_weight: [0.1, 1] #, 10]
     grid_variables:
       - concept_loss_weight
       - emb_size

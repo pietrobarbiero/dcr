@@ -22,6 +22,7 @@ import cem.train.evaluate as evaluate
 
 def _make_callbacks(config, result_dir, full_run_name):
     callbacks = []
+    ckpt_callback = None
     if 'early_stopping_monitor' in config:
         callbacks.append(
             EarlyStopping(
@@ -43,10 +44,13 @@ def _make_callbacks(config, result_dir, full_run_name):
                     monitor=config["early_stopping_monitor"],
                     mode=config.get("early_stopping_mode", "min"),
                     dirpath=best_model_path,
+                    every_n_epochs=config.get("check_val_every_n_epoch", 5),
+                    save_on_train_epoch_end=False,
                 )
             )
+            ckpt_callback = callbacks[-1]
 
-    return callbacks
+    return callbacks, ckpt_callback
 
 
 ################################################################################
@@ -78,6 +82,10 @@ def train_end_to_end_model(
     accelerator="auto",
     devices="auto",
 ):
+    enable_checkpointing = (
+        True if config.get('early_stopping_best_model', False)
+        else enable_checkpointing
+    )
     if seed is not None:
         seed_everything(seed)
 
@@ -136,7 +144,7 @@ def train_end_to_end_model(
         enter_obj = utils.EmptyEnter()
 
     with enter_obj as run:
-        callbacks = _make_callbacks(config, result_dir, full_run_name)
+        callbacks, ckpt_call = _make_callbacks(config, result_dir, full_run_name)
         trainer = pl.Trainer(
             accelerator=accelerator,
             devices=devices,
@@ -208,7 +216,10 @@ def train_end_to_end_model(
                 num_epochs != config['max_epochs']
             ):
                 # Then restore the best validation model
-                model.load_from_checkpoint(callbacks[-1].best_model_path)
+                print("ckpt_call.best_model_path =", ckpt_call.best_model_path)   # prints path to the best model's checkpoint
+                print("ckpt_call.best_model_score =", ckpt_call.best_model_score) # and prints it score
+                chkpoint = torch.load(ckpt_call.best_model_path)
+                model.load_state_dict(chkpoint["state_dict"])
 
             if save_model and (result_dir is not None):
                 torch.save(
@@ -288,6 +299,10 @@ def train_sequential_model(
     enable_checkpointing=False,
     gradient_clip_val=0,
 ):
+    enable_checkpointing = (
+        True if config.get('early_stopping_best_model', False)
+        else enable_checkpointing
+    )
     if seed is not None:
         seed_everything(seed)
     num_epochs = 0
@@ -365,7 +380,7 @@ def train_sequential_model(
     else:
         enter_obj = utils.EmptyEnter()
     with enter_obj as run:
-        callbacks = _make_callbacks(config, result_dir, full_run_name)
+        callbacks, ckpt_call = _make_callbacks(config, result_dir, full_run_name)
         trainer = pl.Trainer(
             accelerator=accelerator,
             devices=devices,
@@ -435,7 +450,10 @@ def train_sequential_model(
                 x2c_trainer.current_epoch != config['max_epochs']
             ):
                 # Then restore the best validation model
-                model.load_from_checkpoint(callbacks[-1].best_model_path)
+                print("ckpt_call.best_model_path =", ckpt_call.best_model_path)   # prints path to the best model's checkpoint
+                print("ckpt_call.best_model_score =", ckpt_call.best_model_score) # and prints it score
+                chkpoint = torch.load(ckpt_call.best_model_path)
+                model.load_state_dict(chkpoint["state_dict"])
             if val_dl is not None:
                 print(
                     "Validation results for x2c model:",
@@ -506,7 +524,7 @@ def train_sequential_model(
 
             # Train the sequential concept to label model
             print("[Training sequential concept to label model]")
-            callbacks = _make_callbacks(config, result_dir, full_run_name)
+            callbacks, ckpt_call = _make_callbacks(config, result_dir, full_run_name)
             seq_c2y_trainer = pl.Trainer(
                 accelerator=accelerator,
                 devices=devices,
@@ -558,7 +576,10 @@ def train_sequential_model(
                 seq_c2y_trainer.current_epoch != config['max_epochs']
             ):
                 # Then restore the best validation model
-                model.load_from_checkpoint(callbacks[-1].best_model_path)
+                print("ckpt_call.best_model_path =", ckpt_call.best_model_path)   # prints path to the best model's checkpoint
+                print("ckpt_call.best_model_score =", ckpt_call.best_model_score) # and prints it score
+                chkpoint = torch.load(ckpt_call.best_model_path)
+                seq_c2y_model.load_state_dict(chkpoint["state_dict"])
             if seq_c2y_val_dl is not None:
                 print(
                     "Sequential validation results for c2y model:",
@@ -652,6 +673,10 @@ def train_independent_model(
     enable_checkpointing=False,
     gradient_clip_val=0,
 ):
+    enable_checkpointing = (
+        True if config.get('early_stopping_best_model', False)
+        else enable_checkpointing
+    )
     if seed is not None:
         seed_everything(seed)
     num_epochs = 0
@@ -732,7 +757,7 @@ def train_independent_model(
     else:
         enter_obj = utils.EmptyEnter()
     with enter_obj as run:
-        callbacks = _make_callbacks(config, result_dir, full_run_name)
+        callbacks, ckpt_call = _make_callbacks(config, result_dir, full_run_name)
         trainer = pl.Trainer(
             accelerator=accelerator,
             devices=devices,
@@ -804,7 +829,10 @@ def train_independent_model(
                 x2c_trainer.current_epoch != config['max_epochs']
             ):
                 # Then restore the best validation model
-                model.load_from_checkpoint(callbacks[-1].best_model_path)
+                print("ckpt_call.best_model_path =", ckpt_call.best_model_path)   # prints path to the best model's checkpoint
+                print("ckpt_call.best_model_score =", ckpt_call.best_model_score) # and prints it score
+                chkpoint = torch.load(ckpt_call.best_model_path)
+                model.load_state_dict(chkpoint["state_dict"])
             if val_dl is not None:
                 print(
                     "Validation results for x2c model:",
@@ -842,7 +870,7 @@ def train_independent_model(
 
             # Train the independent concept to label model
             print("[Training independent concept to label model]")
-            callbacks = _make_callbacks(config, result_dir, full_run_name)
+            callbacks, ckpt_call = _make_callbacks(config, result_dir, full_run_name)
             ind_c2y_trainer = pl.Trainer(
                 accelerator=accelerator,
                 devices=devices,
@@ -894,7 +922,10 @@ def train_independent_model(
                 ind_c2y_trainer.current_epoch != config['max_epochs']
             ):
                 # Then restore the best validation model
-                model.load_from_checkpoint(callbacks[-1].best_model_path)
+                print("ckpt_call.best_model_path =", ckpt_call.best_model_path)   # prints path to the best model's checkpoint
+                print("ckpt_call.best_model_score =", ckpt_call.best_model_score) # and prints it score
+                chkpoint = torch.load(ckpt_call.best_model_path)
+                ind_c2y_model.load_state_dict(chkpoint["state_dict"])
             if ind_c2y_val_dl is not None:
                 print(
                     "Independent validation results for c2y model:",
@@ -987,6 +1018,10 @@ def train_prob_cbm(
     accelerator="auto",
     devices="auto",
 ):
+    enable_checkpointing = (
+        True if config.get('early_stopping_best_model', False)
+        else enable_checkpointing
+    )
     assert activation_freq == 0, (
         'ProbCBM training currently does not support activation dumping during '
         'training.'
@@ -1058,7 +1093,7 @@ def train_prob_cbm(
         result_dir,
         f'{full_run_name}.pt'
     )
-    callbacks = _make_callbacks(config, result_dir, full_run_name)
+    callbacks, ckpt_call = _make_callbacks(config, result_dir, full_run_name)
     trainer_args = dict(
         accelerator=accelerator,
         devices=devices,
@@ -1170,7 +1205,10 @@ def train_prob_cbm(
                     concept_trainer.current_epoch != max_epochs
                 ):
                     # Then restore the best validation model
-                    model.load_from_checkpoint(callbacks[-1].best_model_path)
+                    print("ckpt_call.best_model_path =", ckpt_call.best_model_path)   # prints path to the best model's checkpoint
+                    print("ckpt_call.best_model_score =", ckpt_call.best_model_score) # and prints it score
+                    chkpoint = torch.load(ckpt_call.best_model_path)
+                    model.load_state_dict(chkpoint["state_dict"])
                 print("\tTraining ProbCBM's task model")
                 model.stage = 'class'
                 params_to_train = [
@@ -1216,7 +1254,10 @@ def train_prob_cbm(
                     task_trainer.current_epoch != max_epochs
                 ):
                     # Then restore the best validation model
-                    model.load_from_checkpoint(callbacks[-1].best_model_path)
+                    print("ckpt_call.best_model_path =", ckpt_call.best_model_path)   # prints path to the best model's checkpoint
+                    print("ckpt_call.best_model_score =", ckpt_call.best_model_score) # and prints it score
+                    chkpoint = torch.load(ckpt_call.best_model_path)
+                    model.load_state_dict(chkpoint["state_dict"])
                 training_time = time.time() - start_time
             elif model.train_class_mode == 'joint':
                 print("\tTraining ProbCBM jointly")
@@ -1245,7 +1286,10 @@ def train_prob_cbm(
                     task_trainer.current_epoch != max_epochs
                 ):
                     # Then restore the best validation model
-                    model.load_from_checkpoint(callbacks[-1].best_model_path)
+                    print("ckpt_call.best_model_path =", ckpt_call.best_model_path)   # prints path to the best model's checkpoint
+                    print("ckpt_call.best_model_score =", ckpt_call.best_model_score) # and prints it score
+                    chkpoint = torch.load("ckpt_call.best_model_path =", ckpt_call.best_model_path)
+                    model.load_state_dict(chkpoint["state_dict"])
                 training_time = time.time() - start_time
             else:
                 raise ValueError(

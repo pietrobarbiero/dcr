@@ -1,4 +1,5 @@
 trials: 3
+model_selection_trials: 2
 results_dir: /anfs/bigdisc/me466/mixcem_results/waterbirds_species/
 
 model_selection_groups:

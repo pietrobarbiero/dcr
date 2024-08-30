@@ -1,6 +1,6 @@
 trials: 3
 model_selection_trials: 2
-results_dir: /anfs/bigdisc/me466/mixcem_results/waterbirds_incomplete_0.2/
+results_dir: /anfs/bigdisc/me466/mixcem_results/waterbirds_incomplete_same_val_distr_0.2/
 
 model_selection_groups:
   - ["^(CBM_Sigmoid_Baseline_).*$", "Joint CBM (Baseline)"]
@@ -22,7 +22,7 @@ shared_params:
     dataset: "waterbirds"
     num_workers: 8
     batch_size: 256
-    n_classes: 2
+    n_classes: 1
 
     # DATASET VARIABLES
     root_dir: /anfs/bigdisc/me466/waterbirds
@@ -33,6 +33,7 @@ shared_params:
     sampling_groups: True
     test_subsampling: 1
     weight_loss: True
+    val_subsample: 0.2
 
   # Intervention Parameters
   intervention_config:
@@ -104,6 +105,19 @@ shared_params:
 
 
 runs:
+  - architecture: 'ConceptBottleneckModel'
+    run_name: "DNN_extra_dims_{extra_dims}"
+    training_intervention_prob: 0
+    concept_loss_weight: 0
+    embedding_activation: "leakyrelu"
+    bool: False
+    extra_dims: [0, 50, 100]
+    sigmoidal_extra_capacity: False
+    sigmoidal_prob: False
+    grid_variables:
+      - extra_dims
+    grid_search_mode: exhaustive
+
   - architecture: "IntAwareConceptEmbeddingModel"
     run_name: "IntCEM_emb_size_{emb_size}_intervention_weight_{intervention_weight}_intervention_task_discount_{intervention_task_discount}_Baseline_cwl_{concept_loss_weight}"
     training_intervention_prob: 0.25
@@ -135,18 +149,6 @@ runs:
         - emb_size
     grid_search_mode: exhaustive
 
-  - architecture: 'ConceptBottleneckModel'
-    run_name: "DNN_extra_dims_{extra_dims}"
-    training_intervention_prob: 0
-    concept_loss_weight: 0
-    embedding_activation: "leakyrelu"
-    bool: False
-    extra_dims: [0, 50, 100, 200]
-    sigmoidal_extra_capacity: False
-    sigmoidal_prob: False
-    grid_variables:
-      - extra_dims
-    grid_search_mode: exhaustive
 
   - architecture: 'MixingConceptEmbeddingModel'
     run_name: "MixCEM_n_extra_{n_discovered_concepts}_entr_{discovered_probs_entropy}_dis_{intervention_task_discount}_ip_{training_intervention_prob}_dip_{dyn_training_intervention_prob}_cl_{contrastive_loss_weight}_mix_{mix_ground_truth_embs}_shared_{shared_emb_generator}_emb_size_{emb_size}_ml_{intermediate_task_concept_loss}_Baseline_cwl_{concept_loss_weight}"

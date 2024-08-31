@@ -524,6 +524,11 @@ def _perform_model_selection(
                 result_dir=result_dir,
                 split=split,
                 save_name=f"output_table_{model_selection_metric}",
+                use_auc=(config["n_tasks"] <= 2),
+                use_int_auc=config.get('intervention_config', {}).get(
+                    'use_auc',
+                    False,
+                ),
             )
             with open(
                 os.path.join(
@@ -562,7 +567,7 @@ def _multiprocess_run_trial(
     single_frequency_epochs,
     activation_freq,
 ):
-    config = copy.deepcopy(run_config)
+    config = run_config #copy.deepcopy(run_config)
     (
         train_dl,
         val_dl,
@@ -715,6 +720,7 @@ def _multiprocess_run_trial(
             run_name=run_name,
             prefix="",
         )
+        return config_copy
 
 
 ################################################################################
@@ -1014,6 +1020,11 @@ def main(
                 sort_key=sort_key,
                 result_dir=None,
                 split=split,
+                use_auc=(run_config["n_tasks"] <= 2),
+                use_int_auc=run_config.get('intervention_config', {}).get(
+                    'use_auc',
+                    False,
+                ),
             )
         if (model_selection_groups is not None) and (
             model_selection_metrics is not None
@@ -1050,6 +1061,11 @@ def main(
         sort_key=sort_key,
         result_dir=result_dir,
         split=split,
+        use_auc=(run_config["n_tasks"] <= 2),
+        use_int_auc=run_config.get('intervention_config', {}).get(
+            'use_auc',
+            False,
+        ),
     )
     # And repring the final model selection table after all other folds have
     # been computed

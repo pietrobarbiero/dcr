@@ -210,17 +210,19 @@ def print_table(
     sort_key="model",
     config=None,
     save_name="output_table",
+    use_auc=False,
+    use_int_auc=False,
 ):
     config = config or {}
     # Initialise output table
     results_table = PrettyTable()
     field_names = [
         "Method",
-        "Task Accuracy",
+        "ROC-AUC" if use_auc else "Task Accuracy",
 
     ]
     result_table_fields_keys = [
-        "test_acc_y",
+        "test_auc_y" if use_auc else "test_acc_y",
     ]
 
     # Add AUC only when it is a binary class
@@ -251,20 +253,20 @@ def print_table(
     # And intervention summaries if we chose to also include them
     if len(shared_params.get("intervention_config", {}).get("intervention_policies", [])) > 0:
         field_names.extend([
-            "25% Int Acc",
-            "50% Int Acc",
-            "75% Int Acc",
-            "100% Int Acc",
+            "25% Int ROC-AUC" if use_int_auc else "25% Int Acc",
+            "50% Int ROC-AUC" if use_int_auc else "50% Int Acc",
+            "75% Int ROC-AUC" if use_int_auc else "75% Int Acc",
+            "100% Int ROC-AUC" if use_int_auc else "100% Int Acc",
             "Val Int AUC",
             "Test Int AUC",
         ])
         result_table_fields_keys.extend([
-            "test_acc_y_random_group_level_True_use_prior_False_ints_25%",
-            "test_acc_y_random_group_level_True_use_prior_False_ints_50%",
-            "test_acc_y_random_group_level_True_use_prior_False_ints_75%",
-            "test_acc_y_random_group_level_True_use_prior_False_ints_100%",
-            "val_acc_y_random_group_level_True_use_prior_False_int_auc",
-            "test_acc_y_random_group_level_True_use_prior_False_int_auc",
+            f"test_{'auc' if use_int_auc else 'acc'}_y_random_group_level_True_use_prior_False_ints_25%",
+            f"test_{'auc' if use_int_auc else 'acc'}_y_random_group_level_True_use_prior_False_ints_50%",
+            f"test_{'auc' if use_int_auc else 'acc'}_y_random_group_level_True_use_prior_False_ints_75%",
+            f"test_{'auc' if use_int_auc else 'acc'}_y_random_group_level_True_use_prior_False_ints_100%",
+            f"val_{'auc' if use_int_auc else 'acc'}_y_random_group_level_True_use_prior_False_int_auc",
+            f"test_{'auc' if use_int_auc else 'acc'}_y_random_group_level_True_use_prior_False_int_auc",
         ])
 
     if summary_table_metrics is not None:
@@ -285,7 +287,10 @@ def print_table(
             for metric_name, vals in metric_vals.items():
                 for desired_metric in result_table_fields_keys:
                     real_name = desired_metric
-                    if ("_acc_y_" in desired_metric) and (
+                    if (
+                        ("_acc_y_" in desired_metric) or
+                        ("_auc_y_" in desired_metric)
+                    ) and (
                         ("_ints_" in desired_metric) and
                         (desired_metric[-1] == "%")
                     ):

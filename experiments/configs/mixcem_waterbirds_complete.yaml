@@ -13,8 +13,8 @@ model_selection_groups:
 
 
 model_selection_metrics:
-  - val_acc_y_random_group_level_True_use_prior_False_int_auc
-  - val_acc_y
+  - val_auc_y_random_group_level_True_use_prior_False_int_auc
+  - val_auc_y
 
 shared_params:
   # Dataset Configuration
@@ -39,6 +39,7 @@ shared_params:
     competence_levels: [1]
     intervention_freq: 1
     intervention_batch_size: 256
+    use_auc: True
     val_intervention_policies:
       - policy: "random"
         group_level: True
@@ -59,7 +60,7 @@ shared_params:
   patience: 15
   emb_size: 16
   extra_dims: 0
-  concept_loss_weight: [5]
+  concept_loss_weight: [1, 5, 10]
   learning_rate: 0.01
   weight_decay: 0.000004
   weight_loss: True
@@ -71,7 +72,7 @@ shared_params:
   early_stopping_delta: 0.0
   momentum: 0.9
   sigmoidal_prob: False
-  training_intervention_prob: 0.25
+  training_intervention_prob: 0
   grid_variables:
     - concept_loss_weight
   grid_search_mode: exhaustive
@@ -122,29 +123,23 @@ runs:
     grid_search_mode: exhaustive
 
   - architecture: 'ConceptEmbeddingModel'
-    run_name: "CEM_Baseline_cwl_{concept_loss_weight}"
+    run_name: "CEM_emb_size_{emb_size}_Baseline_cwl_{concept_loss_weight}"
     sigmoidal_prob: True
     training_intervention_prob: 0.25
     embedding_activation: "leakyrelu"
-
-  - architecture: 'ConceptEmbeddingModel'
-    run_name: "DNN_emb_size_{emb_size}"
-    sigmoidal_prob: True
-    emb_size: [64, 32, 16]
-    training_intervention_prob: 0
-    concept_loss_weight: 0
-    embedding_activation: "leakyrelu"
+    emb_size: [16, 64, 128]
     grid_variables:
-      - emb_size
+        - concept_loss_weight
+        - emb_size
     grid_search_mode: exhaustive
 
   - architecture: 'ConceptBottleneckModel'
     run_name: "DNN_extra_dims_{extra_dims}"
-    training_intervention_prob: 0.25
+    training_intervention_prob: 0
     concept_loss_weight: 0
     embedding_activation: "leakyrelu"
     bool: False
-    extra_dims: [0, 50, 100]
+    extra_dims: [0, 50, 100, 200]
     sigmoidal_extra_capacity: False
     sigmoidal_prob: False
     grid_variables:
@@ -189,7 +184,7 @@ runs:
     init_negative_scale: 5
     init_shift: 5
     pretrained: True
-    hidden_dim: [4, 8] #, 16] # [16], 32]
+    hidden_dim: [4, 8, 16] #, 16] # [16], 32]
     class_hidden_dim: [16, 32] #, 64] # [32, 64] 128
     intervention_prob: 0.5
     gradient_clip_val: 2.0
@@ -211,7 +206,7 @@ runs:
 
   - architecture: 'ConceptBottleneckModel'
     run_name: "Hybrid-CBM_Sigmoid_extra_dims_{extra_dims}_Baseline_cwl_{concept_loss_weight}"
-    extra_dims: [50, 100]
+    extra_dims: [50, 100, 200]
     training_intervention_prob: 0
     embedding_activation: "leakyrelu"
     sigmoidal_prob: True
@@ -222,7 +217,7 @@ runs:
 
   - architecture: 'ConceptBottleneckModel'
     run_name: "CBM_Sigmoid_Baseline_cwl_{concept_loss_weight}"
-    training_intervention_prob: 0.25
+    training_intervention_prob: 0
     embedding_activation: "leakyrelu"
     bool: False
     extra_dims: 0
@@ -231,6 +226,7 @@ runs:
 
   - architecture: 'ConceptBottleneckModel'
     run_name: "CBM_Logit_Baseline_cwl_{concept_loss_weight}"
+    training_intervention_prob: 0
     embedding_activation: "leakyrelu"
     bool: False
     extra_dims: 0

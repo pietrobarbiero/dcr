@@ -69,8 +69,6 @@ def compute_accuracy(
     # fully certain
     c_true = (c_true.cpu().detach().numpy() > 0.5).astype(np.int32)
     y_probs = torch.nn.Softmax(dim=-1)(y_pred).cpu().detach()
-#     used_classes = np.unique(y_true.cpu().detach())
-#     y_probs = y_probs[:, sorted(list(used_classes))]
     y_pred = y_pred.argmax(dim=-1).cpu().detach()
     y_true = y_true.cpu().detach()
 
@@ -96,13 +94,17 @@ def compute_accuracy(
         )/c_true.shape[-1]
     y_accuracy = sklearn.metrics.accuracy_score(y_true, y_pred)
     try:
+        if y_probs.shape[-1] == 2:
+            y_probs = y_probs[:, -1]
         y_auc = sklearn.metrics.roc_auc_score(
             y_true,
             y_probs,
             multi_class='ovo',
         )
     except Exception as e:
-        y_auc = 0.0
+        # Else, in the case there is a single label in the target, we default
+        # to accuracy
+        y_auc = y_accuracy
     try:
         y_f1 = sklearn.metrics.f1_score(y_true, y_pred, average='macro')
     except:

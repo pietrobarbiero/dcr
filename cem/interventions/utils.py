@@ -262,6 +262,7 @@ def adversarial_intervene_in_cbm(
     c_test=None,
     g_test=None,
     seed=None,
+    use_auc=False,
 ):
     def competence_generator(
         x,
@@ -297,6 +298,7 @@ def adversarial_intervene_in_cbm(
         c_test=c_test,
         g_test=g_test,
         seed=seed,
+        use_auc=use_auc,
     )
 
 def intervene_in_cbm(
@@ -328,6 +330,7 @@ def intervene_in_cbm(
     c_test=None,
     g_test=None,
     seed=None,
+    use_auc=False,
 ):
     run_name = run_name or config.get('run_name', config['architecture'])
     if real_competence_generator is None:
@@ -500,14 +503,23 @@ def intervene_in_cbm(
             axis=0,
         )
         if y_pred.shape[-1] > 1:
-            y_pred = np.argmax(y_pred, axis=-1)
+            if use_auc and (y_pred.shape[-1] == 2):
+                y_pred = scipy.special.softmax(y_pred, axis=-1)[:, -1]
+            else:
+                y_pred = np.argmax(y_pred, axis=-1)
         else:
-            y_pred = np.squeeze((expit(y_pred) >= 0.5).astype(np.int32), axis=-1)
+            if use_auc:
+                y_pred = np.squeeze(
+                    (expit(y_pred) >= 0.5).astype(np.int32),
+                    axis=-1,
+                )
+            else:
+                y_pred = np.squeeze(expit(y_pred), axis=-1)
         prev_interventions = np.concatenate(
             list(map(lambda x: x[3].detach().cpu().numpy(), test_batch_results)),
             axis=0,
         )
-        if n_tasks > 1:
+        if (not use_auc) and (n_tasks > 1):
             acc = np.mean(y_pred == y_test.detach().cpu().numpy())
             logging.debug(
                 f"\tAccuracy when intervening "
@@ -515,13 +527,27 @@ def intervene_in_cbm(
                 f"concept groups is {acc * 100:.2f}%."
             )
         else:
-            if int(os.environ.get("VERBOSE_INTERVENTIONS", "0")):
-                [test_results] = trainer.test(model, test_dl)
-            else:
-                f = io.StringIO()
-                with redirect_stdout(f):
-                    [test_results] = trainer.test(model, test_dl)
-            acc = test_results['test_y_auc']
+            # if int(os.environ.get("VERBOSE_INTERVENTIONS", "0")):
+            #     [test_results] = trainer.test(model, test_dl)
+            # else:
+            #     f = io.StringIO()
+            #     with redirect_stdout(f):
+            #         [test_results] = trainer.test(model, test_dl)
+            # acc = test_results['test_y_auc']
+            try:
+                acc = sklearn.metrics.roc_auc_score(
+                    y_test.detach().cpu().numpy(),
+                    y_pred,
+                    multi_class='ovo',
+                )
+            except Exception as e:
+                # If there is only one class in the true labels, then we resort
+                # to plain accuracy
+                if y_pred.shape[-1] > 1:
+                    y_pred_used = np.argmax(y_pred, axis=-1)
+                else:
+                    y_pred_used = np.squeeze(y_pred >= 0.5).astype(np.int32)
+                acc = np.mean(y_pred_used == y_test.detach().cpu().numpy())
             logging.debug(
                 f"\tAUC when intervening with {num_groups_intervened} "
                 f"concept groups is {acc * 100:.2f}% (accuracy "
@@ -1159,6 +1185,7 @@ def _evaluate_intervention_auc(
     dl_name="test",
 ):
     intervention_config = config.get('intervention_config', {})
+    use_auc = intervention_config.get('use_auc', False)
     if f'{dl_name}_intervention_policies' in intervention_config:
         used_policies = intervention_config[f'{dl_name}_intervention_policies']
     else:
@@ -1189,28 +1216,28 @@ def _evaluate_intervention_auc(
             ):
                 continue
             if competence_level == 1:
-                int_results_key = f'{dl_name}_acc_y_{key_policy_name}_ints'
-                int_auc_key = f'{dl_name}_acc_y_{key_policy_name}_int_auc'
+                int_results_key = f'{dl_name}_{"auc" if use_auc else "acc"}_y_{key_policy_name}_ints'
+                int_auc_key = f'{dl_name}_{"auc" if use_auc else "acc"}_y_{key_policy_name}_int_auc'
             else:
                 extra_suffix = (
                     ("_"  + extra_suffix) if extra_suffix else extra_suffix
                 )
                 if group_level_competencies:
                     int_results_key = (
-                        f'{dl_name}_acc_y_{key_policy_name}_ints'
+                        f'{dl_name}_{"auc" if use_auc else "acc"}_y_{key_policy_name}_ints'
                         f'_co_{competence_level}_gl{extra_suffix}'
                     )
                     int_auc_key = (
-                        f'{dl_name}_acc_y_{key_policy_name}_int_auc_'
+                        f'{dl_name}_{"auc" if use_auc else "acc"}_y_{key_policy_name}_int_auc_'
                         f'co_{competence_level}_gl{extra_suffix}'
                     )
                 else:
                     int_results_key = (
-                        f'{dl_name}_acc_y_{key_policy_name}_ints'
+                        f'{dl_name}_{"auc" if use_auc else "acc"}_y_{key_policy_name}_ints'
                         f'_co_{competence_level}{extra_suffix}'
                     )
                     int_auc_key = (
-                        f'{dl_name}_acc_y_{key_policy_name}_int_auc'
+                        f'{dl_name}_{"auc" if use_auc else "acc"}_y_{key_policy_name}_int_auc'
                         f'_co_{competence_level}{extra_suffix}'
                     )
             int_results = results[int_results_key]
@@ -1252,6 +1279,7 @@ def test_interventions(
     dl_name='test',
 ):
     intervention_config = config.get('intervention_config', {})
+    use_auc = intervention_config.get('use_auc', False)
     if f'{dl_name}_intervention_policies' in intervention_config:
         used_policies = intervention_config[f'{dl_name}_intervention_policies']
     else:
@@ -1366,11 +1394,14 @@ def test_interventions(
                 task_class_weights=task_class_weights,
             )
             print(
-                f"\tIntervening in {run_name} with policy {key_policy_name} and "
-                f"competence {competence_level}"
+                f"\tIntervening in {run_name} with "
+                f"policy {key_policy_name} and competence {competence_level}"
             )
             if competence_level == 1:
-                key = f'{dl_name}_acc_y_{key_policy_name}_ints'
+                key = (
+                    f'{dl_name}_{"auc" if use_auc else "acc"}_y_'
+                    f'{key_policy_name}_ints'
+                )
                 int_time_key = f'avg_int_time_{key_policy_name}_ints'
                 construction_times_key = (
                     f'construction_time_{key_policy_name}_ints'
@@ -1381,7 +1412,8 @@ def test_interventions(
                 )
                 if group_level_competencies:
                     key = (
-                        f'{dl_name}_acc_y_{key_policy_name}_ints_'
+                        f'{dl_name}_{"auc" if use_auc else "acc"}_y_'
+                        f'{key_policy_name}_ints_'
                         f'co_{competence_level}_gl{extra_suffix}'
                     )
                     int_time_key = (
@@ -1394,7 +1426,8 @@ def test_interventions(
                     )
                 else:
                     key = (
-                        f'{dl_name}_acc_y_{key_policy_name}_ints_'
+                        f'{dl_name}_{"auc" if use_auc else "acc"}_y_'
+                        f'{key_policy_name}_ints_'
                         f'co_{competence_level}{extra_suffix}'
                     )
                     int_time_key = (
@@ -1456,6 +1489,7 @@ def test_interventions(
                     ),
                     seed=(42 + split),
                     task_class_weights=task_class_weights,
+                    use_auc=use_auc,
                 ),
             )
             results[key] = int_results
@@ -1469,7 +1503,7 @@ def test_interventions(
             else:
                 extra = ""
             for num_groups_intervened, val in enumerate(int_results):
-                if n_tasks > 1:
+                if not use_auc:
                     logging.info(
                         f"\t\t{dl_name} accuracy when intervening "
                         f"with {num_groups_intervened} "

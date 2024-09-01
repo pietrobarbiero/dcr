@@ -349,7 +349,6 @@ def generate_data(
     output_dataset_vars=False,
     rerun=False,
     dataset_transform=lambda x: x,
-    n_classes=2,
     training_transform=None,
 ):
     if root_dir is None:
@@ -373,6 +372,7 @@ def generate_data(
     use_attributes = config.get('use_attributes', True)
     use_bird_species = config.get('use_bird_species', False)
     batch_size = config.get('batch_size', 32)
+    n_classes = config.get('n_classes', 2)
 
     if use_attributes:
         n_concepts = len(SELECTED_CONCEPTS)
@@ -541,7 +541,7 @@ def generate_data(
             train_dl = DataLoader(
                 training_transform(torch.utils.data.TensorDataset(
                     torch.FloatTensor(x_train),
-                    torch.FloatTensor(y_train),
+                    torch.FloatTensor(y_train) if n_classes == 1 else torch.LongTensor(y_train),
                     torch.FloatTensor(c_train),
                 )),
                 batch_size=batch_size,
@@ -552,7 +552,7 @@ def generate_data(
             val_dl = DataLoader(
                 dataset_transform(torch.utils.data.TensorDataset(
                     torch.FloatTensor(x_val),
-                    torch.FloatTensor(y_val),
+                    torch.FloatTensor(y_val) if n_classes == 1 else torch.LongTensor(y_val),
                     torch.FloatTensor(c_val),
                 )),
                 batch_size=batch_size,
@@ -570,7 +570,7 @@ def generate_data(
             train_dl = DataLoader(
                 training_transform(torch.utils.data.TensorDataset(
                     torch.FloatTensor(x_train),
-                    torch.FloatTensor(y_train),
+                    torch.FloatTensor(y_train) if n_classes == 1 else torch.LongTensor(y_train),
                 )),
                 batch_size=batch_size,
                 shuffle=True,
@@ -580,7 +580,7 @@ def generate_data(
             val_dl = DataLoader(
                 dataset_transform(torch.utils.data.TensorDataset(
                     torch.FloatTensor(x_val),
-                    torch.FloatTensor(y_val),
+                    torch.FloatTensor(y_val) if n_classes == 1 else torch.LongTensor(y_val),
                 )),
                 batch_size=batch_size,
                 shuffle=False,

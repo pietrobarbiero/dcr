@@ -494,6 +494,7 @@ def _perform_model_selection(
     summary_table_metrics=None,
     config=None,
     included_models=None,
+    use_auc=False,
 ):
     ############################################################################
     ## Automatic Model Selection
@@ -524,8 +525,8 @@ def _perform_model_selection(
                 result_dir=result_dir,
                 split=split,
                 save_name=f"output_table_{model_selection_metric}",
-                use_auc=(config["n_tasks"] <= 2),
-                use_int_auc=config.get('intervention_config', {}).get(
+                use_auc=(use_auc or config.get("n_tasks", 3) <= 2),
+                use_int_auc=use_auc or config.get('intervention_config', {}).get(
                     'use_auc',
                     False,
                 ),
@@ -747,6 +748,7 @@ def main(
     model_selection_groups=None,
     fast_run=False,
     no_new_runs=False,
+    use_auc=False,
 ):
     seed_everything(42)
     # parameters for data, model, and training
@@ -1020,8 +1022,8 @@ def main(
                 sort_key=sort_key,
                 result_dir=None,
                 split=split,
-                use_auc=(run_config["n_tasks"] <= 2),
-                use_int_auc=run_config.get('intervention_config', {}).get(
+                use_auc=(use_auc or run_config.get("n_tasks", 3) <= 2),
+                use_int_auc=use_auc or run_config.get('intervention_config', {}).get(
                     'use_auc',
                     False,
                 ),
@@ -1043,6 +1045,7 @@ def main(
                 split=split,
                 summary_table_metrics=summary_table_metrics,
                 config=experiment_config,
+                use_auc=use_auc,
             )
             models_selected_to_continue = set()
             included_models = []
@@ -1061,8 +1064,8 @@ def main(
         sort_key=sort_key,
         result_dir=result_dir,
         split=split,
-        use_auc=(run_config["n_tasks"] <= 2),
-        use_int_auc=run_config.get('intervention_config', {}).get(
+        use_auc=(use_auc or run_config.get("n_tasks", 3) <= 2),
+        use_int_auc=use_auc or run_config.get('intervention_config', {}).get(
             'use_auc',
             False,
         ),
@@ -1078,6 +1081,7 @@ def main(
         summary_table_metrics=summary_table_metrics,
         config=experiment_config,
         included_models=included_models,
+        use_auc=use_auc,
     )
     logging.debug(f"\t\tDone complete experiment after {split + 1} trials")
     return results
@@ -1271,6 +1275,14 @@ def _build_arg_parser():
              "computed/cached."
          ),
     )
+    parser.add_argument(
+        '--use_auc',
+        action="store_true",
+         default=False,
+         help=(
+             "use ROC-AUC as the main performance metric rather than accuracy."
+         ),
+    )
     return parser
 
 
@@ -1384,4 +1396,5 @@ if __name__ == '__main__':
         summary_table_metrics=summary_table_metrics,
         fast_run=args.fast_run,
         no_new_runs=args.no_new_runs,
+        use_auc=args.use_auc,
     )

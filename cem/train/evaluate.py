@@ -17,6 +17,7 @@ import cem.metrics.niching as niching
 import cem.metrics.oracle as oracle
 import cem.train.utils as utils
 import cem.utils.data as data_utils
+import cem.metrics.accs as accs
 
 from cem.metrics.cas import concept_alignment_score
 from cem.models.construction import load_trained_model
@@ -37,14 +38,42 @@ def evaluate_cbm(
         return eval_results
     model.freeze()
     def _inner_call():
-        [eval_results] = trainer.test(model, test_dl)
+        # [eval_results] = trainer.test(model, test_dl)
+        # output = [
+        #     eval_results[f"test_c_accuracy"],
+        #     eval_results[f"test_y_accuracy"],
+        #     eval_results[f"test_c_auc"],
+        #     eval_results[f"test_y_auc"],
+        #     eval_results[f"test_c_f1"],
+        #     eval_results[f"test_y_f1"],
+        # ]
+        batch_results = trainer.predict(model, test_dl)
+        y_true, c_true = data_utils.daloader_to_memory(
+            test_dl,
+            as_torch=True,
+            only_labels=True,
+        )
+        c_pred = torch.cat(
+            list(map(lambda x: x[0].detach().cpu(), batch_results)),
+            dim=0,
+        )
+        y_pred = torch.cat(
+            list(map(lambda x: x[2].detach().cpu(), batch_results)),
+            axis=0,
+        )
+        (c_accuracy, c_auc, c_f1), (y_accuracy, y_auc, y_f1) = accs.compute_accuracy(
+            c_pred=c_pred,
+            y_pred=y_pred,
+            c_true=c_true,
+            y_true=y_true,
+        )
         output = [
-            eval_results[f"test_c_accuracy"],
-            eval_results[f"test_y_accuracy"],
-            eval_results[f"test_c_auc"],
-            eval_results[f"test_y_auc"],
-            eval_results[f"test_c_f1"],
-            eval_results[f"test_y_f1"],
+            c_accuracy,
+            y_accuracy,
+            c_auc,
+            y_auc,
+            c_f1,
+            y_f1,
         ]
         top_k_vals = []
         for key, val in eval_results.items():

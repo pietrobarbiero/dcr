@@ -498,23 +498,23 @@ def intervene_in_cbm(
                 x_test.shape[0] * (coeff if coeff != 0 else 1)
             )
         )
-        y_pred = np.concatenate(
+        y_logits = np.concatenate(
             list(map(lambda x: x[2].detach().cpu().numpy(), test_batch_results)),
             axis=0,
         )
-        if y_pred.shape[-1] > 1:
-            if use_auc and (y_pred.shape[-1] == 2):
-                y_pred = scipy.special.softmax(y_pred, axis=-1)[:, -1]
+        if y_logits.shape[-1] > 1:
+            y_probs = scipy.special.softmax(y_logits, axis=-1)
+            if use_auc and (y_probs.shape[-1] == 2):
+                y_probs = y_probs[:, -1]
+                y_pred =(y_probs >= 0.5).astype(np.int32)
             else:
-                y_pred = np.argmax(y_pred, axis=-1)
+                y_pred = np.argmax(y_probs, axis=-1)
         else:
-            if use_auc:
-                y_pred = np.squeeze(
-                    (expit(y_pred) >= 0.5).astype(np.int32),
-                    axis=-1,
-                )
-            else:
-                y_pred = np.squeeze(expit(y_pred), axis=-1)
+            y_probs = expit(y_logits)
+            y_pred = np.squeeze(
+                (y_probs >= 0.5).astype(np.int32),
+                axis=-1,
+            )
         prev_interventions = np.concatenate(
             list(map(lambda x: x[3].detach().cpu().numpy(), test_batch_results)),
             axis=0,
@@ -537,17 +537,13 @@ def intervene_in_cbm(
             try:
                 acc = sklearn.metrics.roc_auc_score(
                     y_test.detach().cpu().numpy(),
-                    y_pred,
+                    y_probs,
                     multi_class='ovo',
                 )
             except Exception as e:
                 # If there is only one class in the true labels, then we resort
                 # to plain accuracy
-                if y_pred.shape[-1] > 1:
-                    y_pred_used = np.argmax(y_pred, axis=-1)
-                else:
-                    y_pred_used = np.squeeze(y_pred >= 0.5).astype(np.int32)
-                acc = np.mean(y_pred_used == y_test.detach().cpu().numpy())
+                acc = np.mean(y_pred == y_test.detach().cpu().numpy())
             logging.debug(
                 f"\tAUC when intervening with {num_groups_intervened} "
                 f"concept groups is {acc * 100:.2f}% (accuracy "
@@ -1528,4 +1524,37 @@ def test_interventions(
         group_level_competencies=group_level_competencies,
         dl_name=dl_name,
     )
+    if use_auc:
+        # Then rerun this but without AUC so that we also collect metrics
+        # for accuracy
+        intervention_config['use_auc'] = False
+        test_interventions(
+            run_name=run_name,
+            train_dl=train_dl,
+            val_dl=val_dl,
+            test_dl=test_dl,
+            imbalance=imbalance,
+            config=config,
+            n_tasks=n_tasks,
+            n_concepts=n_concepts,
+            acquisition_costs=acquisition_costs,
+            result_dir=result_dir,
+            concept_map=concept_map,
+            intervened_groups=intervened_groups,
+            used_policies=used_policies,
+            intervention_batch_size=intervention_batch_size,
+            competence_levels=competence_levels,
+            real_competence_generator=real_competence_generator,
+            extra_suffix=extra_suffix,
+            real_competence_level=real_competence_level,
+            group_level_competencies=group_level_competencies,
+            accelerator=accelerator,
+            devices=devices,
+            split=split,
+            rerun=rerun,
+            old_results=old_results,
+            task_class_weights=task_class_weights,
+            dl_name=dl_name,
+        )
+        intervention_config['use_auc'] = True
     return results

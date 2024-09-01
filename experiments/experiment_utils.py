@@ -225,11 +225,6 @@ def print_table(
         "test_auc_y" if use_auc else "test_acc_y",
     ]
 
-    # Add AUC only when it is a binary class
-    shared_params = config.get("shared_params", {})
-    if shared_params.get("n_tasks", 3) <= 2:
-        field_names.append("Task AUC")
-        result_table_fields_keys.append("test_auc_y")
 
     # Now add concept evaluation metrics
     field_names.extend([
@@ -241,8 +236,10 @@ def print_table(
         "test_auc_c",
     ])
 
+
     # CAS, if we chose to compute it (off by default as it may be
     # computationally expensive)
+    shared_params = config.get("shared_params", {})
     if (
         (not shared_params.get("skip_repr_evaluation", False)) and
         shared_params.get("run_cas", True)

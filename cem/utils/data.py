@@ -16,6 +16,7 @@ def daloader_to_memory(
     num_workers=5,
     max_val=512,
     output_groups=False,
+    only_labels=False,
 ):
     if hasattr(dl.dataset, 'tensors'):
         x_data, y_data, c_data = dl.dataset.tensors[:3]
@@ -36,7 +37,9 @@ def daloader_to_memory(
             batch_size=_largest_divisor(len(dl.dataset), max_val=max_val),
             num_workers=num_workers,
         )
-        x_data, y_data, c_data, g_data = [], [], [], []
+        y_data, c_data, g_data = [], [], []
+        if not only_labels:
+            x_data = []
         for data in fast_loader:
             if len(data) == 2:
                 x, (y, c) = data
@@ -48,25 +51,32 @@ def daloader_to_memory(
             x_type = x.type()
             y_type = y.type()
             c_type = c.type()
-            x_data.append(x)
+            if not only_labels:
+                x_data.append(x)
             y_data.append(y)
             c_data.append(c)
 
-        x_data = np.concatenate(x_data, axis=0)
+        if not only_labels:
+            x_data = np.concatenate(x_data, axis=0)
         y_data = np.concatenate(y_data, axis=0)
         c_data = np.concatenate(c_data, axis=0)
         if g_data:
             g_data = np.concatenate(g_data, axis=0)
         else:
-            g_data = np.ones((x_data.shape[0], 1), dtype=np.int32)
+            g_data = np.ones((y_data.shape[0], 1), dtype=np.int32)
             g_type = torch.int32
 
         if as_torch:
-            x_data = torch.FloatTensor(x_data).type(x_type)
+            if not only_labels:
+                x_data = torch.FloatTensor(x_data).type(x_type)
             y_data = torch.FloatTensor(y_data).type(y_type)
             c_data = torch.FloatTensor(c_data).type(c_type)
             if g_data is not None:
                 g_data = torch.FloatTensor(g_data).type(g_type)
     if output_groups:
-        return  x_data, y_data, c_data, g_data
-    return  x_data, y_data, c_data
+        if not only_labels:
+            return  x_data, y_data, c_data, g_data
+        return  y_data, c_data, g_data
+    if not only_labels:
+        return  x_data, y_data, c_data
+    return  y_data, c_data

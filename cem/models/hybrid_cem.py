@@ -1799,10 +1799,15 @@ class MixingConceptEmbeddingModel(ConceptEmbeddingModel):
             )
         return output, intervention_idxs, bottleneck
 
-    def _distance_metric(self, anchor, latent):
+    def _distance_metric(self, neg_anchor, pos_anchor, latent):
         if self.use_cosine_similarity:
-            return self._cos_similarity(anchor, latent)
-        return (anchor - latent).pow(2).sum(-1).sqrt()
+            neg_sim = self._cos_similarity(neg_anchor, latent)
+            pos_sim = self._cos_similarity(pos_anchor, latent)
+            return pos_sim - neg_sim
+
+        neg_dist = (neg_anchor - latent).pow(2).sum(-1).sqrt()
+        pos_dist = (pos_anchor - latent).pow(2).sum(-1).sqrt()
+        return neg_dist - pos_dist
 
     def _generate_concept_embeddings(
         self,
@@ -1850,9 +1855,10 @@ class MixingConceptEmbeddingModel(ConceptEmbeddingModel):
                     )
                 # [Shape: (B)]
                 prob = self.sig(
-                    self.contrastive_scale[i] * (
-                        self._distance_metric(anchor_concept_neg_emb, pred_concept_embeddings) -
-                        self._distance_metric(anchor_concept_pos_emb, pred_concept_embeddings)
+                    self.contrastive_scale[i] * self._distance_metric(
+                        neg_anchor=anchor_concept_neg_emb,
+                        pos_anchor=anchor_concept_pos_emb,
+                        latent=pred_concept_embeddings,
                     )
                 )
                 # [Shape: (B, 1)]
@@ -1913,9 +1919,10 @@ class MixingConceptEmbeddingModel(ConceptEmbeddingModel):
                     )
                 # [Shape: (B)]
                 prob = self.sig(
-                    self.discovered_contrastive_scale[i] * (
-                        self._distance_metric(anchor_concept_neg_emb, pred_discovered_concept_embs) -
-                        self._distance_metric(anchor_concept_pos_emb, pred_discovered_concept_embs)
+                    self.discovered_contrastive_scale[i] * self._distance_metric(
+                        neg_anchor=anchor_concept_neg_emb,
+                        pos_anchor=anchor_concept_pos_emb,
+                        latent=pred_discovered_concept_embs,
                     )
                 )
                 # [Shape: (B, 1)]

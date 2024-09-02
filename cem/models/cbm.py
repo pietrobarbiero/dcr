@@ -36,6 +36,8 @@ class ConceptBottleneckModel(pl.LightningModule):
         momentum=0.9,
         learning_rate=0.01,
         weight_decay=4e-05,
+        lr_scheduler_factor=0.1,
+        lr_scheduler_patience=10,
         weight_loss=None,
         task_class_weights=None,
 
@@ -148,6 +150,8 @@ class ConceptBottleneckModel(pl.LightningModule):
         self.intervention_policy = intervention_policy
         self.output_latent = output_latent
         self.output_interventions = output_interventions
+        self.lr_scheduler_patience = lr_scheduler_patience
+        self.lr_scheduler_factor = lr_scheduler_factor
         if x2c_model is not None:
             # Then this is assumed to be a module already provided as
             # the input to concepts method
@@ -753,12 +757,19 @@ class ConceptBottleneckModel(pl.LightningModule):
                 momentum=self.momentum,
                 weight_decay=self.weight_decay,
             )
-        lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer,
-            verbose=True,
-        )
+        if self.lr_scheduler_patience != 0:
+            lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+                optimizer,
+                verbose=True,
+                patience=self.lr_scheduler_patience,
+                factor=self.lr_scheduler_factor,
+            )
+            return {
+                "optimizer": optimizer,
+                "lr_scheduler": lr_scheduler,
+                "monitor": "loss",
+            }
         return {
             "optimizer": optimizer,
-            "lr_scheduler": lr_scheduler,
             "monitor": "loss",
         }

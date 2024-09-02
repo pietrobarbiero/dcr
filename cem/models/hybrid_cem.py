@@ -101,6 +101,8 @@ class HybridConceptEmbeddingModel(ConceptEmbeddingModel):
         momentum=0.9,
         learning_rate=0.01,
         weight_decay=4e-05,
+        lr_scheduler_factor=0.1,
+        lr_scheduler_patience=10,
         weight_loss=None,
         task_class_weights=None,
         tau=1,
@@ -332,6 +334,8 @@ class HybridConceptEmbeddingModel(ConceptEmbeddingModel):
         self.learning_rate = learning_rate
         self.weight_decay = weight_decay
         self.optimizer_name = optimizer
+        self.lr_scheduler_factor = lr_scheduler_factor
+        self.lr_scheduler_patience = lr_scheduler_patience
         self.n_tasks = n_tasks
         self.tau = tau
         self.use_concept_groups = use_concept_groups
@@ -533,6 +537,8 @@ class MultiConceptEmbeddingModel(ConceptEmbeddingModel):
         momentum=0.9,
         learning_rate=0.01,
         weight_decay=4e-05,
+        lr_scheduler_factor=0.1,
+        lr_scheduler_patience=10,
         weight_loss=None,
         task_class_weights=None,
         tau=1,
@@ -749,6 +755,8 @@ class MultiConceptEmbeddingModel(ConceptEmbeddingModel):
         self.learning_rate = learning_rate
         self.weight_decay = weight_decay
         self.optimizer_name = optimizer
+        self.lr_scheduler_factor = lr_scheduler_factor
+        self.lr_scheduler_patience = lr_scheduler_patience
         self.n_tasks = n_tasks
         self.tau = tau
         self.use_concept_groups = use_concept_groups
@@ -1073,6 +1081,8 @@ class MixingConceptEmbeddingModel(ConceptEmbeddingModel):
         momentum=0.9,
         learning_rate=0.01,
         weight_decay=4e-05,
+        lr_scheduler_factor=0.1,
+        lr_scheduler_patience=10,
         weight_loss=None,
         task_class_weights=None,
         tau=1,
@@ -1359,6 +1369,8 @@ class MixingConceptEmbeddingModel(ConceptEmbeddingModel):
         self.learning_rate = learning_rate
         self.weight_decay = weight_decay
         self.optimizer_name = optimizer
+        self.lr_scheduler_factor = lr_scheduler_factor
+        self.lr_scheduler_patience = lr_scheduler_patience
         self.n_tasks = n_tasks
         self.tau = tau
         self.use_concept_groups = use_concept_groups
@@ -2145,6 +2157,8 @@ class ResidualMixingConceptEmbeddingModel(ConceptEmbeddingModel):
         momentum=0.9,
         learning_rate=0.01,
         weight_decay=4e-05,
+        lr_scheduler_factor=0.1,
+        lr_scheduler_patience=10,
         weight_loss=None,
         task_class_weights=None,
         tau=1,
@@ -2365,6 +2379,8 @@ class ResidualMixingConceptEmbeddingModel(ConceptEmbeddingModel):
         self.learning_rate = learning_rate
         self.weight_decay = weight_decay
         self.optimizer_name = optimizer
+        self.lr_scheduler_factor = lr_scheduler_factor
+        self.lr_scheduler_patience = lr_scheduler_patience
         self.n_tasks = n_tasks
         self.tau = tau
         self.use_concept_groups = use_concept_groups

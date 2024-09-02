@@ -257,7 +257,7 @@ def train_end_to_end_model(
                 _check_interruption(warmup_trainer)
                 _restore_checkpoint(
                     model=model,
-                    max_epochs=config['max_epochs'],
+                    max_epochs=warmup_epochs,
                     ckpt_call=warmup_ckpt_call,
                     trainer=warmup_trainer,
                 )

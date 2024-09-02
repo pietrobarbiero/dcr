@@ -90,6 +90,7 @@ import cem.data.CUB200.cub_loader as cub_data_module
 import cem.data.mnist_add as mnist_data_module
 import cem.data.waterbirds_loader as waterbirds_data_module
 import cem.train.train_blackbox as train_blackbox
+import cem.train.train_mixcem as train_mixcem
 import cem.train.train_pcbm as train_pcbm
 import cem.train.training as training
 import cem.train.utils as utils
@@ -607,6 +608,12 @@ def _multiprocess_run_trial(
         "ProbabilisticConceptBottleneckModel",
     ]:
         train_fn = training.train_prob_cbm
+
+    elif config["architecture"] in [
+        "NewMixingConceptEmbeddingModel",  # TODO: CHANGE THIS IF THIS WORKS!!!!!!!!!!!!!!
+    ]:
+        train_fn = train_mixcem.train_mixcem
+
     elif config["architecture"] in [
         "PosthocCBM",
         "PCBM",
@@ -614,7 +621,8 @@ def _multiprocess_run_trial(
         "Post-hocConceptBottleneckModel",
     ]:
         train_fn = train_pcbm.train_pcbm
-    if config["architecture"] in [
+
+    elif config["architecture"] in [
         "BBModel",
         "BlackBoxModel",
         "BlackBox",

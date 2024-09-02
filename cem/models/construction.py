@@ -10,6 +10,7 @@ import cem.models.cbm as models_cbm
 import cem.models.cem as models_cem
 import cem.models.hybrid_cem as models_hcem
 import cem.models.intcbm as models_intcbm
+import cem.models.mixcem as models_mixcem
 import cem.models.posthoc_cbm as models_pcbm
 import cem.models.probcbm as models_probcbm
 import cem.train.utils as utils
@@ -429,6 +430,8 @@ def construct_model(
             residual_model=config.get('residual_model', None),
             reg_strength=config.get('reg_strength', 1e-5),
             l1_ratio=config.get('reg_strength', 0.99),
+            lr_scheduler_factor=config.get('lr_scheduler_factor', 0.1),
+            lr_scheduler_patience=config.get('lr_scheduler_patience', 10),
             freeze_pretrained_model=config.get('freeze_pretrained_model', True),
             freeze_concept_embeddings=config.get('freeze_concept_embeddings', True),
             training_intervention_prob=config.get(
@@ -436,6 +439,81 @@ def construct_model(
                 0.0,
             ),
         )
+    elif config["architecture"] in [
+        "NewMixingConceptEmbeddingModel",
+    ]:
+        model_cls = models_mixcem.MixingConceptEmbeddingModel
+        extra_params = {
+            "emb_size": config["emb_size"],
+            "n_discovered_concepts": config.get(
+                "n_discovered_concepts",
+                0,
+            ),
+            "contrastive_loss_weight": config.get(
+                "contrastive_loss_weight",
+                0.0,
+            ),
+            "normalize_embs": config.get(
+                "normalize_embs",
+                False,
+            ),
+            "sample_probs": config.get(
+                "sample_probs",
+                False,
+            ),
+            "cond_discovery": config.get(
+                "cond_discovery",
+                False,
+            ),
+            "intermediate_task_concept_loss": config.get(
+                "intermediate_task_concept_loss",
+                0.0,
+            ),
+            "intervention_task_discount": config.get(
+                "intervention_task_discount",
+                1,
+            ),
+            "mix_ground_truth_embs": config.get(
+                "mix_ground_truth_embs",
+                True,
+            ),
+            "discovered_probs_entropy": config.get(
+                "discovered_probs_entropy",
+                0,
+            ),
+            "intervention_policy": intervention_policy,
+            "training_intervention_prob": config.get(
+                'training_intervention_prob',
+                0.25,
+            ),
+            "dyn_training_intervention_prob": config.get(
+                "dyn_training_intervention_prob",
+                0,
+            ),
+            "embedding_activation": config.get(
+                "embedding_activation",
+                None,
+            ),
+            "c2y_model": c2y_model,
+            "c2y_layers": config.get("c2y_layers", []),
+
+            "fixed_embeddings": config.get('fixed_embeddings', False),
+            "initial_concept_embeddings": config.get(
+                'initial_concept_embeddings',
+                None,
+            ),
+            "use_cosine_similarity": config.get('use_cosine_similarity', False),
+            "use_linear_emb_layer": config.get('use_linear_emb_layer', False),
+            "fixed_scale": config.get('fixed_scale', None),
+            "residual_scale": config.get('residual_scale', 1),
+            "conditional_residual": config.get('conditional_residual', False),
+            "residual_layers": config.get("residual_layers", []),
+            "additive_mixing": config.get('additive_mixing', False),
+            "per_concept_residual": config.get('per_concept_residual', False),
+            "shared_per_concept_residual": config.get('shared_per_concept_residual', False),
+            "sigmoidal_residual": config.get('sigmoidal_residual', False),
+            "residual_deviation": config.get('residual_deviation', False),
+        }
     else:
         raise ValueError(f'Invalid architecture "{config["architecture"]}"')
 
@@ -475,6 +553,8 @@ def construct_model(
         weight_decay=config.get('weight_decay', 0),
         c_extractor_arch=utils.wrap_pretrained_model(c_extractor_arch),
         optimizer=config['optimizer'],
+        lr_scheduler_factor=config.get('lr_scheduler_factor', 0.1),
+        lr_scheduler_patience=config.get('lr_scheduler_patience', 10),
         top_k_accuracy=config.get('top_k_accuracy'),
         output_latent=output_latent,
         output_interventions=output_interventions,
@@ -531,6 +611,8 @@ def construct_sequential_models(
         learning_rate=config['learning_rate'],
         weight_decay=config.get('weight_decay', 0),
         optimizer=config['optimizer'],
+        lr_scheduler_factor=config.get('lr_scheduler_factor', 0.1),
+        lr_scheduler_patience=config.get('lr_scheduler_patience', 10),
         binary_output=True,
         sigmoidal_output=True,
     )
@@ -549,6 +631,8 @@ def construct_sequential_models(
         learning_rate=config['learning_rate'],
         weight_decay=config.get('weight_decay', 0),
         optimizer=config['optimizer'],
+        lr_scheduler_factor=config.get('lr_scheduler_factor', 0.1),
+        lr_scheduler_patience=config.get('lr_scheduler_patience', 10),
         top_k_accuracy=config.get('top_k_accuracy'),
         binary_output=False,
         sigmoidal_output=False,

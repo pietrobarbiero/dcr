@@ -32,6 +32,8 @@ class PCBM(ConceptBottleneckModel):
         momentum=0.9,
         learning_rate=0.01,
         weight_decay=4e-05,
+        lr_scheduler_factor=0.1,
+        lr_scheduler_patience=10,
         task_class_weights=None,
 
         active_intervention_values=None,
@@ -59,9 +61,8 @@ class PCBM(ConceptBottleneckModel):
         self.freeze_pretrained_model = freeze_pretrained_model
         if freeze_pretrained_model:
             # Then let's go ahead and freeze all the parameters in this model
-            for child in self.embedding_generator.children():
-                for param in child.parameters():
-                    param.requires_grad = False
+            for param in self.embedding_generator.parameters():
+                param.requires_grad = False
 
         # Time to initialize our embedding projection matrix
         self.freeze_concept_embeddings = freeze_concept_embeddings
@@ -140,6 +141,8 @@ class PCBM(ConceptBottleneckModel):
         self.learning_rate = learning_rate
         self.weight_decay = weight_decay
         self.optimizer_name = optimizer
+        self.lr_scheduler_factor = lr_scheduler_factor
+        self.lr_scheduler_patience = lr_scheduler_patience
 
 
     def _generate_concept_scores(
@@ -172,11 +175,10 @@ class PCBM(ConceptBottleneckModel):
             # Then we use all weights for the regularization
             l1_norm = 0.0
             l2_norm = 0.0
-            for child in self.c2y_model.children():
-                for param in child.parameters():
-                    if param.requires_grad:
-                        l1_norm += torch.norm(param, p=1)
-                        l2_norm += torch.pow(param, 2)
+            for param in self.c2y_model.parameters():
+                if param.requires_grad:
+                    l1_norm += torch.norm(param, p=1)
+                    l2_norm += torch.pow(param, 2)
             l2_norm = torch.square(l2_norm)
         else:
             # Otherwise this is the detault sparse network for which we only

@@ -4,7 +4,6 @@ import torch
 
 from torchvision.models import resnet50
 
-from cem.metrics.accs import compute_accuracy
 from cem.models.cbm import ConceptBottleneckModel
 import cem.train.utils as utils
 
@@ -38,7 +37,6 @@ class ConceptEmbeddingModel(ConceptBottleneckModel):
         weight_decay=4e-05,
         weight_loss=None,
         task_class_weights=None,
-        tau=1,
 
         active_intervention_values=None,
         inactive_intervention_values=None,
@@ -221,7 +219,6 @@ class ConceptEmbeddingModel(ConceptBottleneckModel):
         self.optimizer_name = optimizer
         self.n_tasks = n_tasks
         self.emb_size = emb_size
-        self.tau = tau
         self.use_concept_groups = use_concept_groups
 
 

@@ -10,6 +10,7 @@ import cem.models.cbm as models_cbm
 import cem.models.cem as models_cem
 import cem.models.hybrid_cem as models_hcem
 import cem.models.intcbm as models_intcbm
+import cem.models.posthoc_cbm as models_pcbm
 import cem.models.probcbm as models_probcbm
 import cem.train.utils as utils
 
@@ -394,6 +395,47 @@ def construct_model(
             "c2y_model": c2y_model,
             "c2y_layers": config.get("c2y_layers", []),
         }
+    elif config["architecture"] in [
+        "PCBM",
+        "PosthocCBM",
+        "Post-hocCBM",
+        "PosthocConceptBottleneckModel",
+        "Post-hocConceptBottleneckModel",
+    ]:
+        return models_pcbm.PCBM(
+            n_concepts=n_concepts,
+            n_tasks=n_tasks,
+            weight_loss=(
+                torch.FloatTensor(imbalance)
+                if config['weight_loss'] and (imbalance is not None)
+                else None
+            ),
+            task_class_weights=(
+                torch.FloatTensor(task_class_weights)
+                if (task_class_weights is not None)
+                else None
+            ),
+            learning_rate=config['learning_rate'],
+            weight_decay=config.get('weight_decay', 0),
+            optimizer=config['optimizer'],
+            top_k_accuracy=config.get('top_k_accuracy'),
+            output_latent=output_latent,
+            output_interventions=output_interventions,
+            concept_vectors=config['concept_vectors'],
+            pretrained_model=config['pretrained_model'],
+            concept_vector_intercepts=config.get('concept_vector_intercepts'),
+            c2y_model=config.get('c2y_model'),
+            residual=config.get('residual', False),
+            residual_model=config.get('residual_model', None),
+            reg_strength=config.get('reg_strength', 1e-5),
+            l1_ratio=config.get('reg_strength', 0.99),
+            freeze_pretrained_model=config.get('freeze_pretrained_model', True),
+            freeze_concept_embeddings=config.get('freeze_concept_embeddings', True),
+            training_intervention_prob=config.get(
+                'training_intervention_prob',
+                0.0,
+            ),
+        )
     else:
         raise ValueError(f'Invalid architecture "{config["architecture"]}"')
 
@@ -567,9 +609,13 @@ def load_trained_model(
 
     if (
         ((intervention_policy is not None) or intervene) and
-        (train_dl is not None) and
-        (config['architecture'] == "ConceptBottleneckModel") and
-        (not config.get('sigmoidal_prob', True))
+        (train_dl is not None) and (
+            (
+                (config['architecture'] in ["ConceptBottleneckModel", "CBM"]) and
+                (not config.get('sigmoidal_prob', True))
+            ) or
+            (config['architecture'] in ["PosthocConceptBottleneckModel", "PCBM", "PosthocCBM"])
+        )
     ):
         # Then let's look at the empirical distribution of the logits in order
         # to be able to intervene

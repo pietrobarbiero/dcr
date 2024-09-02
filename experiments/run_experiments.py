@@ -89,6 +89,8 @@ import cem.data.color_mnist_add as color_mnist_data_module
 import cem.data.CUB200.cub_loader as cub_data_module
 import cem.data.mnist_add as mnist_data_module
 import cem.data.waterbirds_loader as waterbirds_data_module
+import cem.train.train_blackbox as train_blackbox
+import cem.train.train_pcbm as train_pcbm
 import cem.train.training as training
 import cem.train.utils as utils
 
@@ -283,6 +285,9 @@ def _update_config_with_dataset(
         "concept_map",
         concept_map,
     )
+    for data in train_dl:
+        config['input_shape'] = tuple(data[0].shape)
+        break
 
     task_class_weights = None
 
@@ -602,6 +607,19 @@ def _multiprocess_run_trial(
         "ProbabilisticConceptBottleneckModel",
     ]:
         train_fn = training.train_prob_cbm
+    elif config["architecture"] in [
+        "PosthocCBM",
+        "PCBM",
+        "PosthocConceptBottleneckModel",
+        "Post-hocConceptBottleneckModel",
+    ]:
+        train_fn = train_pcbm.train_pcbm
+    if config["architecture"] in [
+        "BBModel",
+        "BlackBoxModel",
+        "BlackBox",
+    ]:
+        train_fn = train_blackbox.train_blackbox
     else:
         train_fn = training.train_end_to_end_model
 
@@ -613,10 +631,10 @@ def _multiprocess_run_trial(
         devices=devices,
         n_concepts=config['n_concepts'],
         n_tasks=config['n_tasks'],
+        input_shape=config['input_shape'],
         config=config,
         train_dl=train_dl,
         val_dl=val_dl,
-        test_dl=test_dl,
         split=split,
         result_dir=result_dir,
         rerun=current_rerun,

@@ -53,11 +53,43 @@ def _make_callbacks(config, result_dir, full_run_name):
     return callbacks, ckpt_callback
 
 
+def _check_interruption(trainer):
+    if trainer.interrupted:
+        reply = None
+        while reply not in ['y', 'n']:
+            if reply is not None:
+                print("Please provide only either 'y' or 'n'.")
+            reply = input(
+                "Would you like to manually interrupt this model's "
+                "training and continue the experiment? [y/n]\n"
+            ).strip().lower()
+        if reply == "n":
+            raise ValueError(
+                'Experiment execution was manually interrupted!'
+            )
+
+
+def _restore_checkpoint(
+    model,
+    max_epochs,
+    ckpt_call,
+    trainer,
+):
+    if (ckpt_call is not None) and (
+        trainer.current_epoch != max_epochs
+    ):
+        # Then restore the best validation model
+        print("ckpt_call.best_model_path =", ckpt_call.best_model_path)   # prints path to the best model's checkpoint
+        print("ckpt_call.best_model_score =", ckpt_call.best_model_score) # and prints it score
+        chkpoint = torch.load(ckpt_call.best_model_path)
+        model.load_state_dict(chkpoint["state_dict"])
+
 ################################################################################
 ## MODEL TRAINING
 ################################################################################
 
 def train_end_to_end_model(
+    input_shape,
     n_concepts,
     n_tasks,
     config,
@@ -65,7 +97,6 @@ def train_end_to_end_model(
     val_dl,
     run_name,
     result_dir=None,
-    test_dl=None,
     split=None,
     imbalance=None,
     task_class_weights=None,
@@ -196,30 +227,62 @@ def train_end_to_end_model(
         else:
             # Else it is time to train it
             start_time = time.time()
+            training_time = 0
+            num_epochs = 0
+            warmup_epochs = config.get('concept_warmup_epochs', 0)
+            if warmup_epochs:
+                print(
+                    f"\tWarming up concept generator for {warmup_epochs} epochs"
+                )
+                warmup_callbacks, warmup_ckpt_call = _make_callbacks(
+                    config,
+                    result_dir,
+                    full_run_name,
+                )
+                prev_task_loss_weight = model.task_loss_weight
+                prev_concept_loss_weight = model.concept_loss_weight
+                model.task_loss_weight = 0
+                model.concept_loss_weight = 1
+                warmup_trainer = pl.Trainer(
+                    accelerator=accelerator,
+                    devices=devices,
+                    max_epochs=warmup_epochs,
+                    check_val_every_n_epoch=config.get("check_val_every_n_epoch", 5),
+                    callbacks=warmup_callbacks,
+                    logger=logger or False,
+                    enable_checkpointing=enable_checkpointing,
+                    gradient_clip_val=gradient_clip_val,
+                )
+                warmup_trainer.fit(model, train_dl, val_dl)
+                _check_interruption(warmup_trainer)
+                _restore_checkpoint(
+                    model=model,
+                    max_epochs=config['max_epochs'],
+                    ckpt_call=warmup_ckpt_call,
+                    trainer=warmup_trainer,
+                )
+                model.task_loss_weight = prev_task_loss_weight
+                model.concept_loss_weight = prev_concept_loss_weight
+                training_time += time.time() - start_time
+                num_epochs += warmup_trainer.current_epoch
+                start_time = time.time()
+                print(
+                    f"\t\tDone after {num_epochs} epochs and {training_time} secs"
+                )
+
+            print(
+                f"\tTraining end-to-end model for {config['max_epochs']} epochs"
+            )
             fit_trainer.fit(model, train_dl, val_dl)
-            if fit_trainer.interrupted:
-                reply = None
-                while reply not in ['y', 'n']:
-                    if reply is not None:
-                        print("Please provide only either 'y' or 'n'.")
-                    reply = input(
-                        "Would you like to manually interrupt this model's "
-                        "training and continue the experiment? [y/n]\n"
-                    ).strip().lower()
-                if reply == "n":
-                    raise ValueError(
-                        'Experiment execution was manually interrupted!'
-                    )
-            training_time = time.time() - start_time
-            num_epochs = fit_trainer.current_epoch
-            if config.get('early_stopping_best_model', False) and (
-                num_epochs != config['max_epochs']
-            ):
-                # Then restore the best validation model
-                print("ckpt_call.best_model_path =", ckpt_call.best_model_path)   # prints path to the best model's checkpoint
-                print("ckpt_call.best_model_score =", ckpt_call.best_model_score) # and prints it score
-                chkpoint = torch.load(ckpt_call.best_model_path)
-                model.load_state_dict(chkpoint["state_dict"])
+            _check_interruption(fit_trainer)
+            training_time += time.time() - start_time
+            num_epochs += fit_trainer.current_epoch
+            _restore_checkpoint(
+                model=model,
+                max_epochs=config['max_epochs'],
+                ckpt_call=ckpt_call,
+                trainer=trainer,
+            )
 
             if save_model and (result_dir is not None):
                 torch.save(
@@ -253,7 +316,7 @@ def train_end_to_end_model(
             run_name=run_name,
             old_results=old_results,
             rerun=rerun,
-            test_dl=train_dl,
+            test_dl=train_dl, # Evaluate training metrics
             dl_name="train",
         )
         eval_results['training_time'] = training_time
@@ -275,6 +338,7 @@ def train_end_to_end_model(
 
 
 def train_sequential_model(
+    input_shape,
     n_concepts,
     n_tasks,
     config,
@@ -282,7 +346,6 @@ def train_sequential_model(
     val_dl,
     run_name,
     result_dir=None,
-    test_dl=None,
     split=None,
     imbalance=None,
     task_class_weights=None,
@@ -362,8 +425,6 @@ def train_sequential_model(
     if rerun or (not chpt_exists):
         x_train, y_train, c_train = data_utils.daloader_to_memory(train_dl)
 
-        if test_dl:
-            x_test, y_test, c_test = data_utils.daloader_to_memory(test_dl)
         if val_dl is not None:
             x_val, y_val, c_val = data_utils.daloader_to_memory(val_dl)
 
@@ -431,29 +492,16 @@ def train_sequential_model(
             print("[Training input to concept model]")
             start_time = time.time()
             x2c_trainer.fit(model, train_dl, val_dl)
-            if x2c_trainer.interrupted:
-                reply = None
-                while reply not in ['y', 'n']:
-                    if reply is not None:
-                        print("Please provide only either 'y' or 'n'.")
-                    reply = input(
-                        "Would you like to manually interrupt this model's "
-                        "training and continue the experiment? [y/n]\n"
-                    ).strip().lower()
-                if reply == "n":
-                    raise ValueError(
-                        'Experiment execution was manually interrupted!'
-                    )
+            _check_interruption(x2c_trainer)
             training_time += time.time() - start_time
             num_epochs += x2c_trainer.current_epoch
-            if config.get('early_stopping_best_model', False) and (
-                x2c_trainer.current_epoch != config['max_epochs']
-            ):
-                # Then restore the best validation model
-                print("ckpt_call.best_model_path =", ckpt_call.best_model_path)   # prints path to the best model's checkpoint
-                print("ckpt_call.best_model_score =", ckpt_call.best_model_score) # and prints it score
-                chkpoint = torch.load(ckpt_call.best_model_path)
-                model.load_state_dict(chkpoint["state_dict"])
+            _restore_checkpoint(
+                model=model,
+                max_epochs=config['max_epochs'],
+                ckpt_call=ckpt_call,
+                trainer=x2c_trainer,
+            )
+
             if val_dl is not None:
                 print(
                     "Validation results for x2c model:",
@@ -557,19 +605,7 @@ def train_sequential_model(
                 seq_c2y_train_dl,
                 seq_c2y_val_dl,
             )
-            if seq_c2y_trainer.interrupted:
-                reply = None
-                while reply not in ['y', 'n']:
-                    if reply is not None:
-                        print("Please provide only either 'y' or 'n'.")
-                    reply = input(
-                        "Would you like to manually interrupt this model's "
-                        "training and continue the experiment? [y/n]\n"
-                    ).strip().lower()
-                if reply == "n":
-                    raise ValueError(
-                        'Experiment execution was manually interrupted!'
-                    )
+            _check_interruption(seq_c2y_trainer)
             seq_training_time = training_time + time.time() - start_time
             seq_num_epochs = num_epochs + seq_c2y_trainer.current_epoch
             if config.get('early_stopping_best_model', False) and (
@@ -626,7 +662,7 @@ def train_sequential_model(
         run_name=run_name,
         old_results=old_results,
         rerun=rerun,
-        test_dl=train_dl,
+        test_dl=train_dl, # Evaluate training metrics
         dl_name="train",
     )
     eval_results['training_time'] = training_time
@@ -649,6 +685,7 @@ def train_sequential_model(
 
 
 def train_independent_model(
+    input_shape,
     n_concepts,
     n_tasks,
     config,
@@ -656,7 +693,6 @@ def train_independent_model(
     val_dl,
     run_name,
     result_dir=None,
-    test_dl=None,
     split=None,
     imbalance=None,
     task_class_weights=None,
@@ -737,8 +773,6 @@ def train_independent_model(
     if rerun or (not chpt_exists):
         x_train, y_train, c_train = data_utils.daloader_to_memory(train_dl)
 
-        if test_dl:
-            x_test, y_test, c_test = data_utils.daloader_to_memory(test_dl)
         if val_dl is not None:
             x_val, y_val, c_val = data_utils.daloader_to_memory(val_dl)
         else:
@@ -810,19 +844,8 @@ def train_independent_model(
             print("[Training input to concept model]")
             start_time = time.time()
             x2c_trainer.fit(model, train_dl, val_dl)
-            if x2c_trainer.interrupted:
-                reply = None
-                while reply not in ['y', 'n']:
-                    if reply is not None:
-                        print("Please provide only either 'y' or 'n'.")
-                    reply = input(
-                        "Would you like to manually interrupt this model's "
-                        "training and continue the experiment? [y/n]\n"
-                    ).strip().lower()
-                if reply == "n":
-                    raise ValueError(
-                        'Experiment execution was manually interrupted!'
-                    )
+            _check_interruption(x2c_trainer)
+
             training_time += time.time() - start_time
             num_epochs += x2c_trainer.current_epoch
             if config.get('early_stopping_best_model', False) and (
@@ -903,19 +926,7 @@ def train_independent_model(
                 ind_c2y_train_dl,
                 ind_c2y_val_dl,
             )
-            if ind_c2y_trainer.interrupted:
-                reply = None
-                while reply not in ['y', 'n']:
-                    if reply is not None:
-                        print("Please provide only either 'y' or 'n'.")
-                    reply = input(
-                        "Would you like to manually interrupt this model's "
-                        "training and continue the experiment? [y/n]\n"
-                    ).strip().lower()
-                if reply == "n":
-                    raise ValueError(
-                        'Experiment execution was manually interrupted!'
-                    )
+            _check_interruption(ind_c2y_trainer)
             ind_training_time = training_time + time.time() - start_time
             ind_num_epochs = num_epochs + ind_c2y_trainer.current_epoch
             if config.get('early_stopping_best_model', False) and (
@@ -972,7 +983,7 @@ def train_independent_model(
         run_name=run_name,
         old_results=old_results,
         rerun=rerun,
-        test_dl=train_dl,
+        test_dl=train_dl, # Evaluate training metrics
         dl_name="train",
     )
     eval_results['training_time'] = training_time
@@ -994,6 +1005,7 @@ def train_independent_model(
 
 
 def train_prob_cbm(
+    input_shape,
     n_concepts,
     n_tasks,
     config,
@@ -1001,7 +1013,6 @@ def train_prob_cbm(
     val_dl,
     run_name,
     result_dir=None,
-    test_dl=None,
     split=None,
     imbalance=None,
     task_class_weights=None,
@@ -1069,8 +1080,13 @@ def train_prob_cbm(
                 strict=False,
             )
 
+    model_saved_path = os.path.join(
+        result_dir,
+        f'{full_run_name}.pt'
+    )
+
     if (project_name) and result_dir and (
-        not os.path.exists(os.path.join(result_dir, f'{full_run_name}.pt'))
+        not os.path.exists(model_saved_path)
     ):
         # Lazy import to avoid importing unless necessary
         import wandb
@@ -1089,10 +1105,6 @@ def train_prob_cbm(
         enter_obj = utils.EmptyEnter()
         used_logger = logger or False
 
-    model_saved_path = os.path.join(
-        result_dir,
-        f'{full_run_name}.pt'
-    )
     callbacks, ckpt_call = _make_callbacks(config, result_dir, full_run_name)
     trainer_args = dict(
         accelerator=accelerator,
@@ -1146,23 +1158,7 @@ def train_prob_cbm(
                         **trainer_args,
                     )
                     warmup_trainer.fit(model, train_dl, val_dl)
-                    if warmup_trainer.interrupted:
-                        reply = None
-                        while reply not in ['y', 'n']:
-                            if reply is not None:
-                                print(
-                                    "Please provide only either 'y' or 'n'."
-                                )
-                            reply = input(
-                                "Would you like to manually interrupt this "
-                                "model's training and continue the "
-                                "experiment? [y/n]\n"
-                            ).strip().lower()
-                        if reply == "n":
-                            raise ValueError(
-                                'Experiment execution was manually '
-                                'interrupted!'
-                            )
+                    _check_interruption(warmup_trainer)
                     for p in model.extractor.parameters():
                         p.requires_grad = True
                     print("\t\tDone with warmup!")
@@ -1187,19 +1183,7 @@ def train_prob_cbm(
                     **trainer_args,
                 )
                 concept_trainer.fit(model, train_dl, val_dl)
-                if concept_trainer.interrupted:
-                    reply = None
-                    while reply not in ['y', 'n']:
-                        if reply is not None:
-                            print("Please provide only either 'y' or 'n'.")
-                        reply = input(
-                            "Would you like to manually interrupt this model's "
-                            "training and continue the experiment? [y/n]\n"
-                        ).strip().lower()
-                    if reply == "n":
-                        raise ValueError(
-                            'Experiment execution was manually interrupted!'
-                        )
+                _check_interruption(concept_trainer)
                 num_epochs = concept_trainer.current_epoch
                 if config.get('early_stopping_best_model', False) and (
                     concept_trainer.current_epoch != max_epochs
@@ -1236,19 +1220,7 @@ def train_prob_cbm(
                     **trainer_args,
                 )
                 task_trainer.fit(model, train_dl, val_dl)
-                if task_trainer.interrupted:
-                    reply = None
-                    while reply not in ['y', 'n']:
-                        if reply is not None:
-                            print("Please provide only either 'y' or 'n'.")
-                        reply = input(
-                            "Would you like to manually interrupt this model's "
-                            "training and continue the experiment? [y/n]\n"
-                        ).strip().lower()
-                    if reply == "n":
-                        raise ValueError(
-                            'Experiment execution was manually interrupted!'
-                        )
+                _check_interruption(task_trainer)
                 num_epochs += task_trainer.current_epoch
                 if config.get('early_stopping_best_model', False) and (
                     task_trainer.current_epoch != max_epochs
@@ -1268,19 +1240,7 @@ def train_prob_cbm(
                 )
                 model.stage = 'joint'
                 task_trainer.fit(model, train_dl, val_dl)
-                if task_trainer.interrupted:
-                    reply = None
-                    while reply not in ['y', 'n']:
-                        if reply is not None:
-                            print("Please provide only either 'y' or 'n'.")
-                        reply = input(
-                            "Would you like to manually interrupt this model's "
-                            "training and continue the experiment? [y/n]\n"
-                        ).strip().lower()
-                    if reply == "n":
-                        raise ValueError(
-                            'Experiment execution was manually interrupted!'
-                        )
+                _check_interruption(task_trainer)
                 num_epochs = task_trainer.current_epoch
                 if config.get('early_stopping_best_model', False) and (
                     task_trainer.current_epoch != max_epochs
@@ -1330,7 +1290,7 @@ def train_prob_cbm(
         run_name=run_name,
         old_results=old_results,
         rerun=rerun,
-        test_dl=train_dl,
+        test_dl=train_dl, # Evaluate training metrics
         dl_name="train",
     )
     eval_results['training_time'] = training_time

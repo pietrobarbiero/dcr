@@ -5,7 +5,7 @@ results_dir: /anfs/bigdisc/me466/mixcem_results/waterbirds_incomplete_0.2/
 model_selection_groups:
   - ["^(CBM_Sigmoid_Baseline_).*$", "Joint CBM (Baseline)"]
   - ["^(Hybrid-CBM_).*(_Baseline_).*$", "Hybrid-CBM (Baseline)"]
-  - ["^(CEM_Baseline_).*$", "CEM (Baseline)"]
+  - ["^(CEM_).*$", "CEM (Baseline)"]
   - ["^(DNN_).*$", "DNN (Baseline)"]
   - ["^(IntCEM_).*(_Baseline).*$", "IntCEM (Baseline)"]
   - ["^(MixCEM_).*(_Baseline).*$", "MixCEM (Baseline)"]
@@ -17,6 +17,7 @@ model_selection_metrics:
   - val_auc_y
 
 shared_params:
+  n_tasks: 2
   # Dataset Configuration
   dataset_config:
     dataset: "waterbirds"

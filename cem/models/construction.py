@@ -445,24 +445,8 @@ def construct_model(
         model_cls = models_mixcem.MixingConceptEmbeddingModel
         extra_params = {
             "emb_size": config["emb_size"],
-            "n_discovered_concepts": config.get(
-                "n_discovered_concepts",
-                0,
-            ),
-            "contrastive_loss_weight": config.get(
-                "contrastive_loss_weight",
-                0.0,
-            ),
             "normalize_embs": config.get(
                 "normalize_embs",
-                False,
-            ),
-            "sample_probs": config.get(
-                "sample_probs",
-                False,
-            ),
-            "cond_discovery": config.get(
-                "cond_discovery",
                 False,
             ),
             "intermediate_task_concept_loss": config.get(
@@ -477,18 +461,10 @@ def construct_model(
                 "mix_ground_truth_embs",
                 True,
             ),
-            "discovered_probs_entropy": config.get(
-                "discovered_probs_entropy",
-                0,
-            ),
             "intervention_policy": intervention_policy,
             "training_intervention_prob": config.get(
                 'training_intervention_prob',
                 0.25,
-            ),
-            "dyn_training_intervention_prob": config.get(
-                "dyn_training_intervention_prob",
-                0,
             ),
             "embedding_activation": config.get(
                 "embedding_activation",

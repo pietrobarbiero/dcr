@@ -1,5 +1,6 @@
 trials: 3
-results_dir: /anfs/bigdisc/me466/mixcem_results/color_mnist_count/incomplete_0.75
+model_selection_trials: 3
+results_dir: /anfs/bigdisc/me466/mixcem_results/color_mnist_add/incomplete_new_best_selected
 
 model_selection_groups:
   - ["^(CBM_Sigmoid_Noisy_Count_Baseline_).*$", "Joint CBM (Baseline)"]
@@ -17,24 +18,12 @@ model_selection_groups:
   - ["^(IntCEM_).*(_Noisy_Count_Baseline).*$", "IntCEM (Baseline)"]
   - ["^(IntCEM_).*(_Noisy_Count_Concept_Spurious).*$", "IntCEM (Concept Spurious)"]
   - ["^(IntCEM_).*(_Noisy_Count_Downstream_Spurious).*$", "IntCEM (Downstream Spurious)"]
-  - ["^(H-CEM_).*(_Noisy_Count_Baseline).*$", "H-CEM (Baseline)"]
-  - ["^(H-CEM_).*(_Noisy_Count_Concept_Spurious).*$", "H-CEM (Concept Spurious)"]
-  - ["^(H-CEM_).*(_Noisy_Count_Downstream_Spurious).*$", "H-CEM (Downstream Spurious)"]
-  - ["^(Contrastive_H-CEM_).*(Noisy_Count_Baseline).*$", "Contrastive_H-CEM (Baseline)"]
-  - ["^(Contrastive_H-CEM_).*(Noisy_Count_Concept_Spurious).*$", "Contrastive_H-CEM (Concept Spurious)"]
-  - ["^(Contrastive_H-CEM_).*(Noisy_Count_Downstream_Spurious).*$", "Contrastive_H-CEM (Downstream Spurious)"]
-  - ["^(ResidualMixing-CEM_).*(Noisy_Count_Baseline).*$", "ResidualMixing-CEM (Baseline)"]
-  - ["^(ResidualMixing-CEM_).*(Noisy_Count_Concept_Spurious).*$", "ResidualMixing-CEM (Concept Spurious)"]
-  - ["^(ResidualMixing-CEM_).*(Noisy_Count_Downstream_Spurious).*$", "ResidualMixing-CEM (Downstream Spurious)"]
+  - ["^(MixCEM_).*(Noisy_Count_Baseline).*$", "MixCEM (Baseline)"]
+  - ["^(MixCEM_).*(Noisy_Count_Concept_Spurious).*$", "MixCEM (Concept Spurious)"]
+  - ["^(MixCEM_).*(Noisy_Count_Downstream_Spurious).*$", "MixCEM (Downstream Spurious)"]
   - ["^(DNN_).*(Noisy_Count_Baseline).*$", "DNN (Baseline)"]
   - ["^(DNN_).*(Noisy_Count_Concept_Spurious).*$", "DNN (Concept Spurious)"]
   - ["^(DNN_).*(Noisy_Count_Downstream_Spurious).*$", "DNN (Downstream Spurious)"]
-  - ["^(Mixing-CEM_).*(Noisy_Count_Baseline).*$", "Mixing-CEM (Baseline)"]
-  - ["^(new_Mixing-CEM_).*(Noisy_Count_Baseline).*$", "new_Mixing-CEM (Baseline)"]
-  - ["^(Mixing-CEM_).*(Noisy_Count_Concept_Spurious).*$", "Mixing-CEM (Concept Spurious)"]
-  - ["^(new_Mixing-CEM_).*(Noisy_Count_Concept_Spurious).*$", "new_Mixing-CEM (Concept Spurious)"]
-  - ["^(Mixing-CEM_).*(Noisy_Count_Downstream_Spurious).*$", "Mixing-CEM (Downstream Spurious)"]
-  - ["^(new_Mixing-CEM_).*(Noisy_Count_Downstream_Spurious).*$", "new_Mixing-CEM (Downstream Spurious)"]
   - ["^(ProbCBM).*(_Noisy_Count_Baseline_).*$", "ProbCBM (Baseline)"]
   - ["^(ProbCBM).*(_Noisy_Count_Downstream_Spurious_).*$", "ProbCBM (Downstream Spurious)"]
   - ["^(ProbCBM).*(_Noisy_Count_Concept_Spurious_).*$", "ProbCBM (Concept Spurious)"]
@@ -78,7 +67,7 @@ shared_params:
   emb_size: 8
   verbose: True
   extra_dims: 0
-  concept_loss_weight: [10, 1] #[10, 1, 0.1]
+  concept_loss_weight: [10, 5, 1] #[10, 1, 0.1]
   learning_rate: 0.001
   c_extractor_arch: color_mnist_extractor
   optimizer: adam
@@ -87,14 +76,15 @@ shared_params:
   early_stopping_monitor: val_loss
   early_stopping_mode: min
   early_stopping_delta: 0.0001
-  patience: 15
+  early_stopping_best_model: False
+  patience: 5 #15
+  check_val_every_n_epoch: 1 #5
   momentum: 0.9
   sigmoidal_prob: False
   training_intervention_prob: 0.25
   c2y_layers: [32, 16, 8]
   use_task_class_weights: True
   weight_loss: False
-  check_val_every_n_epoch: 5
   grid_variables:
       - concept_loss_weight
   grid_search_mode: exhaustive
@@ -113,16 +103,17 @@ runs:
       root_dir: data/
       num_workers: 8
       batch_size: 2048
-      num_operands: [20] #[10, 20]
-      selected_digits: [3, 8]
-      count_labels: True
+      num_operands: [10] #[10, 20]
+      selected_digits: [0, 1, 2, 3]
+      count_labels: False
+      range_labels: [5, 10, 15, 20, 25]
       low_noise_level: 1
       noise_level: 0.25
       test_low_noise_level: 1
       test_noise_level: 0.25
       train_dataset_size: 5000
       test_dataset_size: 5000
-      sampling_percent: 0.75
+      sampling_percent: 0.8
       sampling_groups: True
       test_subsampling: 1
       weight_loss: False
@@ -170,16 +161,17 @@ runs:
       root_dir: data/
       num_workers: 8
       batch_size: 2048
-      num_operands: [20] #[10, 20]
-      selected_digits: [3, 8]
-      count_labels: True
+      num_operands: [10] #[10, 20]
+      selected_digits: [0, 1, 2, 3]
+      count_labels: False
+      range_labels: [5, 10, 15, 20, 25]
       low_noise_level: 1
       noise_level: 0.25
       test_low_noise_level: 1
       test_noise_level: 0.25
       train_dataset_size: 5000
       test_dataset_size: 5000
-      sampling_percent: 0.75
+      sampling_percent: 0.8
       sampling_groups: True
       test_subsampling: 1
       weight_loss: False
@@ -228,16 +220,17 @@ runs:
       root_dir: data/
       num_workers: 8
       batch_size: 2048
-      num_operands: [20] #[10, 20]
-      selected_digits: [3, 8]
-      count_labels: True
+      num_operands: [10] #[10, 20]
+      selected_digits: [0, 1, 2, 3]
+      count_labels: False
+      range_labels: [5, 10, 15, 20, 25]
       low_noise_level: 1
       noise_level: 0.25
       test_low_noise_level: 1
       test_noise_level: 0.25
       train_dataset_size: 5000
       test_dataset_size: 5000
-      sampling_percent: 0.75
+      sampling_percent: 0.8
       sampling_groups: True
       test_subsampling: 1
       weight_loss: False
@@ -278,13 +271,13 @@ runs:
 
 
 
+
+
   - architecture: 'ConceptBottleneckModel'
-    run_name: "DNN_extra_dims_{extra_dims}_sigmoidal_prob_{sigmoidal_prob}_Noisy_Count_Baseline_{dataset_config[num_operands]}"
+    run_name: "CBM_Logit_Noisy_Count_Baseline_{dataset_config[num_operands]}_cwl_{concept_loss_weight}"
     training_intervention_prob: 0
     embedding_activation: "leakyrelu"
-    sigmoidal_prob: [True, False]
-    concept_loss_weight: [0]
-    extra_dims: [160, 2560]
+    sigmoidal_prob: False
 
     # Dataset Configuration
     dataset_config:
@@ -292,16 +285,198 @@ runs:
       root_dir: data/
       num_workers: 8
       batch_size: 2048
-      num_operands: [20] #[10, 20]
-      selected_digits: [3, 8]
-      count_labels: True
+      num_operands: [10] #[10, 20]
+      selected_digits: [0, 1, 2, 3]
+      count_labels: False
+      range_labels: [5, 10, 15, 20, 25]
       low_noise_level: 1
       noise_level: 0.25
       test_low_noise_level: 1
       test_noise_level: 0.25
       train_dataset_size: 5000
       test_dataset_size: 5000
-      sampling_percent: 0.75
+      sampling_percent: 0.8
+      sampling_groups: True
+      test_subsampling: 1
+      weight_loss: False
+
+      spurious_strength: 0.1
+      color_by_label: False
+      colors: ["random_1", "random_2", "random_3", "random_4", "random_5", "random_6", "random_7", "random_8", "random_9", "random_10"]
+      digit_color_distribution:
+        0: ["spurious", null, null, null, null, null, null, null, null, null]
+        1: [null, "spurious", null, null, null, null, null, null, null, null]
+        2: [null, null, "spurious", null, null, null, null, null, null, null]
+        3: [null, null, null, "spurious", null, null, null, null, null, null]
+        4: [null, null, null, null, "spurious", null, null, null, null, null]
+        5: [null, null, null, null, null, "spurious", null, null, null, null]
+        6: [null, null, null, null, null, null, "spurious", null, null, null]
+        7: [null, null, null, null, null, null, null, "spurious", null, null]
+        8: [null, null, null, null, null, null, null, null, "spurious", null]
+        9: [null, null, null, null, null, null, null, null, null, "spurious"]
+
+      test_digit_color_distribution:
+        0: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        1: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        2: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        3: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        4: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        5: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        6: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        7: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        8: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        9: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+    grid_variables:
+      - concept_loss_weight
+      - dataset_config.num_operands
+    grid_search_mode: exhaustive
+
+  - architecture: 'ConceptBottleneckModel'
+    run_name: "CBM_Logit_Noisy_Count_Downstream_Spurious_{dataset_config[num_operands]}_cwl_{concept_loss_weight}"
+    training_intervention_prob: 0
+    embedding_activation: "leakyrelu"
+    sigmoidal_prob: False
+
+    # Dataset Configuration
+    dataset_config:
+      dataset: color_mnist_add
+      root_dir: data/
+      num_workers: 8
+      batch_size: 2048
+      num_operands: [10] #[10, 20]
+      selected_digits: [0, 1, 2, 3]
+      count_labels: False
+      range_labels: [5, 10, 15, 20, 25]
+      low_noise_level: 1
+      noise_level: 0.25
+      test_low_noise_level: 1
+      test_noise_level: 0.25
+      train_dataset_size: 5000
+      test_dataset_size: 5000
+      sampling_percent: 0.8
+      sampling_groups: True
+      test_subsampling: 1
+      weight_loss: False
+
+      spurious_strength: 0.95
+      color_by_label: True    # So that the spurious correlation is label-based!
+      colors: ["random_1", "random_2", "random_3", "random_4", "random_5", "random_6", "random_7", "random_8", "random_9", "random_10"]
+      digit_color_distribution:
+        0: ["spurious", null, null, null, null, null, null, null, null, null]
+        1: [null, "spurious", null, null, null, null, null, null, null, null]
+        2: [null, null, "spurious", null, null, null, null, null, null, null]
+        3: [null, null, null, "spurious", null, null, null, null, null, null]
+        4: [null, null, null, null, "spurious", null, null, null, null, null]
+        5: [null, null, null, null, null, "spurious", null, null, null, null]
+        6: [null, null, null, null, null, null, "spurious", null, null, null]
+        7: [null, null, null, null, null, null, null, "spurious", null, null]
+        8: [null, null, null, null, null, null, null, null, "spurious", null]
+        9: [null, null, null, null, null, null, null, null, null, "spurious"]
+
+      test_digit_color_distribution:
+        0: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        1: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        2: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        3: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        4: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        5: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        6: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        7: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        8: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        9: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+    grid_variables:
+      - concept_loss_weight
+      - dataset_config.num_operands
+    grid_search_mode: exhaustive
+
+
+  - architecture: 'ConceptBottleneckModel'
+    run_name: "CBM_Logit_Noisy_Count_Concept_Spurious_{dataset_config[num_operands]}_cwl_{concept_loss_weight}"
+    training_intervention_prob: 0
+    embedding_activation: "leakyrelu"
+    sigmoidal_prob: False
+
+    # Dataset Configuration
+    dataset_config:
+      dataset: color_mnist_add
+      root_dir: data/
+      num_workers: 8
+      batch_size: 2048
+      num_operands: [10] #[10, 20]
+      selected_digits: [0, 1, 2, 3]
+      count_labels: False
+      range_labels: [5, 10, 15, 20, 25]
+      low_noise_level: 1
+      noise_level: 0.25
+      test_low_noise_level: 1
+      test_noise_level: 0.25
+      train_dataset_size: 5000
+      test_dataset_size: 5000
+      sampling_percent: 0.8
+      sampling_groups: True
+      test_subsampling: 1
+      weight_loss: False
+
+      spurious_strength: 0.95
+      color_by_label: False    # So that the spurious correlation is concept-based!
+      colors: ["random_1", "random_2", "random_3", "random_4", "random_5", "random_6", "random_7", "random_8", "random_9", "random_10"]
+      digit_color_distribution:
+        0: ["spurious", null, null, null, null, null, null, null, null, null]
+        1: [null, "spurious", null, null, null, null, null, null, null, null]
+        2: [null, null, "spurious", null, null, null, null, null, null, null]
+        3: [null, null, null, "spurious", null, null, null, null, null, null]
+        4: [null, null, null, null, "spurious", null, null, null, null, null]
+        5: [null, null, null, null, null, "spurious", null, null, null, null]
+        6: [null, null, null, null, null, null, "spurious", null, null, null]
+        7: [null, null, null, null, null, null, null, "spurious", null, null]
+        8: [null, null, null, null, null, null, null, null, "spurious", null]
+        9: [null, null, null, null, null, null, null, null, null, "spurious"]
+
+      test_digit_color_distribution:
+        0: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        1: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        2: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        3: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        4: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        5: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        6: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        7: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        8: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        9: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+    grid_variables:
+      - concept_loss_weight
+      - dataset_config.num_operands
+    grid_search_mode: exhaustive
+
+
+
+
+
+  - architecture: 'ConceptBottleneckModel'
+    run_name: "DNN_extra_dims_{extra_dims}_sigmoidal_prob_{sigmoidal_prob}_Noisy_Count_Baseline_{dataset_config[num_operands]}"
+    training_intervention_prob: 0
+    embedding_activation: "leakyrelu"
+    sigmoidal_prob: [True, False]
+    concept_loss_weight: [0]
+    extra_dims: [0, 128, 512]
+
+    # Dataset Configuration
+    dataset_config:
+      dataset: color_mnist_add
+      root_dir: data/
+      num_workers: 8
+      batch_size: 2048
+      num_operands: [10] #[10, 20]
+      selected_digits: [0, 1, 2, 3]
+      count_labels: False
+      range_labels: [5, 10, 15, 20, 25]
+      low_noise_level: 1
+      noise_level: 0.25
+      test_low_noise_level: 1
+      test_noise_level: 0.25
+      train_dataset_size: 5000
+      test_dataset_size: 5000
+      sampling_percent: 0.8
       sampling_groups: True
       test_subsampling: 1
       weight_loss: False
@@ -345,7 +520,7 @@ runs:
     embedding_activation: "leakyrelu"
     sigmoidal_prob: [True, False]
     concept_loss_weight: [0]
-    extra_dims: [160, 2560]
+    extra_dims: [0, 128, 512]
 
     # Dataset Configuration
     dataset_config:
@@ -353,16 +528,17 @@ runs:
       root_dir: data/
       num_workers: 8
       batch_size: 2048
-      num_operands: [20] #[10, 20]
-      selected_digits: [3, 8]
-      count_labels: True
+      num_operands: [10] #[10, 20]
+      selected_digits: [0, 1, 2, 3]
+      count_labels: False
+      range_labels: [5, 10, 15, 20, 25]
       low_noise_level: 1
       noise_level: 0.25
       test_low_noise_level: 1
       test_noise_level: 0.25
       train_dataset_size: 5000
       test_dataset_size: 5000
-      sampling_percent: 0.75
+      sampling_percent: 0.8
       sampling_groups: True
       test_subsampling: 1
       weight_loss: False
@@ -407,7 +583,7 @@ runs:
     embedding_activation: "leakyrelu"
     sigmoidal_prob: [True, False]
     concept_loss_weight: [0]
-    extra_dims: [160, 2560]
+    extra_dims: [0, 128, 512]
 
     # Dataset Configuration
     dataset_config:
@@ -415,16 +591,17 @@ runs:
       root_dir: data/
       num_workers: 8
       batch_size: 2048
-      num_operands: [20] #[10, 20]
-      selected_digits: [3, 8]
-      count_labels: True
+      num_operands: [10] #[10, 20]
+      selected_digits: [0, 1, 2, 3]
+      count_labels: False
+      range_labels: [5, 10, 15, 20, 25]
       low_noise_level: 1
       noise_level: 0.25
       test_low_noise_level: 1
       test_noise_level: 0.25
       train_dataset_size: 5000
       test_dataset_size: 5000
-      sampling_percent: 0.75
+      sampling_percent: 0.8
       sampling_groups: True
       test_subsampling: 1
       weight_loss: False
@@ -469,7 +646,7 @@ runs:
 
   - architecture: 'ConceptBottleneckModel'
     run_name: "Hybrid-CBM_extra_dims_{extra_dims}_Sigmoid_Noisy_Count_Baseline_{dataset_config[num_operands]}_cwl_{concept_loss_weight}"
-    extra_dims: [5, 10]
+    extra_dims: [128, 512]
     training_intervention_prob: 0
     embedding_activation: "leakyrelu"
     sigmoidal_prob: True
@@ -480,16 +657,17 @@ runs:
       root_dir: data/
       num_workers: 8
       batch_size: 2048
-      num_operands: [20] #[10, 20]
-      selected_digits: [3, 8]
-      count_labels: True
+      num_operands: [10] #[10, 20]
+      selected_digits: [0, 1, 2, 3]
+      count_labels: False
+      range_labels: [5, 10, 15, 20, 25]
       low_noise_level: 1
       noise_level: 0.25
       test_low_noise_level: 1
       test_noise_level: 0.25
       train_dataset_size: 5000
       test_dataset_size: 5000
-      sampling_percent: 0.75
+      sampling_percent: 0.8
       sampling_groups: True
       test_subsampling: 1
       weight_loss: False
@@ -529,7 +707,7 @@ runs:
 
   - architecture: 'ConceptBottleneckModel'
     run_name: "Hybrid-CBM_extra_dims_{extra_dims}_Sigmoid_Noisy_Count_Downstream_Spurious_{dataset_config[num_operands]}_cwl_{concept_loss_weight}"
-    extra_dims: [5, 10]
+    extra_dims: [128, 512]
     training_intervention_prob: 0
     embedding_activation: "leakyrelu"
     sigmoidal_prob: True
@@ -540,16 +718,17 @@ runs:
       root_dir: data/
       num_workers: 8
       batch_size: 2048
-      num_operands: [20] #[10, 20]
-      selected_digits: [3, 8]
-      count_labels: True
+      num_operands: [10] #[10, 20]
+      selected_digits: [0, 1, 2, 3]
+      count_labels: False
+      range_labels: [5, 10, 15, 20, 25]
       low_noise_level: 1
       noise_level: 0.25
       test_low_noise_level: 1
       test_noise_level: 0.25
       train_dataset_size: 5000
       test_dataset_size: 5000
-      sampling_percent: 0.75
+      sampling_percent: 0.8
       sampling_groups: True
       test_subsampling: 1
       weight_loss: False
@@ -589,7 +768,7 @@ runs:
 
   - architecture: 'ConceptBottleneckModel'
     run_name: "Hybrid-CBM_extra_dims_{extra_dims}_Sigmoid_Noisy_Count_Concept_Spurious_{dataset_config[num_operands]}_cwl_{concept_loss_weight}"
-    extra_dims: [5, 10]
+    extra_dims: [128, 512]
     training_intervention_prob: 0
     embedding_activation: "leakyrelu"
     sigmoidal_prob: True
@@ -600,16 +779,17 @@ runs:
       root_dir: data/
       num_workers: 8
       batch_size: 2048
-      num_operands: [20] #[10, 20]
-      selected_digits: [3, 8]
-      count_labels: True
+      num_operands: [10] #[10, 20]
+      selected_digits: [0, 1, 2, 3]
+      count_labels: False
+      range_labels: [5, 10, 15, 20, 25]
       low_noise_level: 1
       noise_level: 0.25
       test_low_noise_level: 1
       test_noise_level: 0.25
       train_dataset_size: 5000
       test_dataset_size: 5000
-      sampling_percent: 0.75
+      sampling_percent: 0.8
       sampling_groups: True
       test_subsampling: 1
       weight_loss: False
@@ -649,11 +829,1034 @@ runs:
 
 
 
+  # - architecture: 'NewMixingConceptEmbeddingModel'
+  #   run_name: "Tryout_MixCEM_end_to_end_but_residual_ip_{training_intervention_prob}_emb_size_{emb_size}_use_ground_truth_{use_ground_truth_mixing_for_res}_Noisy_Count_Baseline_{dataset_config[num_operands]}_cwl_{concept_loss_weight}"
+  #   training_intervention_prob: [[0.25, 0.5, 0.75, 1]]
+  #   emb_size: [1024]
+  #   embedding_activation: null
+  #   concept_loss_weight: [10] #, 0.1]
+  #   normalize_embs: False
+  #   task_concept_loss: 1
+  #   intervention_task_discount: [1.1]
+  #   patience: 20 # TRYING OUT. BEFORE: 5 #15
+  #   lr_scheduler_patience: 10
+  #   learning_rate: 0.001
+  #   use_cosine_similarity: False
+  #   check_val_every_n_epoch: 1
+  #   early_stopping_best_model: False
+  #   conditional_residual: [True] #False, True]
+  #   c2y_layers: [256, 128, 64]
+  #   residual_layers: [256, 128, 64]
+  #   additive_mixing: False
+  #   per_concept_residual: False
+
+  #   residual_scale: 1
+  #   blackbox_warmup_epochs: 0
+
+  #   concept_epochs: 0
+  #   fix_backbone_for_concept: False
+
+  #   no_residual_epochs: 500
+  #   fix_backbone_for_no_res: False
+  #   fix_concept_embeddings_for_no_res: False
+
+  #   e2e_epochs: 500
+  #   fix_backbone_for_res: True
+  #   fix_concept_embeddings_for_res: True
+  #   fix_label_predictor_for_res: True
+  #   use_ground_truth_mixing_for_res: False
+
+  #   grid_variables:
+  #     - dataset_config.num_operands
+  #     - concept_loss_weight
+  #     - emb_size
+  #     - training_intervention_prob
+  #     - intervention_task_discount
+  #     - conditional_residual
+  #   grid_search_mode: exhaustive
+
+
+  #   # Dataset Configuration
+  #   dataset_config:
+  #     dataset: color_mnist_add
+  #     root_dir: data/
+  #     num_workers: 8
+  #     batch_size: 256 #2048 # CHANGING CAUSE GPU MEMORY IS NOT ENOUGH
+  #     num_operands: [10] #[10, 20]
+  #     selected_digits: [0, 1, 2, 3]
+  #     count_labels: False
+  #     range_labels: [5, 10, 15, 20, 25]
+  #     low_noise_level: 1
+  #     noise_level: 0.25
+  #     test_low_noise_level: 1
+  #     test_noise_level: 0.25
+  #     train_dataset_size: 5000
+  #     test_dataset_size: 5000
+  #     sampling_percent: 0.8
+  #     sampling_groups: True
+  #     test_subsampling: 1
+  #     weight_loss: False
+
+  #     spurious_strength: 0.1
+  #     color_by_label: False
+  #     colors: ["random_1", "random_2", "random_3", "random_4", "random_5", "random_6", "random_7", "random_8", "random_9", "random_10"]
+  #     digit_color_distribution:
+  #       0: ["spurious", null, null, null, null, null, null, null, null, null]
+  #       1: [null, "spurious", null, null, null, null, null, null, null, null]
+  #       2: [null, null, "spurious", null, null, null, null, null, null, null]
+  #       3: [null, null, null, "spurious", null, null, null, null, null, null]
+  #       4: [null, null, null, null, "spurious", null, null, null, null, null]
+  #       5: [null, null, null, null, null, "spurious", null, null, null, null]
+  #       6: [null, null, null, null, null, null, "spurious", null, null, null]
+  #       7: [null, null, null, null, null, null, null, "spurious", null, null]
+  #       8: [null, null, null, null, null, null, null, null, "spurious", null]
+  #       9: [null, null, null, null, null, null, null, null, null, "spurious"]
+
+  #     test_digit_color_distribution:
+  #       0: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       1: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       2: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       3: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       4: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       5: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       6: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       7: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       8: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       9: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+
+  - architecture: 'NewMixingConceptEmbeddingModel'
+    run_name: "Tryout_MixCEM_end_to_end_ip_{training_intervention_prob}_emb_size_{emb_size}_dis_{intervention_task_discount}_sig_res_{sigmoidal_residual}_per_concept_res_{per_concept_residual}_shared_{shared_per_concept_residual}_dev_{residual_deviation}_use_cgt_{use_ground_truth_mixing_for_res}_Noisy_Count_Baseline_{dataset_config[num_operands]}_cwl_{concept_loss_weight}"
+    training_intervention_prob: [[0.25, 0.5, 0.75, 1]]
+    emb_size: [512, 1024]
+    embedding_activation: null
+    concept_loss_weight: [10] #, 0.1]
+    normalize_embs: False
+    task_concept_loss: 1
+    intervention_task_discount: [1.1, 1.5]
+    patience: 20 # TRYING OUT. BEFORE: 5 #15
+    lr_scheduler_patience: 10
+    learning_rate: 0.001
+    use_cosine_similarity: False
+    check_val_every_n_epoch: 1
+    early_stopping_best_model: False
+    conditional_residual: [True] #False, True]
+    c2y_layers: [256, 128, 64]
+    residual_layers: [256, 128, 64]
+    additive_mixing: False
+    per_concept_residual: [True]
+    sigmoidal_residual: [False]
+    residual_deviation: [0, 2]
+    shared_per_concept_residual: [True, False] # CHANGE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+    residual_scale: 1
+    blackbox_warmup_epochs: 0
+
+    concept_epochs: 0
+    fix_backbone_for_concept: False
+
+    no_residual_epochs: 0
+    fix_backbone_for_no_res: False
+    fix_concept_embeddings_for_no_res: False
+
+    e2e_epochs: 500
+    fix_backbone_for_res: False
+    fix_concept_embeddings_for_res: False
+    fix_label_predictor_for_res: False
+    use_ground_truth_mixing_for_res: False
+
+    grid_variables:
+      - dataset_config.num_operands
+      - concept_loss_weight
+      - emb_size
+      - training_intervention_prob
+      - intervention_task_discount
+      - conditional_residual
+      - per_concept_residual
+      - sigmoidal_residual
+      - residual_deviation
+      - shared_per_concept_residual
+    grid_search_mode: exhaustive
+
+
+    # Dataset Configuration
+    dataset_config:
+      dataset: color_mnist_add
+      root_dir: data/
+      num_workers: 8
+      batch_size: 256 #2048 # CHANGING CAUSE GPU MEMORY IS NOT ENOUGH
+      num_operands: [10] #[10, 20]
+      selected_digits: [0, 1, 2, 3]
+      count_labels: False
+      range_labels: [5, 10, 15, 20, 25]
+      low_noise_level: 1
+      noise_level: 0.25
+      test_low_noise_level: 1
+      test_noise_level: 0.25
+      train_dataset_size: 5000
+      test_dataset_size: 5000
+      sampling_percent: 0.8
+      sampling_groups: True
+      test_subsampling: 1
+      weight_loss: False
+
+      spurious_strength: 0.1
+      color_by_label: False
+      colors: ["random_1", "random_2", "random_3", "random_4", "random_5", "random_6", "random_7", "random_8", "random_9", "random_10"]
+      digit_color_distribution:
+        0: ["spurious", null, null, null, null, null, null, null, null, null]
+        1: [null, "spurious", null, null, null, null, null, null, null, null]
+        2: [null, null, "spurious", null, null, null, null, null, null, null]
+        3: [null, null, null, "spurious", null, null, null, null, null, null]
+        4: [null, null, null, null, "spurious", null, null, null, null, null]
+        5: [null, null, null, null, null, "spurious", null, null, null, null]
+        6: [null, null, null, null, null, null, "spurious", null, null, null]
+        7: [null, null, null, null, null, null, null, "spurious", null, null]
+        8: [null, null, null, null, null, null, null, null, "spurious", null]
+        9: [null, null, null, null, null, null, null, null, null, "spurious"]
+
+      test_digit_color_distribution:
+        0: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        1: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        2: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        3: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        4: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        5: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        6: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        7: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        8: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        9: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+
+
+
+  # - architecture: 'NewMixingConceptEmbeddingModel'
+  #   run_name: "Tryout_MixCEM_end_to_end_ip_{training_intervention_prob}_emb_size_{emb_size}_use_ground_truth_{use_ground_truth_mixing_for_res}_Noisy_Count_Baseline_{dataset_config[num_operands]}_cwl_{concept_loss_weight}"
+  #   training_intervention_prob: [[0.25, 0.5, 0.75, 1]]
+  #   emb_size: [1024]
+  #   embedding_activation: null
+  #   concept_loss_weight: [10] #, 0.1]
+  #   normalize_embs: False
+  #   task_concept_loss: 1
+  #   intervention_task_discount: [1.1]
+  #   patience: 20 # TRYING OUT. BEFORE: 5 #15
+  #   lr_scheduler_patience: 10
+  #   learning_rate: 0.001
+  #   use_cosine_similarity: False
+  #   check_val_every_n_epoch: 1
+  #   early_stopping_best_model: False
+  #   conditional_residual: [True] #False, True]
+  #   c2y_layers: [256, 128, 64]
+  #   residual_layers: [256, 128, 64]
+  #   additive_mixing: False
+
+  #   residual_scale: 1
+  #   blackbox_warmup_epochs: 0
+
+  #   concept_epochs: 0
+  #   fix_backbone_for_concept: False
+
+  #   no_residual_epochs: 0
+  #   fix_backbone_for_no_res: False
+  #   fix_concept_embeddings_for_no_res: False
+
+  #   e2e_epochs: 500
+  #   fix_backbone_for_res: False
+  #   fix_concept_embeddings_for_res: False
+  #   fix_label_predictor_for_res: False
+  #   use_ground_truth_mixing_for_res: False
+
+  #   grid_variables:
+  #     - dataset_config.num_operands
+  #     - concept_loss_weight
+  #     - emb_size
+  #     - training_intervention_prob
+  #     - intervention_task_discount
+  #     - conditional_residual
+  #   grid_search_mode: exhaustive
+
+
+  #   # Dataset Configuration
+  #   dataset_config:
+  #     dataset: color_mnist_add
+  #     root_dir: data/
+  #     num_workers: 8
+  #     batch_size: 256 #2048 # CHANGING CAUSE GPU MEMORY IS NOT ENOUGH
+  #     num_operands: [10] #[10, 20]
+  #     selected_digits: [0, 1, 2, 3]
+  #     count_labels: False
+  #     range_labels: [5, 10, 15, 20, 25]
+  #     low_noise_level: 1
+  #     noise_level: 0.25
+  #     test_low_noise_level: 1
+  #     test_noise_level: 0.25
+  #     train_dataset_size: 5000
+  #     test_dataset_size: 5000
+  #     sampling_percent: 0.8
+  #     sampling_groups: True
+  #     test_subsampling: 1
+  #     weight_loss: False
+
+  #     spurious_strength: 0.1
+  #     color_by_label: False
+  #     colors: ["random_1", "random_2", "random_3", "random_4", "random_5", "random_6", "random_7", "random_8", "random_9", "random_10"]
+  #     digit_color_distribution:
+  #       0: ["spurious", null, null, null, null, null, null, null, null, null]
+  #       1: [null, "spurious", null, null, null, null, null, null, null, null]
+  #       2: [null, null, "spurious", null, null, null, null, null, null, null]
+  #       3: [null, null, null, "spurious", null, null, null, null, null, null]
+  #       4: [null, null, null, null, "spurious", null, null, null, null, null]
+  #       5: [null, null, null, null, null, "spurious", null, null, null, null]
+  #       6: [null, null, null, null, null, null, "spurious", null, null, null]
+  #       7: [null, null, null, null, null, null, null, "spurious", null, null]
+  #       8: [null, null, null, null, null, null, null, null, "spurious", null]
+  #       9: [null, null, null, null, null, null, null, null, null, "spurious"]
+
+  #     test_digit_color_distribution:
+  #       0: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       1: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       2: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       3: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       4: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       5: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       6: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       7: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       8: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       9: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+
+
+
+
+  # - architecture: 'NewMixingConceptEmbeddingModel'
+  #   run_name: "Tryout_MixCEM_staged_ip_{training_intervention_prob}_emb_size_{emb_size}_use_ground_truth_{use_ground_truth_mixing_for_res}_Noisy_Count_Baseline_{dataset_config[num_operands]}_cwl_{concept_loss_weight}"
+  #   training_intervention_prob: [[0.25, 0.5, 0.75, 1]]
+  #   emb_size: [1024]
+  #   embedding_activation: null
+  #   concept_loss_weight: [10, 0.1]
+  #   normalize_embs: False
+  #   task_concept_loss: 1
+  #   intervention_task_discount: [1.1]
+  #   patience: 20 # TRYING OUT. BEFORE: 5 #15
+  #   learning_rate: 0.001
+  #   use_cosine_similarity: False
+  #   check_val_every_n_epoch: 1
+  #   early_stopping_best_model: False
+  #   conditional_residual: [False, True]
+
+  #   # First warmup the backbone
+  #   residual_scale: 1
+  #   blackbox_warmup_epochs: 50
+
+  #   # Then train the concept embeddings without any task loss
+  #   concept_epochs: 50
+  #   fix_backbone_for_concept: True #False
+
+  #   # At this point, we train the label predictor with the concept embeddings and backbone fixed
+  #   no_residual_epochs: 50
+  #   fix_backbone_for_no_res: True #False
+  #   fix_concept_embeddings_for_no_res: True #False
+
+  #   # Finally, we train the residual model while also fixing the label predictor as well as all other parts
+  #   e2e_epochs: 50
+  #   fix_backbone_for_res: True #False
+  #   fix_concept_embeddings_for_res: True #False
+  #   fix_label_predictor_for_res: True #False
+  #   use_ground_truth_mixing_for_res: False
+
+  #   grid_variables:
+  #     - dataset_config.num_operands
+  #     - concept_loss_weight
+  #     - emb_size
+  #     - training_intervention_prob
+  #     - intervention_task_discount
+  #     - conditional_residual
+  #   grid_search_mode: exhaustive
+
+
+  #   # Dataset Configuration
+  #   dataset_config:
+  #     dataset: color_mnist_add
+  #     root_dir: data/
+  #     num_workers: 8
+  #     batch_size: 256 #2048 # CHANGING CAUSE GPU MEMORY IS NOT ENOUGH
+  #     num_operands: [10] #[10, 20]
+  #     selected_digits: [0, 1, 2, 3]
+  #     count_labels: False
+  #     range_labels: [5, 10, 15, 20, 25]
+  #     low_noise_level: 1
+  #     noise_level: 0.25
+  #     test_low_noise_level: 1
+  #     test_noise_level: 0.25
+  #     train_dataset_size: 5000
+  #     test_dataset_size: 5000
+  #     sampling_percent: 0.8
+  #     sampling_groups: True
+  #     test_subsampling: 1
+  #     weight_loss: False
+
+  #     spurious_strength: 0.1
+  #     color_by_label: False
+  #     colors: ["random_1", "random_2", "random_3", "random_4", "random_5", "random_6", "random_7", "random_8", "random_9", "random_10"]
+  #     digit_color_distribution:
+  #       0: ["spurious", null, null, null, null, null, null, null, null, null]
+  #       1: [null, "spurious", null, null, null, null, null, null, null, null]
+  #       2: [null, null, "spurious", null, null, null, null, null, null, null]
+  #       3: [null, null, null, "spurious", null, null, null, null, null, null]
+  #       4: [null, null, null, null, "spurious", null, null, null, null, null]
+  #       5: [null, null, null, null, null, "spurious", null, null, null, null]
+  #       6: [null, null, null, null, null, null, "spurious", null, null, null]
+  #       7: [null, null, null, null, null, null, null, "spurious", null, null]
+  #       8: [null, null, null, null, null, null, null, null, "spurious", null]
+  #       9: [null, null, null, null, null, null, null, null, null, "spurious"]
+
+  #     test_digit_color_distribution:
+  #       0: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       1: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       2: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       3: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       4: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       5: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       6: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       7: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       8: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       9: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+
+
+
+
+
+
+
+
+
+  - architecture: 'NewMixingConceptEmbeddingModel'
+    run_name: "Tryout_MixCEM_end_to_end_with_per_concept_ip_{training_intervention_prob}_emb_size_{emb_size}_use_ground_truth_{use_ground_truth_mixing_for_res}_Noisy_Count_Baseline_{dataset_config[num_operands]}_cwl_{concept_loss_weight}"
+    training_intervention_prob: [[0.25, 0.5, 0.75, 1]]
+    emb_size: [1024]
+    embedding_activation: null
+    concept_loss_weight: [10] #, 0.1]
+    normalize_embs: False
+    task_concept_loss: 1
+    intervention_task_discount: [1.1]
+    patience: 20 # TRYING OUT. BEFORE: 5 #15
+    lr_scheduler_patience: 10
+    learning_rate: 0.001
+    use_cosine_similarity: False
+    check_val_every_n_epoch: 1
+    early_stopping_best_model: False
+    conditional_residual: [True] #False, True]
+    c2y_layers: [256, 128, 64]
+    residual_layers: [256, 128, 64]
+    additive_mixing: False
+    per_concept_residual: True
+
+    residual_scale: 1
+    blackbox_warmup_epochs: 0
+
+    concept_epochs: 0
+    fix_backbone_for_concept: False
+
+    no_residual_epochs: 0
+    fix_backbone_for_no_res: False
+    fix_concept_embeddings_for_no_res: False
+
+    e2e_epochs: 500
+    fix_backbone_for_res: False
+    fix_concept_embeddings_for_res: False
+    fix_label_predictor_for_res: False
+    use_ground_truth_mixing_for_res: False
+
+    grid_variables:
+      - dataset_config.num_operands
+      - concept_loss_weight
+      - emb_size
+      - training_intervention_prob
+      - intervention_task_discount
+      - conditional_residual
+    grid_search_mode: exhaustive
+
+
+    # Dataset Configuration
+    dataset_config:
+      dataset: color_mnist_add
+      root_dir: data/
+      num_workers: 8
+      batch_size: 256 #2048 # CHANGING CAUSE GPU MEMORY IS NOT ENOUGH
+      num_operands: [10] #[10, 20]
+      selected_digits: [0, 1, 2, 3]
+      count_labels: False
+      range_labels: [5, 10, 15, 20, 25]
+      low_noise_level: 1
+      noise_level: 0.25
+      test_low_noise_level: 1
+      test_noise_level: 0.25
+      train_dataset_size: 5000
+      test_dataset_size: 5000
+      sampling_percent: 0.8
+      sampling_groups: True
+      test_subsampling: 1
+      weight_loss: False
+
+      spurious_strength: 0.1
+      color_by_label: False
+      colors: ["random_1", "random_2", "random_3", "random_4", "random_5", "random_6", "random_7", "random_8", "random_9", "random_10"]
+      digit_color_distribution:
+        0: ["spurious", null, null, null, null, null, null, null, null, null]
+        1: [null, "spurious", null, null, null, null, null, null, null, null]
+        2: [null, null, "spurious", null, null, null, null, null, null, null]
+        3: [null, null, null, "spurious", null, null, null, null, null, null]
+        4: [null, null, null, null, "spurious", null, null, null, null, null]
+        5: [null, null, null, null, null, "spurious", null, null, null, null]
+        6: [null, null, null, null, null, null, "spurious", null, null, null]
+        7: [null, null, null, null, null, null, null, "spurious", null, null]
+        8: [null, null, null, null, null, null, null, null, "spurious", null]
+        9: [null, null, null, null, null, null, null, null, null, "spurious"]
+
+      test_digit_color_distribution:
+        0: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        1: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        2: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        3: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        4: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        5: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        6: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        7: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        8: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        9: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+
+
+  - architecture: 'NewMixingConceptEmbeddingModel'
+    run_name: "Tryout_MixCEM_end_to_end_with_per_concept_ip_{training_intervention_prob}_emb_size_{emb_size}_use_ground_truth_{use_ground_truth_mixing_for_res}_Noisy_Count_Downstream_Spurious_{dataset_config[num_operands]}_cwl_{concept_loss_weight}"
+    training_intervention_prob: [[0.25, 0.5, 0.75, 1]]
+    emb_size: [1024]
+    embedding_activation: null
+    concept_loss_weight: [10] #, 0.1]
+    normalize_embs: False
+    task_concept_loss: 1
+    intervention_task_discount: [1.1]
+    patience: 20 # TRYING OUT. BEFORE: 5 #15
+    lr_scheduler_patience: 10
+    learning_rate: 0.001
+    use_cosine_similarity: False
+    check_val_every_n_epoch: 1
+    early_stopping_best_model: False
+    conditional_residual: [True] #False, True]
+    c2y_layers: [256, 128, 64]
+    residual_layers: [256, 128, 64]
+    additive_mixing: False
+    per_concept_residual: True
+
+    residual_scale: 1
+    blackbox_warmup_epochs: 0
+
+    concept_epochs: 0
+    fix_backbone_for_concept: False
+
+    no_residual_epochs: 0
+    fix_backbone_for_no_res: False
+    fix_concept_embeddings_for_no_res: False
+
+    e2e_epochs: 500
+    fix_backbone_for_res: False
+    fix_concept_embeddings_for_res: False
+    fix_label_predictor_for_res: False
+    use_ground_truth_mixing_for_res: False
+
+    grid_variables:
+      - dataset_config.num_operands
+      - concept_loss_weight
+      - emb_size
+      - training_intervention_prob
+      - intervention_task_discount
+      - conditional_residual
+    grid_search_mode: exhaustive
+
+    # Dataset Configuration
+    dataset_config:
+      dataset: color_mnist_add
+      root_dir: data/
+      num_workers: 8
+      batch_size: 256 #2048 # CHANGING CAUSE GPU MEMORY IS NOT ENOUGH
+      num_operands: [10] #[10, 20]
+      selected_digits: [0, 1, 2, 3]
+      count_labels: False
+      range_labels: [5, 10, 15, 20, 25]
+      low_noise_level: 1
+      noise_level: 0.25
+      test_low_noise_level: 1
+      test_noise_level: 0.25
+      train_dataset_size: 5000
+      test_dataset_size: 5000
+      sampling_percent: 0.8
+      sampling_groups: True
+      test_subsampling: 1
+      weight_loss: False
+
+      spurious_strength: 0.95
+      color_by_label: True    # So that the spurious correlation is label-based!
+      colors: ["random_1", "random_2", "random_3", "random_4", "random_5", "random_6", "random_7", "random_8", "random_9", "random_10"]
+      digit_color_distribution:
+        0: ["spurious", null, null, null, null, null, null, null, null, null]
+        1: [null, "spurious", null, null, null, null, null, null, null, null]
+        2: [null, null, "spurious", null, null, null, null, null, null, null]
+        3: [null, null, null, "spurious", null, null, null, null, null, null]
+        4: [null, null, null, null, "spurious", null, null, null, null, null]
+        5: [null, null, null, null, null, "spurious", null, null, null, null]
+        6: [null, null, null, null, null, null, "spurious", null, null, null]
+        7: [null, null, null, null, null, null, null, "spurious", null, null]
+        8: [null, null, null, null, null, null, null, null, "spurious", null]
+        9: [null, null, null, null, null, null, null, null, null, "spurious"]
+
+      test_digit_color_distribution:
+        0: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        1: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        2: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        3: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        4: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        5: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        6: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        7: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        8: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        9: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+
+
+  - architecture: 'NewMixingConceptEmbeddingModel'
+    run_name: "Tryout_MixCEM_end_to_end_with_per_concept_ip_{training_intervention_prob}_emb_size_{emb_size}_use_ground_truth_{use_ground_truth_mixing_for_res}_Noisy_Count_Concept_Spurious_{dataset_config[num_operands]}_cwl_{concept_loss_weight}"
+    training_intervention_prob: [[0.25, 0.5, 0.75, 1]]
+    emb_size: [1024]
+    embedding_activation: null
+    concept_loss_weight: [10] #, 0.1]
+    normalize_embs: False
+    task_concept_loss: 1
+    intervention_task_discount: [1.1]
+    patience: 20 # TRYING OUT. BEFORE: 5 #15
+    lr_scheduler_patience: 10
+    learning_rate: 0.001
+    use_cosine_similarity: False
+    check_val_every_n_epoch: 1
+    early_stopping_best_model: False
+    conditional_residual: [True] #False, True]
+    c2y_layers: [256, 128, 64]
+    residual_layers: [256, 128, 64]
+    additive_mixing: False
+    per_concept_residual: True
+
+    residual_scale: 1
+    blackbox_warmup_epochs: 0
+
+    concept_epochs: 0
+    fix_backbone_for_concept: False
+
+    no_residual_epochs: 0
+    fix_backbone_for_no_res: False
+    fix_concept_embeddings_for_no_res: False
+
+    e2e_epochs: 500
+    fix_backbone_for_res: False
+    fix_concept_embeddings_for_res: False
+    fix_label_predictor_for_res: False
+    use_ground_truth_mixing_for_res: False
+
+    grid_variables:
+      - dataset_config.num_operands
+      - concept_loss_weight
+      - emb_size
+      - training_intervention_prob
+      - intervention_task_discount
+      - conditional_residual
+    grid_search_mode: exhaustive
+
+    # Dataset Configuration
+    dataset_config:
+      dataset: color_mnist_add
+      root_dir: data/
+      num_workers: 8
+      batch_size: 256 #2048 # CHANGING CAUSE GPU MEMORY IS NOT ENOUGH
+      num_operands: [10] #[10, 20]
+      selected_digits: [0, 1, 2, 3]
+      count_labels: False
+      range_labels: [5, 10, 15, 20, 25]
+      low_noise_level: 1
+      noise_level: 0.25
+      test_low_noise_level: 1
+      test_noise_level: 0.25
+      train_dataset_size: 5000
+      test_dataset_size: 5000
+      sampling_percent: 0.8
+      sampling_groups: True
+      test_subsampling: 1
+      weight_loss: False
+
+      spurious_strength: 0.95
+      color_by_label: False    # So that the spurious correlation is concept-based!
+      colors: ["random_1", "random_2", "random_3", "random_4", "random_5", "random_6", "random_7", "random_8", "random_9", "random_10"]
+      digit_color_distribution:
+        0: ["spurious", null, null, null, null, null, null, null, null, null]
+        1: [null, "spurious", null, null, null, null, null, null, null, null]
+        2: [null, null, "spurious", null, null, null, null, null, null, null]
+        3: [null, null, null, "spurious", null, null, null, null, null, null]
+        4: [null, null, null, null, "spurious", null, null, null, null, null]
+        5: [null, null, null, null, null, "spurious", null, null, null, null]
+        6: [null, null, null, null, null, null, "spurious", null, null, null]
+        7: [null, null, null, null, null, null, null, "spurious", null, null]
+        8: [null, null, null, null, null, null, null, null, "spurious", null]
+        9: [null, null, null, null, null, null, null, null, null, "spurious"]
+
+      test_digit_color_distribution:
+        0: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        1: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        2: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        3: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        4: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        5: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        6: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        7: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        8: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        9: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+
+
+
+
+
+
+
+
+
+
+  # - architecture: 'MixingConceptEmbeddingModel'
+  #   run_name: "MixCEM_n_extra_{n_discovered_concepts}_entr_{discovered_probs_entropy}_dis_{intervention_task_discount}_ip_{training_intervention_prob}_dip_{dyn_training_intervention_prob}_cl_{contrastive_loss_weight}_mix_{mix_ground_truth_embs}_shared_{shared_emb_generator}_emb_size_{emb_size}_ml_{intermediate_task_concept_loss}_Noisy_Count_Baseline_{dataset_config[num_operands]}_cwl_{concept_loss_weight}"
+  #   training_intervention_prob: [[0.25, 0.5, 0.75, 1]] #[0.25, [0.25, 0.5]] #[0.25, [0.25, 0.5]]
+  #   emb_size: [64] # TRYING OUT. BEFORE: [256, 64, 16, 8] # [128, 64] #[256, 128] # CHANGING CAUSE GPU MEMORY IS NOT ENOUGH
+  #   embedding_activation: null
+  #   n_discovered_concepts: [50] # TRYING OUT. BEFORE: [25, 5, 0] # [5, 2, 1, 0] #[10, 5, 0] # CHANGING CAUSE GPU MEMORY IS NOT ENOUGH
+  #   concept_loss_weight: [1] # TRYING OUT. BEFORE: [10, 1] #, 1, 0.1] CHANGE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  #   contrastive_loss_weight: [0] #, 1]
+  #   mix_ground_truth_embs: True
+  #   shared_emb_generator: [True] #[True, False]
+  #   normalize_embs: False
+  #   sample_probs: False
+  #   cond_discovery: False
+  #   intermediate_task_concept_loss: [0]  #, 1, 0.1] CHANGE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! , 0.1] #[1, 0.5, 0.1] #, 0.1, 1]
+  #   task_concept_loss: 1
+  #   intervention_task_discount: [1.1] # TRYING OUT. BEFORE: [1.1, 1.5] #[1.01, 1.1, 1.5]
+  #   discovered_probs_entropy: 0
+  #   dyn_training_intervention_prob: [0.1] # TRYING OUT. BEFORE: [0.1, 0.25] #, 0.5, 1] #[0, 1]
+  #   patience: 20 # TRYING OUT. BEFORE: 5 #15
+  #   learning_rate: 0.001 # TRYING OUT. BEFORE: 0.001
+  #   use_cosine_similarity: False # TRYING OUT. BEFORE: False
+  #   check_val_every_n_epoch: 1 #5
+  #   concept_warmup_epochs: 20 # TRYING OUT. BEFORE: 0
+  #   early_stopping_best_model: False # TRYING OUT. BEFORE: False
+
+  #   # Dataset Configuration
+  #   dataset_config:
+  #     dataset: color_mnist_add
+  #     root_dir: data/
+  #     num_workers: 8
+  #     batch_size: 256 #2048 # CHANGING CAUSE GPU MEMORY IS NOT ENOUGH
+  #     num_operands: [10] #[10, 20]
+  #     selected_digits: [0, 1, 2, 3]
+  #     count_labels: False
+  #     range_labels: [5, 10, 15, 20, 25]
+  #     low_noise_level: 1
+  #     noise_level: 0.25
+  #     test_low_noise_level: 1
+  #     test_noise_level: 0.25
+  #     train_dataset_size: 5000
+  #     test_dataset_size: 5000
+  #     sampling_percent: 0.8
+  #     sampling_groups: True
+  #     test_subsampling: 1
+  #     weight_loss: False
+
+  #     spurious_strength: 0.1
+  #     color_by_label: False
+  #     colors: ["random_1", "random_2", "random_3", "random_4", "random_5", "random_6", "random_7", "random_8", "random_9", "random_10"]
+  #     digit_color_distribution:
+  #       0: ["spurious", null, null, null, null, null, null, null, null, null]
+  #       1: [null, "spurious", null, null, null, null, null, null, null, null]
+  #       2: [null, null, "spurious", null, null, null, null, null, null, null]
+  #       3: [null, null, null, "spurious", null, null, null, null, null, null]
+  #       4: [null, null, null, null, "spurious", null, null, null, null, null]
+  #       5: [null, null, null, null, null, "spurious", null, null, null, null]
+  #       6: [null, null, null, null, null, null, "spurious", null, null, null]
+  #       7: [null, null, null, null, null, null, null, "spurious", null, null]
+  #       8: [null, null, null, null, null, null, null, null, "spurious", null]
+  #       9: [null, null, null, null, null, null, null, null, null, "spurious"]
+
+  #     test_digit_color_distribution:
+  #       0: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       1: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       2: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       3: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       4: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       5: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       6: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       7: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       8: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       9: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #   grid_variables:
+  #     - dataset_config.num_operands
+  #     - concept_loss_weight
+  #     - n_discovered_concepts
+  #     - contrastive_loss_weight
+  #     - shared_emb_generator
+  #     - emb_size
+  #     - intermediate_task_concept_loss
+  #     - intervention_task_discount
+  #     - training_intervention_prob
+  #     - dyn_training_intervention_prob
+  #   grid_search_mode: exhaustive
+
+  # - architecture: 'MixingConceptEmbeddingModel'
+  #   run_name: "MixCEM_n_extra_{n_discovered_concepts}_entr_{discovered_probs_entropy}_dis_{intervention_task_discount}_ip_{training_intervention_prob}_dip_{dyn_training_intervention_prob}_cl_{contrastive_loss_weight}_mix_{mix_ground_truth_embs}_shared_{shared_emb_generator}_emb_size_{emb_size}_ml_{intermediate_task_concept_loss}_Noisy_Count_Baseline_{dataset_config[num_operands]}_cwl_{concept_loss_weight}"
+  #   training_intervention_prob: [[0.25, 0.5, 0.75, 1]] #[0.25, [0.25, 0.5]] #[0.25, [0.25, 0.5]]
+  #   emb_size: [256, 64, 16, 8] # [128, 64] #[256, 128] # CHANGING CAUSE GPU MEMORY IS NOT ENOUGH
+  #   embedding_activation: null
+  #   n_discovered_concepts: [25, 5, 0] # [5, 2, 1, 0] #[10, 5, 0] # CHANGING CAUSE GPU MEMORY IS NOT ENOUGH
+  #   concept_loss_weight: [10, 1] #, 1, 0.1] CHANGE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+  #   contrastive_loss_weight: [0] #, 1]
+  #   mix_ground_truth_embs: True
+  #   shared_emb_generator: [True] #[True, False]
+  #   normalize_embs: False
+  #   sample_probs: False
+  #   cond_discovery: False
+  #   intermediate_task_concept_loss: [0]  #, 1, 0.1] CHANGE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! , 0.1] #[1, 0.5, 0.1] #, 0.1, 1]
+  #   task_concept_loss: 1
+  #   intervention_task_discount: [1.1, 1.5] #[1.01, 1.1, 1.5]
+  #   discovered_probs_entropy: 0
+  #   dyn_training_intervention_prob: [0.1, 0.25] #, 0.5, 1] #[0, 1]
+  #   use_cosine_similarity: False
+  #   early_stopping_best_model: False
+
+  #   # Dataset Configuration
+  #   dataset_config:
+  #     dataset: color_mnist_add
+  #     root_dir: data/
+  #     num_workers: 8
+  #     batch_size: 256 #2048 # CHANGING CAUSE GPU MEMORY IS NOT ENOUGH
+  #     num_operands: [10] #[10, 20]
+  #     selected_digits: [0, 1, 2, 3]
+  #     count_labels: False
+  #     range_labels: [5, 10, 15, 20, 25]
+  #     low_noise_level: 1
+  #     noise_level: 0.25
+  #     test_low_noise_level: 1
+  #     test_noise_level: 0.25
+  #     train_dataset_size: 5000
+  #     test_dataset_size: 5000
+  #     sampling_percent: 0.8
+  #     sampling_groups: True
+  #     test_subsampling: 1
+  #     weight_loss: False
+
+  #     spurious_strength: 0.1
+  #     color_by_label: False
+  #     colors: ["random_1", "random_2", "random_3", "random_4", "random_5", "random_6", "random_7", "random_8", "random_9", "random_10"]
+  #     digit_color_distribution:
+  #       0: ["spurious", null, null, null, null, null, null, null, null, null]
+  #       1: [null, "spurious", null, null, null, null, null, null, null, null]
+  #       2: [null, null, "spurious", null, null, null, null, null, null, null]
+  #       3: [null, null, null, "spurious", null, null, null, null, null, null]
+  #       4: [null, null, null, null, "spurious", null, null, null, null, null]
+  #       5: [null, null, null, null, null, "spurious", null, null, null, null]
+  #       6: [null, null, null, null, null, null, "spurious", null, null, null]
+  #       7: [null, null, null, null, null, null, null, "spurious", null, null]
+  #       8: [null, null, null, null, null, null, null, null, "spurious", null]
+  #       9: [null, null, null, null, null, null, null, null, null, "spurious"]
+
+  #     test_digit_color_distribution:
+  #       0: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       1: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       2: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       3: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       4: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       5: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       6: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       7: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       8: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       9: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #   grid_variables:
+  #     - dataset_config.num_operands
+  #     - concept_loss_weight
+  #     - n_discovered_concepts
+  #     - contrastive_loss_weight
+  #     - shared_emb_generator
+  #     - emb_size
+  #     - intermediate_task_concept_loss
+  #     - intervention_task_discount
+  #     - training_intervention_prob
+  #     - dyn_training_intervention_prob
+  #   grid_search_mode: exhaustive
+
+  # - architecture: 'MixingConceptEmbeddingModel'
+  #   run_name: "MixCEM_n_extra_{n_discovered_concepts}_entr_{discovered_probs_entropy}_dis_{intervention_task_discount}_ip_{training_intervention_prob}_dip_{dyn_training_intervention_prob}_cl_{contrastive_loss_weight}_mix_{mix_ground_truth_embs}_shared_{shared_emb_generator}_emb_size_{emb_size}_ml_{intermediate_task_concept_loss}_Noisy_Count_Downstream_Spurious_{dataset_config[num_operands]}_cwl_{concept_loss_weight}"
+  #   training_intervention_prob: [[0.25, 0.5, 0.75, 1]] #[0.25, [0.25, 0.5]] #[0.25, [0.25, 0.5]]
+  #   emb_size: [64, 8] # [128, 64] #[256, 128]  # CHANGING CAUSE GPU MEMORY IS NOT ENOUGH
+  #   embedding_activation: null
+  #   n_discovered_concepts: [5, 0] # [5, 2, 0] # [10, 5, 0]  # CHANGING CAUSE GPU MEMORY IS NOT ENOUGH
+  #   concept_loss_weight: [10]
+  #   contrastive_loss_weight: [0] #, 1]
+  #   mix_ground_truth_embs: True
+  #   shared_emb_generator: [True] #[True, False]
+  #   normalize_embs: False
+  #   sample_probs: False
+  #   cond_discovery: False
+  #   intermediate_task_concept_loss: [0] #[1, 0.5, 0.1] #, 0.1, 1]
+  #   task_concept_loss: 1
+  #   intervention_task_discount: [1.1, 1.5] #[1.01, 1.1, 1.5]
+  #   discovered_probs_entropy: 0
+  #   dyn_training_intervention_prob: [0.1, 0.25] #, 0.5, 1] #[0, 1]
+
+  #   # Dataset Configuration
+  #   dataset_config:
+  #     dataset: color_mnist_add
+  #     root_dir: data/
+  #     num_workers: 8
+  #     batch_size: 256 #2048 # CHANGING CAUSE GPU MEMORY IS NOT ENOUGH
+  #     num_operands: [10] #[10, 20]
+  #     selected_digits: [0, 1, 2, 3]
+  #     count_labels: False
+  #     range_labels: [5, 10, 15, 20, 25]
+  #     low_noise_level: 1
+  #     noise_level: 0.25
+  #     test_low_noise_level: 1
+  #     test_noise_level: 0.25
+  #     train_dataset_size: 5000
+  #     test_dataset_size: 5000
+  #     sampling_percent: 0.8
+  #     sampling_groups: True
+  #     test_subsampling: 1
+  #     weight_loss: False
+
+  #     spurious_strength: 0.95
+  #     color_by_label: True    # So that the spurious correlation is label-based!
+  #     colors: ["random_1", "random_2", "random_3", "random_4", "random_5", "random_6", "random_7", "random_8", "random_9", "random_10"]
+  #     digit_color_distribution:
+  #       0: ["spurious", null, null, null, null, null, null, null, null, null]
+  #       1: [null, "spurious", null, null, null, null, null, null, null, null]
+  #       2: [null, null, "spurious", null, null, null, null, null, null, null]
+  #       3: [null, null, null, "spurious", null, null, null, null, null, null]
+  #       4: [null, null, null, null, "spurious", null, null, null, null, null]
+  #       5: [null, null, null, null, null, "spurious", null, null, null, null]
+  #       6: [null, null, null, null, null, null, "spurious", null, null, null]
+  #       7: [null, null, null, null, null, null, null, "spurious", null, null]
+  #       8: [null, null, null, null, null, null, null, null, "spurious", null]
+  #       9: [null, null, null, null, null, null, null, null, null, "spurious"]
+
+  #     test_digit_color_distribution:
+  #       0: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       1: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       2: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       3: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       4: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       5: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       6: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       7: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       8: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       9: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #   grid_variables:
+  #     - dataset_config.num_operands
+  #     - concept_loss_weight
+  #     - n_discovered_concepts
+  #     - contrastive_loss_weight
+  #     - shared_emb_generator
+  #     - emb_size
+  #     - intermediate_task_concept_loss
+  #     - intervention_task_discount
+  #     - training_intervention_prob
+  #     - dyn_training_intervention_prob
+  #   grid_search_mode: exhaustive
+
+
+  # - architecture: 'MixingConceptEmbeddingModel'
+  #   run_name: "MixCEM_n_extra_{n_discovered_concepts}_entr_{discovered_probs_entropy}_dis_{intervention_task_discount}_ip_{training_intervention_prob}_dip_{dyn_training_intervention_prob}_cl_{contrastive_loss_weight}_mix_{mix_ground_truth_embs}_shared_{shared_emb_generator}_emb_size_{emb_size}_ml_{intermediate_task_concept_loss}_Noisy_Count_Concept_Spurious_{dataset_config[num_operands]}_cwl_{concept_loss_weight}"
+  #   training_intervention_prob: [[0.25, 0.5, 0.75, 1]] #[0.25, [0.25, 0.5]] #[0.25, [0.25, 0.5]]
+  #   emb_size: [64, 8] # [128, 64] #[256, 128]  # CHANGING CAUSE GPU MEMORY IS NOT ENOUGH
+  #   embedding_activation: null
+  #   n_discovered_concepts: [5, 0] # [5, 2, 0] # [10, 5, 0]  # CHANGING CAUSE GPU MEMORY IS NOT ENOUGH
+  #   concept_loss_weight: [10]
+  #   contrastive_loss_weight: [0] #, 1]
+  #   mix_ground_truth_embs: True
+  #   shared_emb_generator: [True] #[True, False]
+  #   normalize_embs: False
+  #   sample_probs: False
+  #   cond_discovery: False
+  #   intermediate_task_concept_loss: [0] #[1, 0.5, 0.1] #, 0.1, 1]
+  #   task_concept_loss: 1
+  #   intervention_task_discount: [1.1, 1.5] #[1.01, 1.1, 1.5]
+  #   discovered_probs_entropy: 0
+  #   dyn_training_intervention_prob: [0.1, 0.25] #, 0.5, 1] #[0, 1]
+
+  #   # Dataset Configuration
+  #   dataset_config:
+  #     dataset: color_mnist_add
+  #     root_dir: data/
+  #     num_workers: 8
+  #     batch_size: 256 #2048 # CHANGING CAUSE GPU MEMORY IS NOT ENOUGH
+  #     num_operands: [10] #[10, 20]
+  #     selected_digits: [0, 1, 2, 3]
+  #     count_labels: False
+  #     range_labels: [5, 10, 15, 20, 25]
+  #     low_noise_level: 1
+  #     noise_level: 0.25
+  #     test_low_noise_level: 1
+  #     test_noise_level: 0.25
+  #     train_dataset_size: 5000
+  #     test_dataset_size: 5000
+  #     sampling_percent: 0.8
+  #     sampling_groups: True
+  #     test_subsampling: 1
+  #     weight_loss: False
+
+  #     spurious_strength: 0.95
+  #     color_by_label: False    # So that the spurious correlation is concept-based!
+  #     colors: ["random_1", "random_2", "random_3", "random_4", "random_5", "random_6", "random_7", "random_8", "random_9", "random_10"]
+  #     digit_color_distribution:
+  #       0: ["spurious", null, null, null, null, null, null, null, null, null]
+  #       1: [null, "spurious", null, null, null, null, null, null, null, null]
+  #       2: [null, null, "spurious", null, null, null, null, null, null, null]
+  #       3: [null, null, null, "spurious", null, null, null, null, null, null]
+  #       4: [null, null, null, null, "spurious", null, null, null, null, null]
+  #       5: [null, null, null, null, null, "spurious", null, null, null, null]
+  #       6: [null, null, null, null, null, null, "spurious", null, null, null]
+  #       7: [null, null, null, null, null, null, null, "spurious", null, null]
+  #       8: [null, null, null, null, null, null, null, null, "spurious", null]
+  #       9: [null, null, null, null, null, null, null, null, null, "spurious"]
+
+  #     test_digit_color_distribution:
+  #       0: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       1: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       2: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       3: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       4: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       5: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       6: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       7: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       8: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       9: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #   grid_variables:
+  #     - dataset_config.num_operands
+  #     - concept_loss_weight
+  #     - n_discovered_concepts
+  #     - contrastive_loss_weight
+  #     - shared_emb_generator
+  #     - emb_size
+  #     - intermediate_task_concept_loss
+  #     - intervention_task_discount
+  #     - training_intervention_prob
+  #     - dyn_training_intervention_prob
+  #   grid_search_mode: exhaustive
+
+
+
+
+
+
+
 
   - architecture: 'ConceptEmbeddingModel'
     run_name: "CEM_emb_size_{emb_size}_Noisy_Count_Baseline_{dataset_config[num_operands]}_cwl_{concept_loss_weight}"
     training_intervention_prob: 0.25
-    emb_size: [32, 16, 8]
+    emb_size: [64, 32, 16, 8]
     embedding_activation: "leakyrelu"
     sigmoidal_prob: True
 
@@ -663,16 +1866,17 @@ runs:
       root_dir: data/
       num_workers: 8
       batch_size: 2048
-      num_operands: [20] #[10, 20]
-      selected_digits: [3, 8]
-      count_labels: True
+      num_operands: [10] #[10, 20]
+      selected_digits: [0, 1, 2, 3]
+      count_labels: False
+      range_labels: [5, 10, 15, 20, 25]
       low_noise_level: 1
       noise_level: 0.25
       test_low_noise_level: 1
       test_noise_level: 0.25
       train_dataset_size: 5000
       test_dataset_size: 5000
-      sampling_percent: 0.75
+      sampling_percent: 0.8
       sampling_groups: True
       test_subsampling: 1
       weight_loss: False
@@ -712,7 +1916,7 @@ runs:
   - architecture: 'ConceptEmbeddingModel'
     run_name: "CEM_emb_size_{emb_size}_Noisy_Count_Downstream_Spurious_{dataset_config[num_operands]}_cwl_{concept_loss_weight}"
     training_intervention_prob: 0.25
-    emb_size: [32, 16, 8]
+    emb_size: [64, 32, 16, 8]
     embedding_activation: "leakyrelu"
     sigmoidal_prob: True
 
@@ -722,16 +1926,17 @@ runs:
       root_dir: data/
       num_workers: 8
       batch_size: 2048
-      num_operands: [20] #[10, 20]
-      selected_digits: [3, 8]
-      count_labels: True
+      num_operands: [10] #[10, 20]
+      selected_digits: [0, 1, 2, 3]
+      count_labels: False
+      range_labels: [5, 10, 15, 20, 25]
       low_noise_level: 1
       noise_level: 0.25
       test_low_noise_level: 1
       test_noise_level: 0.25
       train_dataset_size: 5000
       test_dataset_size: 5000
-      sampling_percent: 0.75
+      sampling_percent: 0.8
       sampling_groups: True
       test_subsampling: 1
       weight_loss: False
@@ -772,7 +1977,7 @@ runs:
   - architecture: 'ConceptEmbeddingModel'
     run_name: "CEM_emb_size_{emb_size}_Noisy_Count_Concept_Spurious_{dataset_config[num_operands]}_cwl_{concept_loss_weight}"
     training_intervention_prob: 0.25
-    emb_size: [32, 16, 8]
+    emb_size: [64, 32, 16, 8]
     embedding_activation: "leakyrelu"
     sigmoidal_prob: True
 
@@ -782,198 +1987,17 @@ runs:
       root_dir: data/
       num_workers: 8
       batch_size: 2048
-      num_operands: [20] #[10, 20]
-      selected_digits: [3, 8]
-      count_labels: True
+      num_operands: [10] #[10, 20]
+      selected_digits: [0, 1, 2, 3]
+      count_labels: False
+      range_labels: [5, 10, 15, 20, 25]
       low_noise_level: 1
       noise_level: 0.25
       test_low_noise_level: 1
       test_noise_level: 0.25
       train_dataset_size: 5000
       test_dataset_size: 5000
-      sampling_percent: 0.75
-      sampling_groups: True
-      test_subsampling: 1
-      weight_loss: False
-
-      spurious_strength: 0.95
-      color_by_label: False    # So that the spurious correlation is concept-based!
-      colors: ["random_1", "random_2", "random_3", "random_4", "random_5", "random_6", "random_7", "random_8", "random_9", "random_10"]
-      digit_color_distribution:
-        0: ["spurious", null, null, null, null, null, null, null, null, null]
-        1: [null, "spurious", null, null, null, null, null, null, null, null]
-        2: [null, null, "spurious", null, null, null, null, null, null, null]
-        3: [null, null, null, "spurious", null, null, null, null, null, null]
-        4: [null, null, null, null, "spurious", null, null, null, null, null]
-        5: [null, null, null, null, null, "spurious", null, null, null, null]
-        6: [null, null, null, null, null, null, "spurious", null, null, null]
-        7: [null, null, null, null, null, null, null, "spurious", null, null]
-        8: [null, null, null, null, null, null, null, null, "spurious", null]
-        9: [null, null, null, null, null, null, null, null, null, "spurious"]
-
-      test_digit_color_distribution:
-        0: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        1: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        2: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        3: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        4: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        5: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        6: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        7: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        8: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        9: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-    grid_variables:
-      - concept_loss_weight
-      - dataset_config.num_operands
-      - emb_size
-    grid_search_mode: exhaustive
-
-
-
-
-
-  - architecture: 'ConceptEmbeddingModel'
-    run_name: "Sigmoid_emb_size_{emb_size}_CEM_Noisy_Count_Baseline_{dataset_config[num_operands]}_cwl_{concept_loss_weight}"
-    training_intervention_prob: 0.25
-    emb_size: [32, 16, 8]
-    embedding_activation: "sigmoid"
-    sigmoidal_prob: True
-
-    # Dataset Configuration
-    dataset_config:
-      dataset: color_mnist_add
-      root_dir: data/
-      num_workers: 8
-      batch_size: 2048
-      num_operands: [20] #[10, 20]
-      selected_digits: [3, 8]
-      count_labels: True
-      low_noise_level: 1
-      noise_level: 0.25
-      test_low_noise_level: 1
-      test_noise_level: 0.25
-      train_dataset_size: 5000
-      test_dataset_size: 5000
-      sampling_percent: 0.75
-      sampling_groups: True
-      test_subsampling: 1
-      weight_loss: False
-
-      spurious_strength: 0.1
-      color_by_label: False
-      colors: ["random_1", "random_2", "random_3", "random_4", "random_5", "random_6", "random_7", "random_8", "random_9", "random_10"]
-      digit_color_distribution:
-        0: ["spurious", null, null, null, null, null, null, null, null, null]
-        1: [null, "spurious", null, null, null, null, null, null, null, null]
-        2: [null, null, "spurious", null, null, null, null, null, null, null]
-        3: [null, null, null, "spurious", null, null, null, null, null, null]
-        4: [null, null, null, null, "spurious", null, null, null, null, null]
-        5: [null, null, null, null, null, "spurious", null, null, null, null]
-        6: [null, null, null, null, null, null, "spurious", null, null, null]
-        7: [null, null, null, null, null, null, null, "spurious", null, null]
-        8: [null, null, null, null, null, null, null, null, "spurious", null]
-        9: [null, null, null, null, null, null, null, null, null, "spurious"]
-
-      test_digit_color_distribution:
-        0: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        1: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        2: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        3: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        4: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        5: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        6: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        7: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        8: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        9: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-    grid_variables:
-      - concept_loss_weight
-      - dataset_config.num_operands
-      - emb_size
-    grid_search_mode: exhaustive
-
-  - architecture: 'ConceptEmbeddingModel'
-    run_name: "Sigmoid_emb_size_{emb_size}_CEM_Noisy_Count_Downstream_Spurious_{dataset_config[num_operands]}_cwl_{concept_loss_weight}"
-    training_intervention_prob: 0.25
-    emb_size: [32, 16, 8]
-    embedding_activation: "sigmoid"
-    sigmoidal_prob: True
-
-    # Dataset Configuration
-    dataset_config:
-      dataset: color_mnist_add
-      root_dir: data/
-      num_workers: 8
-      batch_size: 2048
-      num_operands: [20] #[10, 20]
-      selected_digits: [3, 8]
-      count_labels: True
-      low_noise_level: 1
-      noise_level: 0.25
-      test_low_noise_level: 1
-      test_noise_level: 0.25
-      train_dataset_size: 5000
-      test_dataset_size: 5000
-      sampling_percent: 0.75
-      sampling_groups: True
-      test_subsampling: 1
-      weight_loss: False
-
-      spurious_strength: 0.95
-      color_by_label: True    # So that the spurious correlation is label-based!
-      colors: ["random_1", "random_2", "random_3", "random_4", "random_5", "random_6", "random_7", "random_8", "random_9", "random_10"]
-      digit_color_distribution:
-        0: ["spurious", null, null, null, null, null, null, null, null, null]
-        1: [null, "spurious", null, null, null, null, null, null, null, null]
-        2: [null, null, "spurious", null, null, null, null, null, null, null]
-        3: [null, null, null, "spurious", null, null, null, null, null, null]
-        4: [null, null, null, null, "spurious", null, null, null, null, null]
-        5: [null, null, null, null, null, "spurious", null, null, null, null]
-        6: [null, null, null, null, null, null, "spurious", null, null, null]
-        7: [null, null, null, null, null, null, null, "spurious", null, null]
-        8: [null, null, null, null, null, null, null, null, "spurious", null]
-        9: [null, null, null, null, null, null, null, null, null, "spurious"]
-
-      test_digit_color_distribution:
-        0: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        1: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        2: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        3: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        4: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        5: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        6: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        7: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        8: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        9: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-    grid_variables:
-      - concept_loss_weight
-      - dataset_config.num_operands
-      - emb_size
-    grid_search_mode: exhaustive
-
-
-  - architecture: 'ConceptEmbeddingModel'
-    run_name: "Sigmoid_emb_size_{emb_size}_CEM_Noisy_Count_Concept_Spurious_{dataset_config[num_operands]}_cwl_{concept_loss_weight}"
-    training_intervention_prob: 0.25
-    emb_size: [32, 16, 8]
-    embedding_activation: "sigmoid"
-    sigmoidal_prob: True
-
-    # Dataset Configuration
-    dataset_config:
-      dataset: color_mnist_add
-      root_dir: data/
-      num_workers: 8
-      batch_size: 2048
-      num_operands: [20] #[10, 20]
-      selected_digits: [3, 8]
-      count_labels: True
-      low_noise_level: 1
-      noise_level: 0.25
-      test_low_noise_level: 1
-      test_noise_level: 0.25
-      train_dataset_size: 5000
-      test_dataset_size: 5000
-      sampling_percent: 0.75
+      sampling_percent: 0.8
       sampling_groups: True
       test_subsampling: 1
       weight_loss: False
@@ -1016,8 +2040,10 @@ runs:
 
 
 
+
+
   - architecture: 'IntAwareConceptEmbeddingModel'
-    run_name: "IntCEM_intervention_weight_{intervention_weight}_intervention_task_discount_{intervention_task_discount}_Noisy_Count_Baseline_{dataset_config[num_operands]}_cwl_{concept_loss_weight}"
+    run_name: "IntCEM_emb_size_{emb_size}_intervention_weight_{intervention_weight}_intervention_task_discount_{intervention_task_discount}_Noisy_Count_Baseline_{dataset_config[num_operands]}_cwl_{concept_loss_weight}"
     training_intervention_prob: 0.25
     intervention_weight: [0.1, 1, 5]
     intervention_task_discount: [1.5]
@@ -1028,11 +2054,13 @@ runs:
     max_horizon: 6
     horizon_rate: 1.005
     gradient_clip_val: 100
+    emb_size: [32, 16, 8]
     grid_variables:
       - concept_loss_weight
       - dataset_config.num_operands
       - intervention_task_discount
       - intervention_weight
+      - emb_size
     grid_search_mode: exhaustive
 
     # Dataset Configuration
@@ -1041,16 +2069,17 @@ runs:
       root_dir: data/
       num_workers: 8
       batch_size: 2048
-      num_operands: [20] #[10, 20]
-      selected_digits: [3, 8]
-      count_labels: True
+      num_operands: [10] #[10, 20]
+      selected_digits: [0, 1, 2, 3]
+      count_labels: False
+      range_labels: [5, 10, 15, 20, 25]
       low_noise_level: 1
       noise_level: 0.25
       test_low_noise_level: 1
       test_noise_level: 0.25
       train_dataset_size: 5000
       test_dataset_size: 5000
-      sampling_percent: 0.75
+      sampling_percent: 0.8
       sampling_groups: True
       test_subsampling: 1
       weight_loss: False
@@ -1083,7 +2112,7 @@ runs:
         9: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
 
   - architecture: 'IntAwareConceptEmbeddingModel'
-    run_name: "IntCEM_intervention_weight_{intervention_weight}_intervention_task_discount_{intervention_task_discount}_Noisy_Count_Downstream_Spurious_{dataset_config[num_operands]}_cwl_{concept_loss_weight}"
+    run_name: "IntCEM_emb_size_{emb_size}_intervention_weight_{intervention_weight}_intervention_task_discount_{intervention_task_discount}_Noisy_Count_Downstream_Spurious_{dataset_config[num_operands]}_cwl_{concept_loss_weight}"
     training_intervention_prob: 0.25
     intervention_weight: [0.1, 1, 5]
     intervention_task_discount: [1.5]
@@ -1094,11 +2123,13 @@ runs:
     max_horizon: 6
     horizon_rate: 1.005
     gradient_clip_val: 100
+    emb_size: [32, 16, 8]
     grid_variables:
       - concept_loss_weight
       - dataset_config.num_operands
       - intervention_task_discount
       - intervention_weight
+      - emb_size
     grid_search_mode: exhaustive
 
     # Dataset Configuration
@@ -1107,16 +2138,17 @@ runs:
       root_dir: data/
       num_workers: 8
       batch_size: 2048
-      num_operands: [20] #[10, 20]
-      selected_digits: [3, 8]
-      count_labels: True
+      num_operands: [10] #[10, 20]
+      selected_digits: [0, 1, 2, 3]
+      count_labels: False
+      range_labels: [5, 10, 15, 20, 25]
       low_noise_level: 1
       noise_level: 0.25
       test_low_noise_level: 1
       test_noise_level: 0.25
       train_dataset_size: 5000
       test_dataset_size: 5000
-      sampling_percent: 0.75
+      sampling_percent: 0.8
       sampling_groups: True
       test_subsampling: 1
       weight_loss: False
@@ -1176,16 +2208,17 @@ runs:
       root_dir: data/
       num_workers: 8
       batch_size: 2048
-      num_operands: [20] #[10, 20]
-      selected_digits: [3, 8]
-      count_labels: True
+      num_operands: [10] #[10, 20]
+      selected_digits: [0, 1, 2, 3]
+      count_labels: False
+      range_labels: [5, 10, 15, 20, 25]
       low_noise_level: 1
       noise_level: 0.25
       test_low_noise_level: 1
       test_noise_level: 0.25
       train_dataset_size: 5000
       test_dataset_size: 5000
-      sampling_percent: 0.75
+      sampling_percent: 0.8
       sampling_groups: True
       test_subsampling: 1
       weight_loss: False
@@ -1216,325 +2249,6 @@ runs:
         7: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
         8: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
         9: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-
-
-
-  - architecture: 'MixingConceptEmbeddingModel'
-    run_name: "ResidualMixing-CEM_n_extra_{n_discovered_concepts}_entr_{discovered_probs_entropy}_dis_{intervention_task_discount}_ip_{training_intervention_prob}_dip_{dyn_training_intervention_prob}_cl_{contrastive_loss_weight}_mix_{mix_ground_truth_embs}_shared_{shared_emb_generator}_emb_size_{emb_size}_ml_{intermediate_task_concept_loss}_Noisy_Count_Baseline_{dataset_config[num_operands]}_cwl_{concept_loss_weight}"
-    training_intervention_prob: [[0.25, 0.5, 0.75, 1]] #[0.25, [0.25, 0.5]] #[0.25, [0.25, 0.5]]
-    emb_size: [64] # [128, 64] #[256, 128] # CHANGING CAUSE GPU MEMORY IS NOT ENOUGH
-    embedding_activation: null
-    n_discovered_concepts: [5, 0] # [5, 2, 1, 0] #[10, 5, 0] # CHANGING CAUSE GPU MEMORY IS NOT ENOUGH
-    concept_loss_weight: [0.1, 1, 10]
-    contrastive_loss_weight: [0] #, 1]
-    mix_ground_truth_embs: True
-    shared_emb_generator: [True] #[True, False]
-    normalize_embs: False
-    sample_probs: False
-    cond_discovery: False
-    intermediate_task_concept_loss: [0, 0.1] #[1, 0.5, 0.1] #, 0.1, 1]
-    task_concept_loss: 1
-    intervention_task_discount: [1.1, 1.5] #[1.01, 1.1, 1.5]
-    discovered_probs_entropy: 0
-    dyn_training_intervention_prob: [0.1, 0.25] #, 0.5, 1] #[0, 1]
-
-    # Dataset Configuration
-    dataset_config:
-      dataset: color_mnist_add
-      root_dir: data/
-      num_workers: 8
-      batch_size: 256 #2048 # CHANGING CAUSE GPU MEMORY IS NOT ENOUGH
-      num_operands: [20] #[10, 20]
-      selected_digits: [3, 8]
-      count_labels: True
-      low_noise_level: 1
-      noise_level: 0.25
-      test_low_noise_level: 1
-      test_noise_level: 0.25
-      train_dataset_size: 5000
-      test_dataset_size: 5000
-      sampling_percent: 0.75
-      sampling_groups: True
-      test_subsampling: 1
-      weight_loss: False
-
-      spurious_strength: 0.1
-      color_by_label: False
-      colors: ["random_1", "random_2", "random_3", "random_4", "random_5", "random_6", "random_7", "random_8", "random_9", "random_10"]
-      digit_color_distribution:
-        0: ["spurious", null, null, null, null, null, null, null, null, null]
-        1: [null, "spurious", null, null, null, null, null, null, null, null]
-        2: [null, null, "spurious", null, null, null, null, null, null, null]
-        3: [null, null, null, "spurious", null, null, null, null, null, null]
-        4: [null, null, null, null, "spurious", null, null, null, null, null]
-        5: [null, null, null, null, null, "spurious", null, null, null, null]
-        6: [null, null, null, null, null, null, "spurious", null, null, null]
-        7: [null, null, null, null, null, null, null, "spurious", null, null]
-        8: [null, null, null, null, null, null, null, null, "spurious", null]
-        9: [null, null, null, null, null, null, null, null, null, "spurious"]
-
-      test_digit_color_distribution:
-        0: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        1: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        2: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        3: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        4: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        5: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        6: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        7: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        8: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        9: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-    grid_variables:
-      - dataset_config.num_operands
-      - concept_loss_weight
-      - n_discovered_concepts
-      - contrastive_loss_weight
-      - shared_emb_generator
-      - emb_size
-      - intermediate_task_concept_loss
-      - intervention_task_discount
-      - training_intervention_prob
-      - dyn_training_intervention_prob
-    grid_search_mode: exhaustive
-
-
-  # NEW TRYY!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  - architecture: 'MixingConceptEmbeddingModel'
-    run_name: "ResidualMixing-CEM_n_extra_{n_discovered_concepts}_entr_{discovered_probs_entropy}_dis_{intervention_task_discount}_ip_{training_intervention_prob}_dip_{dyn_training_intervention_prob}_cl_{contrastive_loss_weight}_mix_{mix_ground_truth_embs}_shared_{shared_emb_generator}_emb_size_{emb_size}_ml_{intermediate_task_concept_loss}_Noisy_Count_Baseline_{dataset_config[num_operands]}_cwl_{concept_loss_weight}"
-    training_intervention_prob: [[0.25, 0.5, 0.75, 1]] #[0.25, [0.25, 0.5]] #[0.25, [0.25, 0.5]]
-    emb_size: [32, 16] #[256, 128]
-    embedding_activation: null
-    n_discovered_concepts: [5, 1] # [5, 2, 1]
-    concept_loss_weight: [10]
-    contrastive_loss_weight: [0] #, 1]
-    mix_ground_truth_embs: True
-    shared_emb_generator: [True] #[True, False]
-    normalize_embs: False
-    sample_probs: False
-    cond_discovery: False
-    intermediate_task_concept_loss: [0] #[1, 0.5, 0.1] #, 0.1, 1]
-    task_concept_loss: 1
-    intervention_task_discount: [1.1, 1.5] #[1.01, 1.1, 1.5]
-    discovered_probs_entropy: 0
-    dyn_training_intervention_prob: [0.1, 0.25] #, 0.5, 1] #[0, 1]
-
-    # Dataset Configuration
-    dataset_config:
-      dataset: color_mnist_add
-      root_dir: data/
-      num_workers: 8
-      batch_size: 256 #2048 # CHANGING CAUSE GPU MEMORY IS NOT ENOUGH
-      num_operands: [20] #[10, 20]
-      selected_digits: [3, 8]
-      count_labels: True
-      low_noise_level: 1
-      noise_level: 0.25
-      test_low_noise_level: 1
-      test_noise_level: 0.25
-      train_dataset_size: 5000
-      test_dataset_size: 5000
-      sampling_percent: 0.75
-      sampling_groups: True
-      test_subsampling: 1
-      weight_loss: False
-
-      spurious_strength: 0.1
-      color_by_label: False
-      colors: ["random_1", "random_2", "random_3", "random_4", "random_5", "random_6", "random_7", "random_8", "random_9", "random_10"]
-      digit_color_distribution:
-        0: ["spurious", null, null, null, null, null, null, null, null, null]
-        1: [null, "spurious", null, null, null, null, null, null, null, null]
-        2: [null, null, "spurious", null, null, null, null, null, null, null]
-        3: [null, null, null, "spurious", null, null, null, null, null, null]
-        4: [null, null, null, null, "spurious", null, null, null, null, null]
-        5: [null, null, null, null, null, "spurious", null, null, null, null]
-        6: [null, null, null, null, null, null, "spurious", null, null, null]
-        7: [null, null, null, null, null, null, null, "spurious", null, null]
-        8: [null, null, null, null, null, null, null, null, "spurious", null]
-        9: [null, null, null, null, null, null, null, null, null, "spurious"]
-
-      test_digit_color_distribution:
-        0: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        1: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        2: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        3: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        4: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        5: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        6: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        7: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        8: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        9: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-    grid_variables:
-      - dataset_config.num_operands
-      - concept_loss_weight
-      - n_discovered_concepts
-      - contrastive_loss_weight
-      - shared_emb_generator
-      - emb_size
-      - intermediate_task_concept_loss
-      - intervention_task_discount
-      - training_intervention_prob
-      - dyn_training_intervention_prob
-    grid_search_mode: exhaustive
-
-  - architecture: 'MixingConceptEmbeddingModel'
-    run_name: "ResidualMixing-CEM_n_extra_{n_discovered_concepts}_entr_{discovered_probs_entropy}_dis_{intervention_task_discount}_ip_{training_intervention_prob}_dip_{dyn_training_intervention_prob}_cl_{contrastive_loss_weight}_mix_{mix_ground_truth_embs}_shared_{shared_emb_generator}_emb_size_{emb_size}_ml_{intermediate_task_concept_loss}_Noisy_Count_Downstream_Spurious_{dataset_config[num_operands]}_cwl_{concept_loss_weight}"
-    training_intervention_prob: [[0.25, 0.5, 0.75, 1]] #[0.25, [0.25, 0.5]] #[0.25, [0.25, 0.5]]
-    emb_size: [64] # [128, 64] #[256, 128]  # CHANGING CAUSE GPU MEMORY IS NOT ENOUGH
-    embedding_activation: null
-    n_discovered_concepts: [5, 0] # [5, 2, 0] # [10, 5, 0]  # CHANGING CAUSE GPU MEMORY IS NOT ENOUGH
-    concept_loss_weight: [10]  # Adding 0 here as an option to see what happens when we do not provide ANY concept supervision. Is the model still much better at dealing with spurious correlations?
-    contrastive_loss_weight: [0] #, 1]
-    mix_ground_truth_embs: True
-    shared_emb_generator: [True] #[True, False]
-    normalize_embs: False
-    sample_probs: False
-    cond_discovery: False
-    intermediate_task_concept_loss: [0] #[1, 0.5, 0.1] #, 0.1, 1]
-    task_concept_loss: 1
-    intervention_task_discount: [1.1, 1.5] #[1.01, 1.1, 1.5]
-    discovered_probs_entropy: 0
-    dyn_training_intervention_prob: [0.1, 0.25] #, 0.5, 1] #[0, 1]
-
-    # Dataset Configuration
-    dataset_config:
-      dataset: color_mnist_add
-      root_dir: data/
-      num_workers: 8
-      batch_size: 256 #2048 # CHANGING CAUSE GPU MEMORY IS NOT ENOUGH
-      num_operands: [20] #[10, 20]
-      selected_digits: [3, 8]
-      count_labels: True
-      low_noise_level: 1
-      noise_level: 0.25
-      test_low_noise_level: 1
-      test_noise_level: 0.25
-      train_dataset_size: 5000
-      test_dataset_size: 5000
-      sampling_percent: 0.75
-      sampling_groups: True
-      test_subsampling: 1
-      weight_loss: False
-
-      spurious_strength: 0.95
-      color_by_label: True    # So that the spurious correlation is label-based!
-      colors: ["random_1", "random_2", "random_3", "random_4", "random_5", "random_6", "random_7", "random_8", "random_9", "random_10"]
-      digit_color_distribution:
-        0: ["spurious", null, null, null, null, null, null, null, null, null]
-        1: [null, "spurious", null, null, null, null, null, null, null, null]
-        2: [null, null, "spurious", null, null, null, null, null, null, null]
-        3: [null, null, null, "spurious", null, null, null, null, null, null]
-        4: [null, null, null, null, "spurious", null, null, null, null, null]
-        5: [null, null, null, null, null, "spurious", null, null, null, null]
-        6: [null, null, null, null, null, null, "spurious", null, null, null]
-        7: [null, null, null, null, null, null, null, "spurious", null, null]
-        8: [null, null, null, null, null, null, null, null, "spurious", null]
-        9: [null, null, null, null, null, null, null, null, null, "spurious"]
-
-      test_digit_color_distribution:
-        0: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        1: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        2: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        3: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        4: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        5: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        6: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        7: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        8: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        9: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-    grid_variables:
-      - dataset_config.num_operands
-      - concept_loss_weight
-      - n_discovered_concepts
-      - contrastive_loss_weight
-      - shared_emb_generator
-      - emb_size
-      - intermediate_task_concept_loss
-      - intervention_task_discount
-      - training_intervention_prob
-      - dyn_training_intervention_prob
-    grid_search_mode: exhaustive
-
-
-  - architecture: 'MixingConceptEmbeddingModel'
-    run_name: "ResidualMixing-CEM_n_extra_{n_discovered_concepts}_entr_{discovered_probs_entropy}_dis_{intervention_task_discount}_ip_{training_intervention_prob}_dip_{dyn_training_intervention_prob}_cl_{contrastive_loss_weight}_mix_{mix_ground_truth_embs}_shared_{shared_emb_generator}_emb_size_{emb_size}_ml_{intermediate_task_concept_loss}_Noisy_Count_Concept_Spurious_{dataset_config[num_operands]}_cwl_{concept_loss_weight}"
-    training_intervention_prob: [[0.25, 0.5, 0.75, 1]] #[0.25, [0.25, 0.5]] #[0.25, [0.25, 0.5]]
-    emb_size: [64] # [128, 64] #[256, 128]  # CHANGING CAUSE GPU MEMORY IS NOT ENOUGH
-    embedding_activation: null
-    n_discovered_concepts: [5, 0] # [5, 2, 0] # [10, 5, 0]  # CHANGING CAUSE GPU MEMORY IS NOT ENOUGH
-    concept_loss_weight: [10]
-    contrastive_loss_weight: [0] #, 1]
-    mix_ground_truth_embs: True
-    shared_emb_generator: [True] #[True, False]
-    normalize_embs: False
-    sample_probs: False
-    cond_discovery: False
-    intermediate_task_concept_loss: [0] #[1, 0.5, 0.1] #, 0.1, 1]
-    task_concept_loss: 1
-    intervention_task_discount: [1.1, 1.5] #[1.01, 1.1, 1.5]
-    discovered_probs_entropy: 0
-    dyn_training_intervention_prob: [0.1, 0.25] #, 0.5, 1] #[0, 1]
-
-    # Dataset Configuration
-    dataset_config:
-      dataset: color_mnist_add
-      root_dir: data/
-      num_workers: 8
-      batch_size: 256 #2048 # CHANGING CAUSE GPU MEMORY IS NOT ENOUGH
-      num_operands: [20] #[10, 20]
-      selected_digits: [3, 8]
-      count_labels: True
-      low_noise_level: 1
-      noise_level: 0.25
-      test_low_noise_level: 1
-      test_noise_level: 0.25
-      train_dataset_size: 5000
-      test_dataset_size: 5000
-      sampling_percent: 0.75
-      sampling_groups: True
-      test_subsampling: 1
-      weight_loss: False
-
-      spurious_strength: 0.95
-      color_by_label: False    # So that the spurious correlation is concept-based!
-      colors: ["random_1", "random_2", "random_3", "random_4", "random_5", "random_6", "random_7", "random_8", "random_9", "random_10"]
-      digit_color_distribution:
-        0: ["spurious", null, null, null, null, null, null, null, null, null]
-        1: [null, "spurious", null, null, null, null, null, null, null, null]
-        2: [null, null, "spurious", null, null, null, null, null, null, null]
-        3: [null, null, null, "spurious", null, null, null, null, null, null]
-        4: [null, null, null, null, "spurious", null, null, null, null, null]
-        5: [null, null, null, null, null, "spurious", null, null, null, null]
-        6: [null, null, null, null, null, null, "spurious", null, null, null]
-        7: [null, null, null, null, null, null, null, "spurious", null, null]
-        8: [null, null, null, null, null, null, null, null, "spurious", null]
-        9: [null, null, null, null, null, null, null, null, null, "spurious"]
-
-      test_digit_color_distribution:
-        0: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        1: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        2: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        3: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        4: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        5: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        6: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        7: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        8: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-        9: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-    grid_variables:
-      - dataset_config.num_operands
-      - concept_loss_weight
-      - n_discovered_concepts
-      - contrastive_loss_weight
-      - shared_emb_generator
-      - emb_size
-      - intermediate_task_concept_loss
-      - intervention_task_discount
-      - training_intervention_prob
-      - dyn_training_intervention_prob
-    grid_search_mode: exhaustive
-
-
 
 
 
@@ -1572,16 +2286,17 @@ runs:
       root_dir: data/
       num_workers: 8
       batch_size: 256 #2048 # CHANGING CAUSE GPU MEMORY IS NOT ENOUGH
-      num_operands: [20] #[10, 20]
-      selected_digits: [3, 8]
-      count_labels: True
+      num_operands: [10] #[10, 20]
+      selected_digits: [0, 1, 2, 3]
+      count_labels: False
+      range_labels: [5, 10, 15, 20, 25]
       low_noise_level: 1
       noise_level: 0.25
       test_low_noise_level: 1
       test_noise_level: 0.25
       train_dataset_size: 5000
       test_dataset_size: 5000
-      sampling_percent: 0.75
+      sampling_percent: 0.8
       sampling_groups: True
       test_subsampling: 1
       weight_loss: False
@@ -1649,16 +2364,17 @@ runs:
       root_dir: data/
       num_workers: 8
       batch_size: 256 #2048 # CHANGING CAUSE GPU MEMORY IS NOT ENOUGH
-      num_operands: [20] #[10, 20]
-      selected_digits: [3, 8]
-      count_labels: True
+      num_operands: [10] #[10, 20]
+      selected_digits: [0, 1, 2, 3]
+      count_labels: False
+      range_labels: [5, 10, 15, 20, 25]
       low_noise_level: 1
       noise_level: 0.25
       test_low_noise_level: 1
       test_noise_level: 0.25
       train_dataset_size: 5000
       test_dataset_size: 5000
-      sampling_percent: 0.75
+      sampling_percent: 0.8
       sampling_groups: True
       test_subsampling: 1
       weight_loss: False
@@ -1726,16 +2442,17 @@ runs:
       root_dir: data/
       num_workers: 8
       batch_size: 256 #2048 # CHANGING CAUSE GPU MEMORY IS NOT ENOUGH
-      num_operands: [20] #[10, 20]
-      selected_digits: [3, 8]
-      count_labels: True
+      num_operands: [10] #[10, 20]
+      selected_digits: [0, 1, 2, 3]
+      count_labels: False
+      range_labels: [5, 10, 15, 20, 25]
       low_noise_level: 1
       noise_level: 0.25
       test_low_noise_level: 1
       test_noise_level: 0.25
       train_dataset_size: 5000
       test_dataset_size: 5000
-      sampling_percent: 0.75
+      sampling_percent: 0.8
       sampling_groups: True
       test_subsampling: 1
       weight_loss: False

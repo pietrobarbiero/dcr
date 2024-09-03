@@ -1,4 +1,5 @@
 import copy
+import gc
 import joblib
 import numpy as np
 import os
@@ -179,20 +180,13 @@ def train_mixcem(
                 model.warmup_mode = False
 
 
-                # Now save to tmp checkpoint and reload model (in order to
-                # restart any optimizer state)
-                torch.save(
-                    model.state_dict(),
-                    tmp_checkpoint_file,
-                )
-                model = construct_model(
-                    n_concepts,
-                    n_tasks,
-                    config,
-                    imbalance=imbalance,
-                    task_class_weights=task_class_weights,
-                )
-                model.load_state_dict(torch.load(tmp_checkpoint_file))
+                # Restart the optimizer state!
+                opt_configs = model.configure_optimizers()
+                opts = model.optimizers()
+                opts.load_state_dict(opt_configs['optimizer'].state_dict())
+                if 'lr_scheduler' in opt_configs:
+                    lr_scheduler = model.lr_schedulers()
+                    lr_scheduler.load_state_dict(opt_configs['lr_scheduler'].state_dict())
 
             ####################################################################
             ## Step 1: Train the concept model
@@ -243,20 +237,13 @@ def train_mixcem(
                 print(
                     f"\t\tDone after {num_epochs} epochs and {training_time} secs"
                 )
-                # Now save to tmp checkpoint and reload model (in order to
-                # restart any optimizer state)
-                torch.save(
-                    model.state_dict(),
-                    tmp_checkpoint_file,
-                )
-                model = construct_model(
-                    n_concepts,
-                    n_tasks,
-                    config,
-                    imbalance=imbalance,
-                    task_class_weights=task_class_weights,
-                )
-                model.load_state_dict(torch.load(tmp_checkpoint_file))
+                # Restart the optimizer state!
+                opt_configs = model.configure_optimizers()
+                opts = model.optimizers()
+                opts.load_state_dict(opt_configs['optimizer'].state_dict())
+                if 'lr_scheduler' in opt_configs:
+                    lr_scheduler = model.lr_schedulers()
+                    lr_scheduler.load_state_dict(opt_configs['lr_scheduler'].state_dict())
 
             ####################################################################
             ## Step 2: Train the end-to-end model without any residual
@@ -314,21 +301,13 @@ def train_mixcem(
                         model.task_loss_weight = prev_task_loss_weight
                         model.concept_loss_weight = prev_concept_loss_weight
 
-                # Now save to tmp checkpoint and reload model (in order to
-                # restart any optimizer state)
-                torch.save(
-                    model.state_dict(),
-                    tmp_checkpoint_file,
-                )
-                model = construct_model(
-                    n_concepts,
-                    n_tasks,
-                    config,
-                    imbalance=imbalance,
-                    task_class_weights=task_class_weights,
-                )
-                model.load_state_dict(torch.load(tmp_checkpoint_file))
-
+                # Restart the optimizer state!
+                opt_configs = model.configure_optimizers()
+                opts = model.optimizers()
+                opts.load_state_dict(opt_configs['optimizer'].state_dict())
+                if 'lr_scheduler' in opt_configs:
+                    lr_scheduler = model.lr_schedulers()
+                    lr_scheduler.load_state_dict(opt_configs['lr_scheduler'].state_dict())
 
             ####################################################################
             ## Step 3: Train the end-to-end model with residual

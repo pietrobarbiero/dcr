@@ -484,11 +484,13 @@ def construct_model(
             "residual_scale": config.get('residual_scale', 1),
             "conditional_residual": config.get('conditional_residual', False),
             "residual_layers": config.get("residual_layers", []),
-            "additive_mixing": config.get('additive_mixing', False),
+            "bottleneck_pooling": config.get('bottleneck_pooling', 'concat'),
             "per_concept_residual": config.get('per_concept_residual', False),
             "shared_per_concept_residual": config.get('shared_per_concept_residual', False),
             "sigmoidal_residual": config.get('sigmoidal_residual', False),
             "residual_deviation": config.get('residual_deviation', False),
+            "warmup_mode": config.get('blackbox_warmup_epochs', 0) > 0,
+            "residual_norm_loss": config.get('residual_norm_loss', 0),
         }
     else:
         raise ValueError(f'Invalid architecture "{config["architecture"]}"')

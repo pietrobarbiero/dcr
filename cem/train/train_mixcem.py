@@ -127,7 +127,6 @@ def train_mixcem(
         else:
             training_time = 0
             num_epochs = 0
-            tmp_checkpoint_file = os.path.join(result_dir, f'{full_run_name}_tmp_checkpoint.pt')
 
             ####################################################################
             ## Step 0: Blackbox Warmup
@@ -259,7 +258,7 @@ def train_mixcem(
                 model.freeze_residual()
                 if config.get('fix_concept_embeddings_for_no_res', False):
                     model.freeze_concept_embeddings()
-                if config.get('fix_backbone_for_no_res', True):
+                if config.get('fix_backbone_for_no_res', False):
                     model.freeze_backbone()
                     if config.get('fix_concept_embeddings_for_no_res', False):
                         # Then there is no point in having a concept loss cause
@@ -295,7 +294,7 @@ def train_mixcem(
                 model.unfreeze_residual()
                 if config.get('fix_concept_embeddings_for_no_res', False):
                     model.unfreeze_concept_embeddings()
-                if config.get('fix_backbone_for_no_res', True):
+                if config.get('fix_backbone_for_no_res', False):
                     model.unfreeze_backbone()
                     if config.get('fix_concept_embeddings_for_no_res', False):
                         model.task_loss_weight = prev_task_loss_weight
@@ -320,11 +319,11 @@ def train_mixcem(
                     f"\tTraining end-to-end model WITH residual for {e2e_epochs} epochs"
                 )
                 # Setup
-                if config.get('fix_backbone_for_res', True):
+                if config.get('fix_backbone_for_res', False):
                     model.freeze_backbone()
                 if config.get('fix_concept_embeddings_for_res', False):
                     model.freeze_concept_embeddings()
-                    if config.get('fix_concept_embeddings_for_res', False):
+                    if config.get('fix_backbone_for_res', False):
                         # Then there is no point in having a concept loss cause
                         # everything is frozen
                         prev_task_loss_weight = model.task_loss_weight
@@ -363,11 +362,11 @@ def train_mixcem(
                 )
 
                 # And undo any changes needed just for this stage
-                if config.get('fix_backbone_for_res', True):
+                if config.get('fix_backbone_for_res', False):
                     model.unfreeze_backbone()
                 if config.get('fix_concept_embeddings_for_res', False):
                     model.unfreeze_concept_embeddings()
-                    if config.get('fix_concept_embeddings_for_res', False):
+                    if config.get('fix_backbone_for_res', False):
                         model.task_loss_weight = prev_task_loss_weight
                         model.concept_loss_weight = prev_concept_loss_weight
                 if config.get('fix_label_predictor_for_res', False):

@@ -491,6 +491,8 @@ def construct_model(
             "residual_deviation": config.get('residual_deviation', False),
             "warmup_mode": config.get('blackbox_warmup_epochs', 0) > 0,
             "residual_norm_loss": config.get('residual_norm_loss', 0),
+            "learnable_residual_scale": config.get('learnable_residual_scale', False),
+            "sigmoidal_residual_scale": config.get('sigmoidal_residual_scale', False),
         }
     else:
         raise ValueError(f'Invalid architecture "{config["architecture"]}"')

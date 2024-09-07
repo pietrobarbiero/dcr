@@ -134,6 +134,7 @@ def train_mixcem(
 
             start_time = time.time()
             blackbox_warmup_epochs = config.get('blackbox_warmup_epochs', 0)
+            opt_configs = model.configure_optimizers()
             if blackbox_warmup_epochs:
                 print(
                     f"\tTraining entire model as a blackbox model for {blackbox_warmup_epochs} epochs"
@@ -180,12 +181,12 @@ def train_mixcem(
 
 
                 # Restart the optimizer state!
-                opt_configs = model.configure_optimizers()
                 opts = model.optimizers()
                 opts.load_state_dict(opt_configs['optimizer'].state_dict())
                 if 'lr_scheduler' in opt_configs:
                     lr_scheduler = model.lr_schedulers()
                     lr_scheduler.load_state_dict(opt_configs['lr_scheduler'].state_dict())
+                    lr_scheduler._reset()
 
             ####################################################################
             ## Step 1: Train the concept model
@@ -226,6 +227,14 @@ def train_mixcem(
                     ckpt_call=concept_ckpt_call,
                     trainer=concept_trainer,
                 )
+                # Restart the optimizer state!
+                opts = model.optimizers()
+                opts.load_state_dict(opt_configs['optimizer'].state_dict())
+                if 'lr_scheduler' in opt_configs:
+                    lr_scheduler = model.lr_schedulers()
+                    lr_scheduler.load_state_dict(opt_configs['lr_scheduler'].state_dict())
+                    lr_scheduler._reset()
+
                 model.task_loss_weight = prev_task_loss_weight
                 model.concept_loss_weight = prev_concept_loss_weight
                 model.training_intervention_prob = prev_training_intervention_prob
@@ -236,13 +245,6 @@ def train_mixcem(
                 print(
                     f"\t\tDone after {num_epochs} epochs and {training_time} secs"
                 )
-                # Restart the optimizer state!
-                opt_configs = model.configure_optimizers()
-                opts = model.optimizers()
-                opts.load_state_dict(opt_configs['optimizer'].state_dict())
-                if 'lr_scheduler' in opt_configs:
-                    lr_scheduler = model.lr_schedulers()
-                    lr_scheduler.load_state_dict(opt_configs['lr_scheduler'].state_dict())
 
             ####################################################################
             ## Step 2: Train the end-to-end model without any residual
@@ -290,6 +292,14 @@ def train_mixcem(
                     ckpt_call=no_residual_ckpt_call,
                     trainer=no_residual_trainer,
                 )
+                # Restart the optimizer state!
+                opts = model.optimizers()
+                opts.load_state_dict(opt_configs['optimizer'].state_dict())
+                if 'lr_scheduler' in opt_configs:
+                    lr_scheduler = model.lr_schedulers()
+                    lr_scheduler.load_state_dict(opt_configs['lr_scheduler'].state_dict())
+                    lr_scheduler._reset()
+
                 # And recover the state of the model
                 model.unfreeze_residual()
                 if config.get('fix_concept_embeddings_for_no_res', False):
@@ -300,13 +310,6 @@ def train_mixcem(
                         model.task_loss_weight = prev_task_loss_weight
                         model.concept_loss_weight = prev_concept_loss_weight
 
-                # Restart the optimizer state!
-                opt_configs = model.configure_optimizers()
-                opts = model.optimizers()
-                opts.load_state_dict(opt_configs['optimizer'].state_dict())
-                if 'lr_scheduler' in opt_configs:
-                    lr_scheduler = model.lr_schedulers()
-                    lr_scheduler.load_state_dict(opt_configs['lr_scheduler'].state_dict())
 
             ####################################################################
             ## Step 3: Train the end-to-end model with residual

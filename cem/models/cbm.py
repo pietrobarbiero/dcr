@@ -763,6 +763,7 @@ class ConceptBottleneckModel(pl.LightningModule):
                 verbose=True,
                 patience=self.lr_scheduler_patience,
                 factor=self.lr_scheduler_factor,
+                min_lr=getattr(self, 'min_lr', 1e-5),
             )
             return {
                 "optimizer": optimizer,

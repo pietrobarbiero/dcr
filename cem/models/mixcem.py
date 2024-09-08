@@ -543,7 +543,10 @@ class MixingConceptEmbeddingModel(ConceptEmbeddingModel):
     def _relaxed_multi_bernoulli_sample(self, probs, temperature=1, idx=None):
         # Sample from a standard Gaussian first to perform the
         # reparameterization trick
-        shape = (probs.shape[0],)
+        if len(probs.shape):
+            shape = (probs.shapea[0],)
+        else:
+            shape = []
         epsilon = torch.normal(mean=torch.zeros(shape), std=torch.ones(shape)).to(
             probs.device
         )
@@ -558,6 +561,7 @@ class MixingConceptEmbeddingModel(ConceptEmbeddingModel):
         self,
         pred_concepts,
         projected_space,
+        train=False,
     ):
         used_pred_concepts = pred_concepts
         if self.per_concept_residual:
@@ -581,6 +585,8 @@ class MixingConceptEmbeddingModel(ConceptEmbeddingModel):
                         scale = self.residual_scale
                     if self.sigmoidal_residual_scale:
                         scale = self.sig(scale)
+                        if train:
+                            scale = self._relaxed_multi_bernoulli_sample(scale)
                     res = scale * self.residual_model(
                         updated_input
                     )
@@ -610,6 +616,8 @@ class MixingConceptEmbeddingModel(ConceptEmbeddingModel):
                     )
                     if self.sigmoidal_residual_scale:
                         scale = self.sig(scale)
+                        if train:
+                            scale = self._relaxed_multi_bernoulli_sample(scale)
                     res = scale * self.sig(res)
                     if self.residual_norm_loss:
                         self._current_residuals.append(torch.norm(res, p=1, dim=-1))
@@ -628,6 +636,8 @@ class MixingConceptEmbeddingModel(ConceptEmbeddingModel):
                         scale = self.residual_scale
                     if self.sigmoidal_residual_scale:
                         scale = self.sig(scale)
+                        if train:
+                            scale = self._relaxed_multi_bernoulli_sample(scale)
                     if self.conditional_residual:
                         updated_input = torch.concat(
                             [projected_space, pred_concepts[:, i, :]],
@@ -648,6 +658,8 @@ class MixingConceptEmbeddingModel(ConceptEmbeddingModel):
             scale = self.residual_scale
             if self.sigmoidal_residual_scale:
                 scale = self.sig(scale)
+                if train:
+                    scale = self._relaxed_multi_bernoulli_sample(scale)
             if self.conditional_residual:
                 updated_input = torch.concat(
                     [projected_space, pred_concepts.view(pred_concepts.shape[0], -1)],
@@ -733,6 +745,7 @@ class MixingConceptEmbeddingModel(ConceptEmbeddingModel):
             bottleneck = self._make_bottleneck(
                 pred_concepts=pred_concepts,
                 projected_space=projected_space,
+                train=train,
             )
             return intervention_idxs, bottleneck
         if intervention_idxs is None:
@@ -778,6 +791,7 @@ class MixingConceptEmbeddingModel(ConceptEmbeddingModel):
         bottleneck = self._make_bottleneck(
             pred_concepts=pred_concepts,
             projected_space=projected_space,
+            train=train,
         )
         return intervention_idxs, bottleneck
 

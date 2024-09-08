@@ -404,7 +404,7 @@ class MixingConceptEmbeddingModel(ConceptEmbeddingModel):
         self.learn_residual_embeddings = learn_residual_embeddings
         if self.learn_residual_embeddings:
             self.residual_embeddings = torch.nn.Parameter(
-                torch.rand((self.n_concepts, self.emb_size)),
+                torch.rand((self.n_concepts, 2, self.emb_size)),
                 requires_grad=True,
             )
         if self.per_concept_residual:
@@ -457,6 +457,8 @@ class MixingConceptEmbeddingModel(ConceptEmbeddingModel):
                         if i != (len(units) - 1):
                             layers.append(torch.nn.LeakyReLU())
 
+                    if sigmoidal_residual:
+                        layers.append(torch.nn.Sigmoid())
                     self.residual_model.append(torch.nn.Sequential(*layers))
             else:
                 units = [
@@ -487,6 +489,8 @@ class MixingConceptEmbeddingModel(ConceptEmbeddingModel):
                 layers.append(torch.nn.Linear(units[i-1], units[i]))
                 if i != (len(units) - 1):
                     layers.append(torch.nn.LeakyReLU())
+            if sigmoidal_residual:
+                layers.append(torch.nn.Sigmoid())
             self.residual_model = torch.nn.Sequential(*layers)
 
         else:
@@ -561,6 +565,7 @@ class MixingConceptEmbeddingModel(ConceptEmbeddingModel):
         self,
         pred_concepts,
         projected_space,
+        probs,
         train=False,
     ):
         used_pred_concepts = pred_concepts
@@ -597,6 +602,7 @@ class MixingConceptEmbeddingModel(ConceptEmbeddingModel):
             elif self.learn_residual_embeddings and self._training_residual:
                 # Then we actually introduce some residuals here!
                 used_pred_concepts = torch.zeros_like(pred_concepts)
+                res_embs = probs.unsqueeze(-1) * self.residual_embeddings[:, 0, :].unsqueeze(0) + (1 - probs.unsqueeze(-1)) * self.residual_embeddings[:, 1, :].unsqueeze(0)
                 for i in range(self.n_concepts):
                     if self.learnable_residual_scale:
                         scale =  self.residual_scale[i]
@@ -618,15 +624,14 @@ class MixingConceptEmbeddingModel(ConceptEmbeddingModel):
                         scale = self.sig(scale)
                         if train:
                             scale = self._relaxed_multi_bernoulli_sample(scale)
-                    res = scale * res
                     if self.residual_norm_loss:
                         self._current_residuals.append(torch.norm(res, p=1, dim=-1))
 
                     used_pred_concepts[:, i, :] += (
                         # Shape: (B, m)
-                        pred_concepts[:, i, :] *
+                        pred_concepts[:, i, :]  +
                         # Shape: (1, m)
-                        res * self.residual_embeddings[i:i+1, :]
+                        scale * res * res_embs[:, i, :]
                     )
             elif self._training_residual:
                 for i in range(self.n_concepts):
@@ -676,10 +681,12 @@ class MixingConceptEmbeddingModel(ConceptEmbeddingModel):
                 self._current_residuals.append(
                     torch.norm(res, p=1, dim=-1)
                 )
+            res_embs = self.residual_embeddings[:, 0, :].unsqueeze(0) + (1 - probs) * self.residual_embeddings[:, 1, :].unsqueeze(0)
             used_pred_concepts = (
-                # Shape: (B, k, m)
-                 used_pred_concepts *
-                res * self.residual_embeddings.unsqueeze(0)
+		# Shape: (B, k, m)
+		pred_concepts  +
+		# Shape: (B, k, mm)
+		scale * res * res_embs
             )
 
         if self.bottleneck_pooling == 'additive':
@@ -746,6 +753,7 @@ class MixingConceptEmbeddingModel(ConceptEmbeddingModel):
                 pred_concepts=pred_concepts,
                 projected_space=projected_space,
                 train=train,
+                probs=prob,
             )
             return intervention_idxs, bottleneck
         if intervention_idxs is None:
@@ -792,6 +800,9 @@ class MixingConceptEmbeddingModel(ConceptEmbeddingModel):
             pred_concepts=pred_concepts,
             projected_space=projected_space,
             train=train,
+            probs=(
+                (1 - intervention_idxs) * prob + (intervention_idxs * c_true)
+            ),
         )
         return intervention_idxs, bottleneck
 

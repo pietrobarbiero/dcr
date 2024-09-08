@@ -618,13 +618,13 @@ class MixingConceptEmbeddingModel(ConceptEmbeddingModel):
                         scale = self.sig(scale)
                         if train:
                             scale = self._relaxed_multi_bernoulli_sample(scale)
-                    res = scale * self.sig(res)
+                    res = scale * res
                     if self.residual_norm_loss:
                         self._current_residuals.append(torch.norm(res, p=1, dim=-1))
 
                     used_pred_concepts[:, i, :] += (
                         # Shape: (B, m)
-                        (1 - res) * pred_concepts[:, i, :] *
+                        pred_concepts[:, i, :] *
                         # Shape: (1, m)
                         res * self.residual_embeddings[i:i+1, :]
                     )
@@ -671,14 +671,14 @@ class MixingConceptEmbeddingModel(ConceptEmbeddingModel):
                 updated_input
             )
             # Shape: (B, k, 1)
-            res = scale * self.sig(res.unsqueeze(-1))
+            res = scale * res.unsqueeze(-1)
             if self.residual_norm_loss:
                 self._current_residuals.append(
                     torch.norm(res, p=1, dim=-1)
                 )
             used_pred_concepts = (
                 # Shape: (B, k, m)
-                (1 - res) * used_pred_concepts *
+                 used_pred_concepts *
                 res * self.residual_embeddings.unsqueeze(0)
             )
 

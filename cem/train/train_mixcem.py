@@ -134,7 +134,6 @@ def train_mixcem(
 
             start_time = time.time()
             blackbox_warmup_epochs = config.get('blackbox_warmup_epochs', 0)
-            opt_configs = model.configure_optimizers()
             if blackbox_warmup_epochs:
                 print(
                     f"\tTraining entire model as a blackbox model for {blackbox_warmup_epochs} epochs"
@@ -149,6 +148,7 @@ def train_mixcem(
                 model.task_loss_weight = 1
                 model.concept_loss_weight = 0
                 model.warmup_mode = True
+                opt_configs = model.configure_optimizers()
                 warmup_trainer = pl.Trainer(
                     accelerator=accelerator,
                     devices=devices,
@@ -209,6 +209,7 @@ def train_mixcem(
                 model.task_loss_weight = 0
                 model.concept_loss_weight = 1
                 model.training_intervention_prob = 0
+                opt_configs = model.configure_optimizers()
                 concept_trainer = pl.Trainer(
                     accelerator=accelerator,
                     devices=devices,
@@ -272,6 +273,7 @@ def train_mixcem(
 
                 # Training
                 no_residual_callbacks, no_residual_ckpt_call = _make_callbacks(config, result_dir, full_run_name)
+                opt_configs = model.configure_optimizers()
                 no_residual_trainer = pl.Trainer(
                     accelerator=accelerator,
                     devices=devices,
@@ -311,6 +313,8 @@ def train_mixcem(
                         model.concept_loss_weight = prev_concept_loss_weight
 
 
+
+
             ####################################################################
             ## Step 3: Train the end-to-end model with residual
             ####################################################################
@@ -343,6 +347,7 @@ def train_mixcem(
 
 
                 e2e_callbacks, e2e_ckpt_call = _make_callbacks(config, result_dir, full_run_name)
+                opt_configs = model.configure_optimizers()
                 e2e_trainer = pl.Trainer(
                     accelerator=accelerator,
                     devices=devices,

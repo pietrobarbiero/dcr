@@ -112,6 +112,7 @@ class MixingConceptEmbeddingModel(ConceptEmbeddingModel):
         per_concept_residual=False,
         sigmoidal_residual=False,
         shared_per_concept_residual=False,
+        learn_residual_embeddings=False,
         residual_deviation=0,
         residual_norm_loss=0,
         residual_scale_reg=0,
@@ -381,6 +382,7 @@ class MixingConceptEmbeddingModel(ConceptEmbeddingModel):
         self.residual_norm_loss = residual_norm_loss
         self.residual_scale_reg = residual_scale_reg
         self.sigmoidal_residual_scale = sigmoidal_residual_scale
+        self._training_residual = True
         self._current_residuals = []
 
         if self.per_concept_residual and self.learnable_residual_scale:
@@ -399,27 +401,63 @@ class MixingConceptEmbeddingModel(ConceptEmbeddingModel):
                 residual_scale if residual_scale is not None else 1
             )
 
+        self.learn_residual_embeddings = learn_residual_embeddings
+        if self.learn_residual_embeddings:
+            self.residual_embeddings = torch.nn.Parameter(
+                torch.rand((self.n_concepts, self.emb_size)),
+                requires_grad=True,
+            )
         if self.per_concept_residual:
             if self.shared_per_concept_residual:
                 assert conditional_residual, (
                     'conditional_residual needs to be True if '
                     'shared_per_concept_residual is True'
                 )
+                if self.learn_residual_embeddings:
+                    units = [
+                            (emb_size * 2)
+                            if conditional_residual else emb_size
+
+                        ] + (residual_layers or []) + [1]
+                    layers = []
+                    for i in range(1, len(units)):
+                        layers.append(torch.nn.Linear(units[i-1], units[i]))
+                        if i != (len(units) - 1):
+                            layers.append(torch.nn.LeakyReLU())
+                    self.residual_model = torch.nn.Sequential(*layers)
+
+                else:
+                    units = [
+                        emb_size * 2
+
+                    ] + (residual_layers or []) + [
+                        emb_size if per_concept_residual else n_tasks
+                    ]
+                    layers = []
+                    for i in range(1, len(units)):
+                        layers.append(torch.nn.LeakyReLU())
+                        layers.append(torch.nn.Linear(units[i-1], units[i]))
+
+                    if sigmoidal_residual:
+                        layers.append(torch.nn.Sigmoid())
+
+                    self.residual_model = torch.nn.Sequential(*layers)
+            elif self.learn_residual_embeddings:
                 units = [
-                    emb_size * 2
+                        (emb_size * 2)
+                        if conditional_residual else emb_size
 
-                ] + (residual_layers or []) + [
-                    emb_size if per_concept_residual else n_tasks
-                ]
-                layers = []
-                for i in range(1, len(units)):
-                    layers.append(torch.nn.LeakyReLU())
-                    layers.append(torch.nn.Linear(units[i-1], units[i]))
+                    ] + (residual_layers or []) + [1]
+                self.residual_model = torch.nn.ModuleList()
 
-                if sigmoidal_residual:
-                    layers.append(torch.nn.Sigmoid())
+                for _ in range(self.n_concepts):
+                    layers = []
+                    for i in range(1, len(units)):
+                        layers.append(torch.nn.Linear(units[i-1], units[i]))
+                        if i != (len(units) - 1):
+                            layers.append(torch.nn.LeakyReLU())
 
-                self.residual_model = torch.nn.Sequential(*layers)
+                    self.residual_model.append(torch.nn.Sequential(*layers))
             else:
                 units = [
                     (2 * emb_size) if conditional_residual else emb_size
@@ -437,6 +475,20 @@ class MixingConceptEmbeddingModel(ConceptEmbeddingModel):
                     self.residual_model.append(
                         torch.nn.Sequential(*layers)
                     )
+
+        elif self.learn_residual_embeddings:
+            units = [
+                    (emb_size + self.bottleneck_size)
+                    if conditional_residual else emb_size
+
+                ] + (residual_layers or []) + [n_concepts]
+            layers = []
+            for i in range(1, len(units)):
+                layers.append(torch.nn.Linear(units[i-1], units[i]))
+                if i != (len(units) - 1):
+                    layers.append(torch.nn.LeakyReLU())
+            self.residual_model = torch.nn.Sequential(*layers)
+
         else:
             units = [
                     (emb_size + self.bottleneck_size)
@@ -511,7 +563,9 @@ class MixingConceptEmbeddingModel(ConceptEmbeddingModel):
         if self.per_concept_residual:
             if self.residual_norm_loss:
                 self._current_residuals = []
-            if self.shared_per_concept_residual:
+            if self.shared_per_concept_residual and self._training_residual:
+                # Then we actually introduce some residuals here!
+                assert not self.learn_residual_embeddings, 'Unsupported'
                 used_pred_concepts = (
                     torch.zeros_like(pred_concepts) +
                     pred_concepts
@@ -534,10 +588,40 @@ class MixingConceptEmbeddingModel(ConceptEmbeddingModel):
                         self._current_residuals.append(torch.norm(res, p=2, dim=-1))
 
                     used_pred_concepts[:, i, :] += res
-            else:
+            elif self.learn_residual_embeddings and self._training_residual:
+                # Then we actually introduce some residuals here!
+                used_pred_concepts = torch.zeros_like(pred_concepts)
                 for i in range(self.n_concepts):
                     if self.learnable_residual_scale:
                         scale =  self.residual_scale[i]
+                    else:
+                        scale = self.residual_scale
+
+                    if self.conditional_residual:
+                        updated_input = torch.concat(
+                            [projected_space, pred_concepts[:, i, :]],
+                            dim=-1,
+                        )
+                    else:
+                        updated_input = projected_space
+                    # Shape (B, 1)
+                    res = scale * self.residual_model[i](
+                        updated_input
+                    )
+                    res = self.sig(res)
+                    if self.residual_norm_loss:
+                        self._current_residuals.append(torch.norm(res, p=1, dim=-1))
+
+                    used_pred_concepts[:, i, :] += (
+                        # Shape: (B, m)
+                        (1 - res) * pred_concepts[:, i, :] *
+                        # Shape: (1, m)
+                        res * self.residual_embeddings[i:i+1, :]
+                    )
+            elif self._training_residual:
+                for i in range(self.n_concepts):
+                    if self.learnable_residual_scale:
+                        scale = self.residual_scale[i]
                     else:
                         scale = self.residual_scale
                     if self.sigmoidal_residual_scale:
@@ -554,9 +638,35 @@ class MixingConceptEmbeddingModel(ConceptEmbeddingModel):
                     )
                     if self.residual_norm_loss:
                         self._current_residuals.append(
-                            torch.norm(res, p=2, dim=-1)
+                            torch.norm(res, p=1, dim=-1)
                         )
                     used_pred_concepts[:, i, :] += res
+
+        elif self.learn_residual_embeddings and self._training_residual:
+            scale = self.residual_scale
+            if self.sigmoidal_residual_scale:
+                scale = self.sig(scale)
+            if self.conditional_residual:
+                updated_input = torch.concat(
+                    [projected_space, pred_concepts.view(pred_concepts.shape[0], -1)],
+                    dim=-1,
+                )
+            else:
+                updated_input = projected_space
+            res = scale * self.residual_model(
+                updated_input
+            )
+            # Shape: (B, k, 1)
+            res = self.sig(res.unsqueeze(-1))
+            if self.residual_norm_loss:
+                self._current_residuals.append(
+                    torch.norm(res, p=1, dim=-1)
+                )
+            used_pred_concepts = (
+                # Shape: (B, k, m)
+                (1 - res) * used_pred_concepts *
+                res * self.residual_embeddings.unsqueeze(0)
+            )
 
         if self.bottleneck_pooling == 'additive':
             bottleneck = torch.zeros(
@@ -890,7 +1000,9 @@ class MixingConceptEmbeddingModel(ConceptEmbeddingModel):
         else:
             y_pred = self.c2y_model(bottleneck)
 
-        if (not self.warmup_mode) and (not self.per_concept_residual):
+        if (not self.warmup_mode) and (not self.per_concept_residual) and (
+            not self.learn_residual_embeddings
+        ):
             if self.residual_deviation:
                 # Then add some noise!
                 projected_space = projected_space + torch.normal(
@@ -938,12 +1050,22 @@ class MixingConceptEmbeddingModel(ConceptEmbeddingModel):
         self.concept_embeddings.requires_grad = True
 
     def freeze_residual(self):
+        # self._training_residual = False
         for param in self.residual_model.parameters():
             param.requires_grad = False
+        if self.learn_residual_embeddings:
+            self.residual_embeddings.requires_grad = False
+        if self.learnable_residual_scale:
+            self.residual_scale.requires_grad = False
 
     def unfreeze_residual(self):
+        # self._training_residual = True
         for param in self.residual_model.parameters():
             param.requires_grad = True
+        if self.learn_residual_embeddings:
+            self.residual_embeddings.requires_grad = True
+        if self.learnable_residual_scale:
+            self.residual_scale.requires_grad = True
 
     def freeze_label_predictor(self):
         if 'per_class_mixing' in self.bottleneck_pooling:

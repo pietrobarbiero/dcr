@@ -493,6 +493,7 @@ def construct_model(
             "residual_norm_loss": config.get('residual_norm_loss', 0),
             "learnable_residual_scale": config.get('learnable_residual_scale', False),
             "sigmoidal_residual_scale": config.get('sigmoidal_residual_scale', False),
+            "learn_residual_embeddings": config.get("learn_residual_embeddings", False),
         }
     else:
         raise ValueError(f'Invalid architecture "{config["architecture"]}"')

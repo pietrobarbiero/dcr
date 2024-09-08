@@ -605,10 +605,12 @@ class MixingConceptEmbeddingModel(ConceptEmbeddingModel):
                     else:
                         updated_input = projected_space
                     # Shape (B, 1)
-                    res = scale * self.residual_model[i](
+                    res = self.residual_model[i](
                         updated_input
                     )
-                    res = self.sig(res)
+                    if self.sigmoidal_residual_scale:
+                        scale = self.sig(scale)
+                    res = scale * self.sig(res)
                     if self.residual_norm_loss:
                         self._current_residuals.append(torch.norm(res, p=1, dim=-1))
 
@@ -653,11 +655,11 @@ class MixingConceptEmbeddingModel(ConceptEmbeddingModel):
                 )
             else:
                 updated_input = projected_space
-            res = scale * self.residual_model(
+            res =  self.residual_model(
                 updated_input
             )
             # Shape: (B, k, 1)
-            res = self.sig(res.unsqueeze(-1))
+            res = scale * self.sig(res.unsqueeze(-1))
             if self.residual_norm_loss:
                 self._current_residuals.append(
                     torch.norm(res, p=1, dim=-1)

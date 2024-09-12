@@ -1482,7 +1482,26 @@ class CUBDataset(Dataset):
     Returns a compatible Torch Dataset object customized for the CUB dataset
     """
 
-    def __init__(self, pkl_file_paths, use_attr, no_img, uncertain_label, image_dir, n_class_attr, root_dir='../data/CUB200/', path_transform=None, transform=None, concept_transform=None, label_transform=None, from_clip_embedding=False, zero_shot_clip_attrs=False, clip_concept_embbedings_path=None, clip_model=None):
+    def __init__(
+        self,
+        pkl_file_paths,
+        use_attr,
+        no_img,
+        uncertain_label,
+        image_dir,
+        n_class_attr,
+        root_dir='../data/CUB200/',
+        path_transform=None,
+        transform=None,
+        concept_transform=None,
+        label_transform=None,
+        from_clip_embedding=False,
+        zero_shot_clip_attrs=False,
+        clip_concept_embbedings_path=None,
+        clip_model=None,
+        traveling_birds=False,
+        traveling_birds_root_dir=None,
+    ):
         """
         Arguments:
         pkl_file_paths: list of full path to all the pkl data
@@ -1513,6 +1532,9 @@ class CUBDataset(Dataset):
         self.from_clip_embedding = from_clip_embedding
         self.zero_shot_clip_attrs = zero_shot_clip_attrs
         self.clip_model = clip_model
+        self.traveling_birds = traveling_birds
+        self.traveling_birds_root_dir = traveling_birds_root_dir
+        self.is_val = any(["val" in path for path in pkl_file_paths])
         if zero_shot_clip_attrs:
             embeddings_file = (
                 clip_concept_embbedings_path or
@@ -1541,12 +1563,16 @@ class CUBDataset(Dataset):
         if self.path_transform == None:
             img_path = img_path.replace(
                 '/juice/scr/scr102/scr/thaonguyen/CUB_supervision/datasets/',
-                '../data/CUB200/'
+                self.root_dir
             )
             # Trim unnecessary paths
             try:
-                idx = img_path.split('/').index('CUB_200_2011')
-                img_path = self.root_dir + '/'.join(img_path.split('/')[idx:])
+                if self.traveling_birds:
+                    idx = img_path.split('/').index('CUB_200_2011')
+                    folder = '/train/' if (self.is_train or self.is_val) else '/test/'
+                    img_path = self.traveling_birds_root_dir + folder + '/'.join(img_path.split('/')[idx+2:])
+                else:
+                    idx = img_path.split('/').index('CUB_200_2011')
                 if self.from_clip_embedding:
                     emb_path = img_path.replace('/images/', f'/clip_{self.clip_model.replace("/", "_")}_embeddings/')
                     emb_path = emb_path.replace('.jpg', '.npy')
@@ -1694,6 +1720,8 @@ def load_data(
     clip_model=None,
     zero_shot_clip_attrs=False,
     clip_concept_embbedings_path=None,
+    traveling_birds_root_dir=None,
+    traveling_birds=False,
 ):
     """
     Note: Inception needs (299,299,3) images with inputs scaled between -1 and 1
@@ -1751,6 +1779,8 @@ def load_data(
         clip_model=clip_model,
         zero_shot_clip_attrs=zero_shot_clip_attrs,
         clip_concept_embbedings_path=clip_concept_embbedings_path,
+        traveling_birds_root_dir=traveling_birds_root_dir,
+        traveling_birds=traveling_birds,
     )
     if is_training:
         drop_last = True
@@ -1858,6 +1888,8 @@ def generate_data(
     zero_shot_clip_attrs = config.get('zero_shot_clip_attrs', False)
     clip_concept_embbedings_path = config.get('clip_concept_embbedings_path', None)
     clip_model = config.get('clip_model', 'ViT-B/32')
+    traveling_birds_root_dir = config.get('traveling_birds_root_dir', None)
+    traveling_birds = config.get('traveling_birds', False)
 
     if zero_shot_clip_attrs:
         concept_group_map = UNSUPERVISED_CONCEPT_GROUP_MAP.copy()
@@ -1955,6 +1987,8 @@ def generate_data(
         clip_model=clip_model,
         zero_shot_clip_attrs=zero_shot_clip_attrs,
         clip_concept_embbedings_path=clip_concept_embbedings_path,
+        traveling_birds_root_dir=traveling_birds_root_dir,
+        traveling_birds=traveling_birds,
     )
     val_dl = load_data(
         pkl_paths=[val_data_path],
@@ -1972,6 +2006,8 @@ def generate_data(
         clip_model=clip_model,
         zero_shot_clip_attrs=zero_shot_clip_attrs,
         clip_concept_embbedings_path=clip_concept_embbedings_path,
+        traveling_birds_root_dir=traveling_birds_root_dir,
+        traveling_birds=traveling_birds,
     )
 
     test_dl = load_data(
@@ -1990,6 +2026,8 @@ def generate_data(
         clip_model=clip_model,
         zero_shot_clip_attrs=zero_shot_clip_attrs,
         clip_concept_embbedings_path=clip_concept_embbedings_path,
+        traveling_birds_root_dir=traveling_birds_root_dir,
+        traveling_birds=traveling_birds,
     )
     if not output_dataset_vars:
         return train_dl, val_dl, test_dl, imbalance

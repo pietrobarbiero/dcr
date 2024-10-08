@@ -695,7 +695,9 @@ class ConceptBottleneckModel(pl.LightningModule):
                     ("auc" in name) or
                     ("mask_accuracy" in name) or
                     ("current_steps" in name) or
-                    ("num_rollouts" in name)
+                    ("num_rollouts" in name) or
+                    ("mode" in name) or
+                    ("adv" in name)
                 )
             else:
                 prog_bar = (
@@ -703,23 +705,25 @@ class ConceptBottleneckModel(pl.LightningModule):
                     ("y_accuracy" in name) or
                     ("mask_accuracy" in name) or
                     ("current_steps" in name) or
-                    ("num_rollouts" in name)
+                    ("num_rollouts" in name) or
+                    ("mode" in name) or
+                    ("adv" in name)
 
                 )
             self.log(name, val, prog_bar=prog_bar)
         return {
             "loss": loss,
             "log": {
-                "c_accuracy": result['c_accuracy'],
-                "c_auc": result['c_auc'],
-                "c_f1": result['c_f1'],
-                "y_accuracy": result['y_accuracy'],
-                "y_auc": result['y_auc'],
-                "y_f1": result['y_f1'],
-                "concept_loss": result['concept_loss'],
-                "task_loss": result['task_loss'],
-                "loss": result['loss'],
-                "avg_c_y_acc": result['avg_c_y_acc'],
+                "c_accuracy": result.get('c_accuracy', 0),
+                "c_auc": result.get('c_auc', 0),
+                "c_f1": result.get('c_f1', 0),
+                "y_accuracy": result.get('y_accuracy', 0),
+                "y_auc": result.get('y_auc', 0),
+                "y_f1": result.get('y_f1', 0),
+                "concept_loss": result.get('concept_loss', 0),
+                "task_loss": result.get('task_loss', 0),
+                "loss": result.get('loss', 0),
+                "avg_c_y_acc": result.get('avg_c_y_acc', 0),
             },
         }
 

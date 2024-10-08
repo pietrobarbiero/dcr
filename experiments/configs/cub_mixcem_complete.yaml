@@ -157,6 +157,7 @@ runs:
     training_intervention_prob: 0
     embedding_activation: "leakyrelu"
     sigmoidal_prob: True
+    concept_loss_weight: 0
     grid_variables:
       - extra_dims
     grid_search_mode: exhaustive

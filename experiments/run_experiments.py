@@ -92,6 +92,8 @@ import cem.data.waterbirds_loader as waterbirds_data_module
 import cem.train.train_blackbox as train_blackbox
 import cem.train.train_mixcem as train_mixcem
 import cem.train.train_pcbm as train_pcbm
+import cem.train.train_adversarial_cbm as train_adversarial_cbm
+import cem.train.train_defer_cem as train_defer_cem
 import cem.train.training as training
 import cem.train.utils as utils
 
@@ -611,8 +613,19 @@ def _multiprocess_run_trial(
 
     elif config["architecture"] in [
         "NewMixingConceptEmbeddingModel",  # TODO: CHANGE THIS IF THIS WORKS!!!!!!!!!!!!!!
+        "ProjectionConceptEmbeddingModel",
     ]:
         train_fn = train_mixcem.train_mixcem
+
+    elif config["architecture"] in [
+        "ACBM",  # TODO: CHANGE THIS IF THIS WORKS!!!!!!!!!!!!!!
+        "AdversarialCBM",
+        "AdversarialConceptBottleneckModel",
+    ]:
+        train_fn = train_adversarial_cbm.train_adversarial_cbm
+
+    elif config["architecture"] == "DeferConceptEmbeddingModel":
+        train_fn = train_defer_cem.train_defer_cem
 
     elif config["architecture"] in [
         "PosthocCBM",
@@ -833,8 +846,8 @@ def main(
             ):
                 run_config = copy.deepcopy(run_config)
                 run_config['result_dir'] = result_dir
-                experiment_utils.evaluate_expressions(run_config, soft=True)
                 run_config['split'] = split
+                experiment_utils.evaluate_expressions(run_config, soft=True)
 
                 old_results = None
                 if "run_name" not in run_config:

@@ -13,6 +13,10 @@ import cem.models.intcbm as models_intcbm
 import cem.models.mixcem as models_mixcem
 import cem.models.posthoc_cbm as models_pcbm
 import cem.models.probcbm as models_probcbm
+import cem.models.backtracking as backtrack
+import cem.models.direction_cem as direction_cem
+import cem.models.defer_cem as defer_cem
+import cem.models.adversarial_cbm as adversarial_cbm
 import cem.train.utils as utils
 
 
@@ -46,6 +50,7 @@ def construct_model(
     inactive_intervention_values=None,
     output_latent=False,
     output_interventions=False,
+    train=False,
 ):
     task_loss_weight = config.get('task_loss_weight', 1.0)
     if config["architecture"] in ["ConceptEmbeddingModel", "CEM"]:
@@ -336,7 +341,7 @@ def construct_model(
             "num_rollouts": config.get("num_rollouts", 1),
         }
     elif config["architecture"] in ["IntAwareConceptEmbeddingModel", "IntCEM"]:
-        task_loss_weight = config.get('task_loss_weight', 0.0)
+        task_loss_weight = config.get('task_loss_weight', 1)
         model_cls = models_intcbm.IntAwareConceptEmbeddingModel
         extra_params = {
             "emb_size": config["emb_size"],
@@ -375,6 +380,93 @@ def construct_model(
             "int_model_use_bn": config.get("int_model_use_bn", False),
             "num_rollouts": config.get("num_rollouts", 1),
         }
+    elif config["architecture"] in ["IntAwareMixCEM"]:
+        task_loss_weight = config.get('task_loss_weight', 1)
+        model_cls = backtrack.IntAwareMixCEM
+        extra_params = {
+            "emb_size": config["emb_size"],
+            "intervention_policy": intervention_policy,
+            "training_intervention_prob": config.get(
+                'training_intervention_prob',
+                0.25,
+            ),
+            "embedding_activation": config.get(
+                "embedding_activation",
+                "leakyrelu",
+            ),
+            "c2y_model": c2y_model,
+            "c2y_layers": config.get("c2y_layers", []),
+
+            "intervention_weight": config.get("intervention_weight", 5),
+            "horizon_rate": config.get("horizon_rate", 1.005),
+            "concept_map": config.get("concept_map", None),
+            "max_horizon": config.get("max_horizon", 6),
+            "include_only_last_trajectory_loss": config.get(
+                "include_only_last_trajectory_loss",
+                True,
+            ),
+            "intervention_task_loss_weight": config.get(
+                "intervention_task_loss_weight",
+                1,
+            ),
+            "initial_horizon": config.get("initial_horizon", 2),
+            "use_concept_groups": config.get("use_concept_groups", False),
+            "intervention_task_discount": config.get(
+                "intervention_task_discount",
+                config.get("intervention_task_discount", 1.1),
+            ),
+            "rollout_init_steps": config.get('rollout_init_steps', 0),
+            "int_model_layers": config.get("int_model_layers", None),
+            "int_model_use_bn": config.get("int_model_use_bn", False),
+            "num_rollouts": config.get("num_rollouts", 1),
+
+
+
+            "fixed_embeddings": config.get('fixed_embeddings', False),
+            "initial_concept_embeddings": config.get(
+                'initial_concept_embeddings',
+                None,
+            ),
+            "residual_scale": config.get('residual_scale', None),
+            "learnable_residual_scale": config.get('learnable_residual_scale', True),
+            "residual_scale_reg": config.get('residual_scale_reg', 0),
+            "sigmoidal_residual_scale": config.get('sigmoidal_residual_scale', False),
+            "residual_scale_norm_metric": config.get('residual_scale_norm_metric', 1),
+            "normalize_residual": config.get('normalize_residual', False),
+            "residual_nll_reg": config.get('residual_nll_reg', 0),
+            "fixed_residual_scale": config.get('fixed_residual_scale', None),
+            "intermediate_task_concept_loss": config.get('intermediate_task_concept_loss', 0),
+            "drop_residual_prob": config.get('drop_residual_prob', 0),
+            "scalar_residual": config.get('scalar_residual', False),
+            "sigmoidal_residual": config.get('sigmoidal_residual', False),
+            "use_distance_probs": config.get('use_distance_probs', False),
+        }
+
+    elif (
+        "AdversarialConceptBottleneckModel" in config["architecture"] or
+        "AdversarialCBM" in config["architecture"]
+    ):
+        model_cls = adversarial_cbm.AdversarialConceptBottleneckModel
+        extra_params = {
+            "bool": config["bool"],
+            "extra_dims": config["extra_dims"],
+            "sigmoidal_extra_capacity": config.get(
+                "sigmoidal_extra_capacity",
+                True,
+            ),
+            "sigmoidal_prob": config.get("sigmoidal_prob", True),
+            "intervention_policy": intervention_policy,
+            "bottleneck_nonlinear": config.get("bottleneck_nonlinear", None),
+            "active_intervention_values": active_intervention_values,
+            "inactive_intervention_values": inactive_intervention_values,
+            "x2c_model": x2c_model,
+            "c2y_model": c2y_model,
+            "c2y_layers": config.get("c2y_layers", []),
+            "discriminator_layers": config.get('discriminator_layers', []),
+            "discriminator_loss_weight": config.get('discriminator_loss_weight', 1),
+            "interleave_steps": config.get('interleave_steps', 5),
+        }
+
     elif (
         "ConceptBottleneckModel" in config["architecture"] or
         "CBM" in config["architecture"]
@@ -396,6 +488,7 @@ def construct_model(
             "c2y_model": c2y_model,
             "c2y_layers": config.get("c2y_layers", []),
         }
+
     elif config["architecture"] in [
         "PCBM",
         "PosthocCBM",
@@ -439,11 +532,26 @@ def construct_model(
                 0.0,
             ),
         )
-    elif config["architecture"] in [
-        "NewMixingConceptEmbeddingModel",
-    ]:
-        model_cls = models_mixcem.MixingConceptEmbeddingModel
+    elif "NewMixingConceptEmbeddingModel" in config["architecture"]:
+        if config['architecture'] == 'NeSyMixingConceptEmbeddingModel':
+            model_cls = models_mixcem.NeSyMixingConceptEmbeddingModel
+        else:
+            model_cls = models_mixcem.MixingConceptEmbeddingModel
         extra_params = {
+            'rollout_init_steps': config.get('rollout_init_steps', 0),
+            'int_model_layers': config.get('int_model_layers', None),
+            'int_model_use_bn': config.get('int_model_use_bn', True),
+            'num_rollouts': config.get('num_rollouts', 1),
+            'intervention_discount': config.get('intervention_discount', 1),
+            'include_only_last_trajectory_loss': config.get('include_only_last_trajectory_loss', True),
+            'intervention_task_loss_weight': config.get('intervention_task_loss_weight', 1),
+            'intervention_weight': config.get('intervention_weight', 5),
+            'concept_map': config.get('concept_map', None),
+            'max_horizon': config.get('max_horizon', 6),
+            'initial_horizon': config.get('initial_horizon', 2),
+            'horizon_rate': config.get('horizon_rate', 1.005),
+
+
             "emb_size": config["emb_size"],
             "normalize_embs": config.get(
                 "normalize_embs",
@@ -489,12 +597,255 @@ def construct_model(
             "shared_per_concept_residual": config.get('shared_per_concept_residual', False),
             "sigmoidal_residual": config.get('sigmoidal_residual', False),
             "residual_deviation": config.get('residual_deviation', False),
-            "warmup_mode": config.get('blackbox_warmup_epochs', 0) > 0,
+            "warmup_mode": train and (config.get('blackbox_warmup_epochs', 0) > 0),
+            "include_bypass_model": (config.get('blackbox_warmup_epochs', 0) > 0),
             "residual_norm_loss": config.get('residual_norm_loss', 0),
             "learnable_residual_scale": config.get('learnable_residual_scale', False),
             "sigmoidal_residual_scale": config.get('sigmoidal_residual_scale', False),
             "learn_residual_embeddings": config.get("learn_residual_embeddings", False),
+            "residual_norm_metric": config.get('residual_norm_metric', 1),
+            "residual_scale_norm_metric": config.get('residual_scale_norm_metric', 1),
+            "noise_residual_embedings": config.get('noise_residual_embedings', False),
+            "dynamic_residual": config.get('dynamic_residual', False),
+            "learnable_distance_metric": config.get('learnable_distance_metric', False),
+            "learnable_prob_model": config.get('learnable_prob_model', False),
+            "residual_model_weight_l2_reg": config.get('residual_model_weight_l2_reg', 0),
+            "extra_capacity_dropout_prob": config.get('extra_capacity_dropout_prob', 0),
+            "extra_capacity": config.get("extra_capacity", 0),
+            "orthogonal_extra_capacity": config.get("orthogonal_extra_capacity", False),
+            "use_residual": config.get('use_residual', True),
         }
+        # extra_params = {
+        #     "emb_size": config["emb_size"],
+        #     "normalize_embs": config.get(
+        #         "normalize_embs",
+        #         False,
+        #     ),
+        #     "intermediate_task_concept_loss": config.get(
+        #         "intermediate_task_concept_loss",
+        #         0.0,
+        #     ),
+        #     "intervention_task_discount": config.get(
+        #         "intervention_task_discount",
+        #         1,
+        #     ),
+        #     "mix_ground_truth_embs": config.get(
+        #         "mix_ground_truth_embs",
+        #         True,
+        #     ),
+        #     "intervention_policy": intervention_policy,
+        #     "training_intervention_prob": config.get(
+        #         'training_intervention_prob',
+        #         0.25,
+        #     ),
+        #     "embedding_activation": config.get(
+        #         "embedding_activation",
+        #         None,
+        #     ),
+        #     "c2y_model": c2y_model,
+        #     "c2y_layers": config.get("c2y_layers", []),
+
+        #     "fixed_embeddings": config.get('fixed_embeddings', False),
+        #     "initial_concept_embeddings": config.get(
+        #         'initial_concept_embeddings',
+        #         None,
+        #     ),
+        #     "use_cosine_similarity": config.get('use_cosine_similarity', False),
+        #     "use_linear_emb_layer": config.get('use_linear_emb_layer', False),
+        #     "fixed_scale": config.get('fixed_scale', None),
+        #     "residual_scale": config.get('residual_scale', 1),
+        #     "conditional_residual": config.get('conditional_residual', False),
+        #     "residual_layers": config.get("residual_layers", []),
+        #     "bottleneck_pooling": config.get('bottleneck_pooling', 'concat'),
+        #     "per_concept_residual": config.get('per_concept_residual', False),
+        #     "shared_per_concept_residual": config.get('shared_per_concept_residual', False),
+        #     "sigmoidal_residual": config.get('sigmoidal_residual', False),
+        #     "residual_deviation": config.get('residual_deviation', False),
+        #     "warmup_mode": train and (config.get('blackbox_warmup_epochs', 0) > 0),
+        #     "include_bypass_model": (config.get('blackbox_warmup_epochs', 0) > 0),
+        #     "residual_norm_loss": config.get('residual_norm_loss', 0),
+        #     "learnable_residual_scale": config.get('learnable_residual_scale', False),
+        #     "sigmoidal_residual_scale": config.get('sigmoidal_residual_scale', False),
+        #     "learn_residual_embeddings": config.get("learn_residual_embeddings", False),
+        #     "residual_norm_metric": config.get('residual_norm_metric', 1),
+        #     "residual_scale_norm_metric": config.get('residual_scale_norm_metric', 1),
+        #     "noise_residual_embedings": config.get('noise_residual_embedings', False),
+        #     "dynamic_residual": config.get('dynamic_residual', False),
+        #     "learnable_distance_metric": config.get('learnable_distance_metric', False),
+        #     "learnable_prob_model": config.get('learnable_prob_model', False),
+        #     "residual_model_weight_l2_reg": config.get('residual_model_weight_l2_reg', 0),
+        #     "extra_capacity_dropout_prob": config.get('extra_capacity_dropout_prob', 0),
+        #     "extra_capacity": config.get("extra_capacity", 0),
+        #     "orthogonal_extra_capacity": config.get("orthogonal_extra_capacity", False),
+        #     "use_residual": config.get('use_residual', True),
+        # }
+    elif config['architecture'] == "ProjectionConceptEmbeddingModel":
+        model_cls = direction_cem.ProjectionConceptEmbeddingModel
+        extra_params = {
+            'rollout_init_steps': config.get('rollout_init_steps', 0),
+            'int_model_layers': config.get('int_model_layers', None),
+            'int_model_use_bn': config.get('int_model_use_bn', True),
+            'num_rollouts': config.get('num_rollouts', 1),
+            'intervention_discount': config.get('intervention_discount', 1),
+            'include_only_last_trajectory_loss': config.get('include_only_last_trajectory_loss', True),
+            'intervention_task_loss_weight': config.get('intervention_task_loss_weight', 1),
+            'intervention_weight': config.get('intervention_weight', 5),
+            'concept_map': config.get('concept_map', None),
+            'max_horizon': config.get('max_horizon', 6),
+            'initial_horizon': config.get('initial_horizon', 2),
+            'horizon_rate': config.get('horizon_rate', 1.005),
+
+
+
+            "emb_size": config["emb_size"],
+            "normalize_embs": config.get(
+                "normalize_embs",
+                False,
+            ),
+            "intermediate_task_concept_loss": config.get(
+                "intermediate_task_concept_loss",
+                0.0,
+            ),
+            "intervention_task_discount": config.get(
+                "intervention_task_discount",
+                1,
+            ),
+            "mix_ground_truth_embs": config.get(
+                "mix_ground_truth_embs",
+                True,
+            ),
+            "intervention_policy": intervention_policy,
+            "training_intervention_prob": config.get(
+                'training_intervention_prob',
+                0.25,
+            ),
+            "embedding_activation": config.get(
+                "embedding_activation",
+                None,
+            ),
+            "c2y_model": c2y_model,
+            "c2y_layers": config.get("c2y_layers", []),
+
+            "fixed_embeddings": config.get('fixed_embeddings', False),
+            "initial_concept_embeddings": config.get(
+                'initial_concept_embeddings',
+                None,
+            ),
+            "use_cosine_similarity": config.get('use_cosine_similarity', False),
+            "use_linear_emb_layer": config.get('use_linear_emb_layer', False),
+            "fixed_scale": config.get('fixed_scale', None),
+            "residual_scale": config.get('residual_scale', 1),
+            "residual_layers": config.get("residual_layers", []),
+            "bottleneck_pooling": config.get('bottleneck_pooling', 'concat'),
+            "per_concept_residual": config.get('per_concept_residual', False),
+            "shared_per_concept_residual": config.get('shared_per_concept_residual', False),
+            "sigmoidal_residual": config.get('sigmoidal_residual', False),
+            "residual_deviation": config.get('residual_deviation', False),
+            "warmup_mode": train and (config.get('blackbox_warmup_epochs', 0) > 0),
+            "include_bypass_model": (config.get('blackbox_warmup_epochs', 0) > 0),
+            "residual_norm_loss": config.get('residual_norm_loss', 0),
+            "learnable_residual_scale": config.get('learnable_residual_scale', False),
+            "sigmoidal_residual_scale": config.get('sigmoidal_residual_scale', False),
+            "learn_residual_embeddings": config.get("learn_residual_embeddings", False),
+            "residual_norm_metric": config.get('residual_norm_metric', 1),
+            "residual_scale_norm_metric": config.get('residual_scale_norm_metric', 1),
+            "noise_residual_embedings": config.get('noise_residual_embedings', False),
+            "dynamic_residual": config.get('dynamic_residual', False),
+            "learnable_distance_metric": config.get('learnable_distance_metric', False),
+            "learnable_prob_model": config.get('learnable_prob_model', False),
+            "residual_model_weight_l2_reg": config.get('residual_model_weight_l2_reg', 0),
+            "extra_capacity": config.get("extra_capacity", 0),
+            "orthogonal_extra_capacity": config.get("orthogonal_extra_capacity", False),
+            "use_residual": config.get('use_residual', True),
+            "simplified_mode": config.get('simplified_mode', False),
+            "use_triplet_loss": config.get('use_triplet_loss', False),
+            "learnable_orthogonal_dir": config.get('learnable_orthogonal_dir', False),
+            "single_residual_vector": config.get('single_residual_vector', False),
+            "extra_capacity_dropout_prob": config.get('extra_capacity_dropout_prob', 0),
+
+            "adversary_loss_weight": config.get('adversary_loss_weight', 0),
+            "use_learnable_residual": config.get('use_learnable_residual', False),
+            "warmup_period": config.get('warmup_period', 0),
+            "sigmoidal_extra_capacity": config.get('sigmoidal_extra_capacity', True),
+            "conditional_residual": config.get('conditional_residual', True),
+            "use_learnable_prob": config.get('use_learnable_prob', False),
+            "dyn_scaling": config.get('dyn_scaling', 100),
+
+            "residual_weight_l2": config.get('residual_weight_l2', 0),
+            "residual_drop_prob": config.get('residual_drop_prob', 0),
+            "mix_residuals": config.get('mix_residuals', False),
+            "manual_residual_scale": config.get('manual_residual_scale', 1),
+            "residual_sep_loss": config.get('residual_sep_loss', 0),
+            "residual_ood_detection": config.get('residual_ood_detection', 1),
+        }
+
+
+    elif config['architecture'] == "DeferConceptEmbeddingModel":
+        model_cls = defer_cem.DeferConceptEmbeddingModel
+        extra_params = {
+            'rollout_init_steps': config.get('rollout_init_steps', 0),
+            'int_model_layers': config.get('int_model_layers', None),
+            'int_model_use_bn': config.get('int_model_use_bn', True),
+            'num_rollouts': config.get('num_rollouts', 1),
+            'intervention_discount': config.get('intervention_discount', 1),
+            'include_only_last_trajectory_loss': config.get('include_only_last_trajectory_loss', True),
+            'intervention_task_loss_weight': config.get('intervention_task_loss_weight', 1),
+            'intervention_weight': config.get('intervention_weight', 5),
+            'concept_map': config.get('concept_map', None),
+            'max_horizon': config.get('max_horizon', 6),
+            'initial_horizon': config.get('initial_horizon', 2),
+            'horizon_rate': config.get('horizon_rate', 1.005),
+
+
+
+
+            "emb_size": config["emb_size"],
+            "intervention_task_discount": config.get(
+                "intervention_task_discount",
+                1,
+            ),
+            "intervention_policy": intervention_policy,
+            "training_intervention_prob": config.get(
+                'training_intervention_prob',
+                0.25,
+            ),
+            "embedding_activation": config.get(
+                "embedding_activation",
+                None,
+            ),
+            "c2y_model": c2y_model,
+            "c2y_layers": config.get("c2y_layers", []),
+
+            "fixed_embeddings": config.get('fixed_embeddings', False),
+            "fixed_scale": config.get('fixed_scale', None),
+            "initial_concept_embeddings": config.get(
+                'initial_concept_embeddings',
+                None,
+            ),
+            "bottleneck_pooling": config.get('bottleneck_pooling', 'concat'),
+
+            'bottleneck_pooling': config.get('bottleneck_pooling', 'concat'),
+            'fixed_embeddings': config.get('fixed_embeddings', False),
+            'initial_concept_embeddings': config.get('initial_concept_embeddings', None),
+            'fixed_scale': config.get('fixed_scale', None),
+            'simplified_mode': config.get('simplified_mode', False),
+            'shared_emb_generator': config.get('shared_emb_generator', True),
+            'dynamic_ood_detection': config.get('dynamic_ood_detection', 1),
+            'dynamic_weights_reg': config.get('dynamic_weights_reg', 0),
+            'dynamic_weights_reg_norm': config.get('dynamic_weights_reg_norm', 2),
+            'dynamic_activations_reg': config.get('dynamic_activations_reg', 0),
+            'dynamic_activations_reg_norm': config.get('dynamic_activations_reg_norm', 2),
+            'dynamic_drop_prob': config.get('dynamic_drop_prob', 0),
+            'conditional_pred_mixture': config.get('conditional_pred_mixture', False),
+            'mode': config.get('mode', 'joint'),
+            "mixcem_c2y_scaling": config.get('mixcem_c2y_scaling', 1),
+            "dynamic_c2y_scaling": config.get('dynamic_c2y_scaling', 1),
+            "dyn_from_shared_space": config.get('dyn_from_shared_space', True),
+            "probability_mode": config.get('probability_mode', 'joint'),
+            "mix_before_predictor": config.get('mix_before_predictor', False),
+            "joint_model_pooling": config.get('joint_model_pooling', None),
+        }
+
     else:
         raise ValueError(f'Invalid architecture "{config["architecture"]}"')
 

@@ -15,7 +15,7 @@ from PIL import Image
 from pytorch_lightning import seed_everything
 from torch.utils.data import Dataset, Subset, DataLoader
 
-from cem.data.CUB200.cub_loader import CONCEPT_GROUP_MAP, SELECTED_CONCEPTS
+from cem.data.CUB200.cub_loader import CONCEPT_GROUP_MAP, SELECTED_CONCEPTS, find_class_imbalance
 
 ########################################################
 ## GENERAL DATASET GLOBAL VARIABLES
@@ -67,6 +67,7 @@ class WaterbirdsDataset(Dataset):
         use_bird_species=False,
         concept_transform=None,
         n_classes=2,
+        majority_vote_attrs=False,
     ):
         self.root_dir = root_dir
         self.augment_data = augment_data
@@ -76,6 +77,7 @@ class WaterbirdsDataset(Dataset):
         self.use_attributes = use_attributes
         self.use_bird_species = use_bird_species
         self.concept_transform = concept_transform
+        self.majority_vote_attrs = majority_vote_attrs
 
         if not os.path.exists(self.root_dir):
             raise ValueError(
@@ -107,10 +109,14 @@ class WaterbirdsDataset(Dataset):
                     'set to True for Waterbirds.'
                 )
             if self.use_attributes:
+                if self.majority_vote_attrs:
+                    pre = 'majority_vote_'
+                else:
+                    pre = ''
                 with open(
                     os.path.join(
                         self.cub_root_dir,
-                        'CUB_200_2011/attributes/image_attribute_labels.txt',
+                        f'CUB_200_2011/attributes/{pre}image_attribute_labels.txt',
                     ),
                     'r',
                 ) as f:
@@ -238,6 +244,7 @@ def load_data(
     n_classes=2,
     use_attributes=True,
     use_bird_species=False,
+    majority_vote_attrs=False,
     cub_root_dir=None,
     concept_transform=None,
 ):
@@ -281,6 +288,7 @@ def load_data(
         use_attributes=use_attributes,
         use_bird_species=use_bird_species,
         concept_transform=concept_transform,
+        majority_vote_attrs=majority_vote_attrs,
     )
     if dataset_size is not None:
         # Then we will subsample this training set so that after splitting
@@ -373,6 +381,7 @@ def generate_data(
     use_bird_species = config.get('use_bird_species', False)
     batch_size = config.get('batch_size', 32)
     n_classes = config.get('n_classes', 2)
+    majority_vote_attrs = config.get('majority_vote_attrs', False)
 
     if use_attributes:
         n_concepts = len(SELECTED_CONCEPTS)
@@ -471,17 +480,26 @@ def generate_data(
         cub_root_dir=config.get('cub_root_dir', None),
         use_attributes=use_attributes,
         use_bird_species=use_bird_species,
+        majority_vote_attrs=majority_vote_attrs,
         concept_transform=concept_transform,
     )
 
     if config.get('weight_loss', False):
-        attribute_count = np.zeros((n_concepts,))
-        samples_seen = 0
-        for i, (_, y, c) in enumerate(train_dl):
-            c = c.cpu().detach().numpy()
-            attribute_count += np.sum(c, axis=0)
-            samples_seen += c.shape[0]
-        imbalance = samples_seen / attribute_count - 1
+        if use_attributes and config.get('cub_root_dir', None):
+            base_dir = os.path.join(
+                config.get('cub_root_dir'),
+                'class_attr_data_10',
+            )
+            train_data_path = os.path.join(base_dir, 'train.pkl')
+            imbalance = find_class_imbalance(train_data_path, True)
+        else:
+            attribute_count = np.zeros((n_concepts,))
+            samples_seen = 0
+            for i, (_, y, c) in enumerate(train_dl):
+                c = c.cpu().detach().numpy()
+                attribute_count += np.sum(c, axis=0)
+                samples_seen += c.shape[0]
+            imbalance = samples_seen / attribute_count - 1
     else:
         imbalance = None
 
@@ -499,6 +517,7 @@ def generate_data(
             cub_root_dir=config.get('cub_root_dir', None),
             use_attributes=use_attributes,
             use_bird_species=use_bird_species,
+            majority_vote_attrs=majority_vote_attrs,
             concept_transform=concept_transform,
         )
     else:
@@ -601,6 +620,7 @@ def generate_data(
         cub_root_dir=config.get('cub_root_dir', None),
         use_attributes=use_attributes,
         use_bird_species=use_bird_species,
+        majority_vote_attrs=majority_vote_attrs,
         concept_transform=concept_transform,
     )
 

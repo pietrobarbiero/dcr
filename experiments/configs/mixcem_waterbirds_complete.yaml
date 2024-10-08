@@ -3,13 +3,16 @@ model_selection_trials: 2
 results_dir: /anfs/bigdisc/me466/mixcem_results/waterbirds_complete/
 
 model_selection_groups:
-  - ["^(CBM_Sigmoid_Baseline_).*$", "Joint CBM (Baseline)"]
-  - ["^(Hybrid-CBM_).*(_Baseline_).*$", "Hybrid-CBM (Baseline)"]
-  - ["^(CEM_Baseline_).*$", "CEM (Baseline)"]
+  - ["^(CBM_Sigmoid).*$", "Joint CBM (Baseline)"]
+  - ["^(CBM_Logit).*$", "Logit CBM (Baseline)"]
+  - ["^(Hybrid-CBM_).*$", "Hybrid-CBM (Baseline)"]
+  - ["^(CEM).*$", "CEM (Baseline)"]
   - ["^(DNN_).*$", "DNN (Baseline)"]
   - ["^(IntCEM_).*(_Baseline).*$", "IntCEM (Baseline)"]
   - ["^(MixCEM_).*(_Baseline).*$", "MixCEM (Baseline)"]
+  - ["^(Try_MixCEM_).*(_Baseline).*$", "Try_MixCEM (Baseline)"]
   - ["^(ProbCBM_).*$", "ProbCBM (Baseline)"]
+  - ["^(DNN_).*$", "DNN (Baseline)"]
 
 
 model_selection_metrics:
@@ -60,7 +63,6 @@ shared_params:
   patience: 15
   emb_size: 16
   extra_dims: 0
-  concept_loss_weight: [1, 5, 10]
   learning_rate: 0.01
   weight_decay: 0.000004
   weight_loss: True
@@ -73,6 +75,7 @@ shared_params:
   momentum: 0.9
   sigmoidal_prob: False
   training_intervention_prob: 0
+  concept_loss_weight: [1, 5, 10]
   grid_variables:
     - concept_loss_weight
   grid_search_mode: exhaustive
@@ -232,3 +235,85 @@ runs:
     extra_dims: 0
     sigmoidal_extra_capacity: False
     sigmoidal_prob: False
+
+  - architecture: 'IndependentConceptBottleneckModel'
+    run_name: "IndependentCBM_Baseline_cwl_{concept_loss_weight}"
+    training_intervention_prob: 0
+    embedding_activation: "leakyrelu"
+    bool: False
+    extra_dims: 0
+    sigmoidal_extra_capacity: False
+    sigmoidal_prob: True
+    concept_loss_weight: 1
+    grid_variables: []
+    grid_search_mode: exhaustive
+
+  - architecture: 'NewMixingConceptEmbeddingModel'
+    run_name: "Try_MixCEM_staged_ip_{training_intervention_prob}_emb_size_{emb_size}_dis_{intervention_task_discount}_rnl_{residual_norm_loss}_pcr_{per_concept_residual}_shared_{shared_per_concept_residual}_itl_{intermediate_task_concept_loss}_bp_{bottleneck_pooling}_cwl_{concept_loss_weight}"
+    training_intervention_prob: [[0.25, 0.5, 0.75, 1]]
+    emb_size: [64, 32] #[512, 1024]
+    embedding_activation: null
+    concept_loss_weight: [10] #, 0.1]
+    normalize_embs: False
+    task_concept_loss: 1
+    intervention_task_discount: [1.05] #1.1, 1.5]
+    use_cosine_similarity: False
+    early_stopping_best_model: False
+    conditional_residual: [True] #False, True]
+    # c2y_layers: [32, 16, 8]
+    residual_layers: [32, 16, 8]
+    bottleneck_pooling: 'concat'
+    per_concept_residual: [True]
+    sigmoidal_residual: [False]
+    residual_deviation: [0] #, 2]
+    shared_per_concept_residual: [True]
+    residual_norm_loss: [0.1, 0]
+    gradient_clip_val: 100
+    intermediate_task_concept_loss: 0
+
+    residual_scale: 1
+    blackbox_warmup_epochs: 0
+
+    concept_epochs: 50
+    fix_backbone_for_concept: False
+
+    no_residual_epochs: 50
+    fix_backbone_for_no_res: False
+    fix_concept_embeddings_for_no_res: False
+
+    e2e_epochs: 500
+    fix_backbone_for_res: False
+    fix_concept_embeddings_for_res: False
+    fix_label_predictor_for_res: False
+    use_ground_truth_mixing_for_res: False
+
+    grid_variables:
+      - concept_loss_weight
+      - emb_size
+      - training_intervention_prob
+      - intervention_task_discount
+      - conditional_residual
+      - per_concept_residual
+      - sigmoidal_residual
+      - residual_deviation
+      - shared_per_concept_residual
+      - residual_norm_loss
+    grid_search_mode: exhaustive
+
+    # Dataset Configuration
+    dataset_config:
+      dataset: "waterbirds"
+      num_workers: 8
+      batch_size: 256
+      n_classes: 2
+      majority_vote_attrs: True
+
+      # DATASET VARIABLES
+      root_dir: /anfs/bigdisc/me466/waterbirds
+      cub_root_dir: /homes/me466/data/CUB200/
+      use_attributes: True
+      augment_data: False
+      sampling_percent: 1
+      sampling_groups: True
+      test_subsampling: 1
+      weight_loss: True

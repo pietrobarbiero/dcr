@@ -1058,6 +1058,7 @@ class MixingConceptEmbeddingModel(ConceptEmbeddingModel):
         intermediate_task_concept_loss=0,
         intervention_task_discount=1,
         discovered_probs_entropy=0,
+        extra_dimensions=0,
 
         mix_ground_truth_embs=True,
         shared_emb_generator=False,
@@ -1382,6 +1383,12 @@ class MixingConceptEmbeddingModel(ConceptEmbeddingModel):
             self._cos_similarity = torch.nn.CosineSimilarity(dim=-1, eps=1e-08)
         else:
             self._cos_similarity = None
+
+        self.extra_dimensions = extra_dimensions
+        if extra_dimensions:
+            self.residual_model = torch.nn.Linear(self.emb_size, self.extra_dimensions)
+        else:
+            self.residual_model = None
 
     def _extra_losses(
         self,

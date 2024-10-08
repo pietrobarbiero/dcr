@@ -46,6 +46,8 @@ class ConceptEmbeddingModel(ConceptBottleneckModel):
         output_interventions=False,
         use_concept_groups=False,
 
+        context_gen_out_size=None,
+
         top_k_accuracy=None,
     ):
         """
@@ -132,6 +134,7 @@ class ConceptEmbeddingModel(ConceptBottleneckModel):
         self.pre_concept_model = c_extractor_arch(output_dim=None)
         self.training_intervention_prob = training_intervention_prob
         self.output_latent = output_latent
+        context_gen_out_size = context_gen_out_size or (2 * emb_size)
         if self.training_intervention_prob != 0:
             self.ones = torch.ones(n_concepts)
 
@@ -173,7 +176,7 @@ class ConceptEmbeddingModel(ConceptBottleneckModel):
                         )[-1].out_features,
                         # Two as each concept will have a positive and a
                         # negative embedding portion which are later mixed
-                        2 * emb_size,
+                        context_gen_out_size,
                     ),
                 ] + act_to_use))
             )

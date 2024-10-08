@@ -58,7 +58,7 @@ shared_params:
   patience: 15
   emb_size: 16
   extra_dims: 0
-  concept_loss_weight: [1]
+  concept_loss_weight: [1, 10]
   learning_rate: 0.005
   weight_decay: 0.000004
   weight_loss: False
@@ -103,18 +103,28 @@ shared_params:
 
 
 runs:
-  - architecture: 'ConceptEmbeddingModel'
-    run_name: "DNN"
-    sigmoidal_prob: True
+  - architecture: 'ConceptBottleneckModel'
+    run_name: "DNN_extra_dims_{extra_dims}"
+    extra_dims: [0, 50, 100, 200]
     training_intervention_prob: 0
-    concept_loss_weight: [0]
     embedding_activation: "leakyrelu"
+    sigmoidal_prob: True
+    concept_loss_weight: 0
+    grid_variables:
+      - extra_dims
+    grid_search_mode: exhaustive
+
 
   - architecture: 'ConceptEmbeddingModel'
-    run_name: "CEM"
+    run_name: "CEM_emb_size_{emb_size}_cwl_{concept_loss_weight}"
     sigmoidal_prob: True
     training_intervention_prob: 0.25
+    emb_size: [16, 32]
     embedding_activation: "leakyrelu"
+    grid_variables:
+        - concept_loss_weight
+        - emb_size
+    grid_search_mode: exhaustive
 
   - architecture: "IntAwareConceptEmbeddingModel"
     run_name: "IntCEM_intervention_weight_{intervention_weight}_intervention_task_discount_{intervention_task_discount}"
@@ -196,7 +206,7 @@ runs:
 
   - architecture: 'ConceptBottleneckModel'
     run_name: "Hybrid-CBM_Sigmoid_extra_dims_{extra_dims}_Baseline_cwl_{concept_loss_weight}"
-    extra_dims: [50, 100]
+    extra_dims: [50, 100, 200]
     training_intervention_prob: 0
     embedding_activation: "leakyrelu"
     sigmoidal_prob: True

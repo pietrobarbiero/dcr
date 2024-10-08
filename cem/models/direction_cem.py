@@ -1366,7 +1366,7 @@ class ProjectionConceptEmbeddingModel(IntAwareConceptEmbeddingModel):
                     result[f'y_top_{top_k_val}_accuracy'] = y_top_k_accuracy
         return loss, result
 
-    def _predict_labels(self, bottleneck):
+    def _predict_labels(self, bottleneck, **task_loss_kwargs):
         if 'per_class_mixing' in self.bottleneck_pooling:
             # Shape (B, k, m)
             concept_vectors = torch.nn.functional.leaky_relu(bottleneck[:, :self.n_concepts, :])

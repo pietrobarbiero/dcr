@@ -17,6 +17,7 @@ import cem.train.evaluate as evaluate
 import cem.train.utils as utils
 import cem.utils.data as data_utils
 
+from cem.models.base_wrappers import WrapperModule, EvalOnlyWrapperModule
 from cem.models.construction import construct_model
 from cem.train.training import _make_callbacks, _check_interruption, _restore_checkpoint
 
@@ -143,12 +144,41 @@ def train_pcbm(
 
         print("\tConstructing black-box model")
         blackbox_model_config = config["blackbox_model_config"]
-        bbox = standard_models.construct_standard_model(
+        bbox, _ = standard_models.construct_standard_model(
             architecture=blackbox_model_config['name'],
             input_shape=input_shape,
             n_labels=n_tasks,
             seed=seed,
             **blackbox_model_config,
+        )
+        if 'optimizer_config' in blackbox_model_config:
+            bbox_optimizer_config = blackbox_model_config['optimizer_config']
+        else:
+            bbox_optimizer_config = dict(
+                optimizer=config['optimizer'],
+                learning_rate=config.get('learning_rate', 1e-3),
+                weight_decay=config.get('weight_decay', 0),
+                momentum=config.get('momentum', 0.9),
+                lr_scheduler=dict(
+                    type='reduce_on_plateau',
+
+                )
+            )
+        if 'bbox_loss_config' in blackbox_model_config:
+            bbox_loss_config = blackbox_model_config['bbox_loss_config']
+        else:
+            bbox_loss_config = dict(
+                name="binary_cross_entropy" if n_tasks <= 2 else "cross_entropy"
+            )
+        bbox = WrapperModule(
+            model=bbox,
+            optimizer_config=bbox_optimizer_config,
+            loss_config=bbox_loss_config,
+            output_activation=None,
+            metrics=["accuracy" if n_tasks > 2 else "auc"],
+            task_class_weights=task_class_weights,
+            n_labels=n_tasks,
+
         )
         print(
             "\t\t[Number of parameters in black-box model",
@@ -161,59 +191,76 @@ def train_pcbm(
             "]",
         )
         bbox_path = config.get("blackbox_path")
-        if bbox_path and os.path.exists(bbox_path):
+        if bbox_path:
+            bbox_path = os.path.join(result_dir, bbox_path)
+            if bbox_path[-3:] != ".pt":
+                bbox_path +=  ".pt"
+        if (not rerun) and bbox_path and os.path.exists(bbox_path):
             print(f"\t\tLoading blackbox model's weights from {bbox_path}")
             bbox.load_state_dict(
                 torch.load(bbox_path),
                 strict=False,
             )
-
-        bbox_epochs = config.get('blackbox_training_epochs', 0)
-        if bbox_epochs != 0:
-            start_time = time.time()
-            print(
-                f"\t\tTraining blackbox model for {bbox_epochs} epochs"
-            )
-            bbox_callbacks, bbox_ckpt_call = _make_callbacks(
-                config.get('blackbox_early_stop_config', config),
-                result_dir,
-                ("BlackBoxModel_" + full_run_name),
-            )
-            bbox_trainer = pl.Trainer(
-                max_epochs=bbox_epochs,
-                callbacks=bbox_callbacks,
-                **trainer_args,
-            )
-            bbox_trainer.fit(bbox, train_dl, val_dl)
-            _check_interruption(bbox)
-            _restore_checkpoint(
-                model=bbox,
-                max_epochs=bbox_epochs,
-                ckpt_call=bbox_ckpt_call,
-                trainer=bbox_trainer,
-            )
-            num_epochs.append(bbox_trainer.current_epoch)
-            times.append(time.time() - start_time)
-            print(
-                f"\t\tDone with black box model training "
-                f"after {bbox_trainer.current_epoch} epochs ({times[-1]} sec)!"
-            )
         else:
-            num_epochs.append(0)
-            times.append(0)
+            bbox_epochs = config.get('blackbox_training_epochs', 0)
+            if bbox_epochs != 0:
+                start_time = time.time()
+                print(
+                    f"\t\tTraining blackbox model for {bbox_epochs} epochs"
+                )
+                bbox_callbacks, bbox_ckpt_call = _make_callbacks(
+                    config.get('blackbox_early_stop_config', config),
+                    result_dir,
+                    ("BlackBoxModel_" + full_run_name),
+                )
+                bbox_trainer = pl.Trainer(
+                    max_epochs=bbox_epochs,
+                    callbacks=bbox_callbacks,
+                    **trainer_args,
+                )
+                bbox_trainer.fit(bbox, train_dl, val_dl)
+                _check_interruption(bbox_trainer)
+                _restore_checkpoint(
+                    model=bbox,
+                    max_epochs=bbox_epochs,
+                    ckpt_call=bbox_ckpt_call,
+                    trainer=bbox_trainer,
+                )
+                num_epochs.append(bbox_trainer.current_epoch)
+                times.append(time.time() - start_time)
+                print(
+                    f"\t\tDone with black box model training "
+                    f"after {bbox_trainer.current_epoch} epochs ({times[-1]} sec)!"
+                )
+                if bbox_path:
+                    print(f"\t\tSaving blackbox model's weights from {bbox_path}")
+                    torch.save(
+                        bbox.state_dict(),
+                        bbox_path,
+                    )
+            else:
+                num_epochs.append(0)
+                times.append(0)
 
 
         #####################
         ## Step 2: extract embedding generator from black box model
         #####################
         print(f"\tConstructing embedding generator from black box model")
-
         _, latent_name = standard_models.get_out_layer_name_from_config(
-            blackbox_model_config["name"]
+            blackbox_model_config["name"],
+            add_linear_layers=blackbox_model_config.get('add_linear_layers'),
         )
         embedding_generator = standard_models.create_feature_extractor(
-            bbox,
-            return_nodes=[latent_name],
+            bbox.wrapped_model,
+            return_nodes={latent_name: latent_name},
+        )
+        embedding_generator = EvalOnlyWrapperModule(
+            model=embedding_generator,
+            n_labels=n_tasks,
+            metrics=[],
+            output_activation=None,
+            logits_name=latent_name,
         )
 
 
@@ -230,7 +277,9 @@ def train_pcbm(
             result_dir,
             f'{full_run_name}_Intercepts.npy'
         )
-        if os.path.exists(intercept_path) and os.path.exists(cav_path):
+        if (not rerun) and os.path.exists(intercept_path) and (
+            os.path.exists(cav_path)
+        ):
             # Then let's simply load them!
             print(f"\t\tFound CAVs cached, so we will load them")
 
@@ -272,33 +321,41 @@ def train_pcbm(
                     train_concept_labels=c_train[:, i],
                     C=config.get('svd_penalty', 1),
                 )
-                concept_vectors.append(np.expand_dims(cav, axis=0))
-                cav_intercepts.append(np.expand_dims(intercept, axis=0))
+                concept_vectors.append(cav)
+                cav_intercepts.append(intercept)
             concept_vectors = np.concatenate(concept_vectors, axis=0)
             cav_intercepts = np.concatenate(cav_intercepts, axis=0)
             if save_model:
-                np.save(concept_vectors, cav_path)
-                np.save(cav_intercepts, intercept_path)
+                np.save(cav_path, concept_vectors)
+                np.save(intercept_path, cav_intercepts)
             num_epochs.append(0)
             times.append(time.time() - start_time)
             print(f"\t\tDone learning CAVs after {times[-1]} seconds!")
 
-        #####################
-        ## Step 4: Train PCBM with CAVs
-        #####################
 
+        # CONSTRUCT THE PCBM!
         print(f"\tConstructing PCBM")
 
         # Initialize the actual final PCBM model by setting the CAVs and
         # backbone model extractor accordingly
         pcbm_config = copy.deepcopy(config)
-        pcbm_config['concept_vectors'] = concept_vectors
-        pcbm_config['concept_vector_intercepts'] = cav_intercepts
-        pcbm_config['pretrained_model'] = embedding_generator
+        pcbm_config['concept_vectors'] = torch.FloatTensor(concept_vectors)
+        pcbm_config['concept_vector_intercepts'] = torch.FloatTensor(cav_intercepts)
+        pcbm_config['pretrained_model'] = embedding_generator.wrapped_model
+        pcbm_config['emb_size'] = list(
+            embedding_generator.wrapped_model.modules()
+        )[-1].out_features
+        torch.save(
+            bbox.state_dict(),
+                os.path.join(
+                result_dir,
+                f'{full_run_name}_Emb_Extractor.pt'
+            ),
+        )
         c2y_model = None
         if 'c2y_model' in pcbm_config:
             c2y_model_config = config["c2y_model_config"]
-            c2y_model = standard_models.construct_standard_model(
+            c2y_model, _ = standard_models.construct_standard_model(
                 architecture=c2y_model_config['name'],
                 input_shape=(n_concepts,),
                 n_labels=n_tasks,
@@ -313,7 +370,7 @@ def train_pcbm(
             imbalance=None,  # Not relevant cause there is no concept supervision
             task_class_weights=task_class_weights,
         )
-
+        print("\tSetting up PCBM")
         print(
             "\t[Number of parameters in PCBM",
             sum(p.numel() for p in pcbm.parameters() if p.requires_grad),
@@ -324,21 +381,27 @@ def train_pcbm(
             sum(p.numel() for p in pcbm.parameters() if not p.requires_grad),
             "]",
         )
+
         if (not rerun) and os.path.exists(model_saved_path):
-            # Then we simply load the model and proceed
-            print("\t\tFound cached PCBM... loading it")
+            print("\tFound cached model... loading it")
             pcbm.load_state_dict(torch.load(model_saved_path))
             if os.path.exists(
                 model_saved_path.replace(".pt", "_training_times.npy")
             ):
                 [training_time, num_epochs] = np.load(
-                    model_saved_path.replace(".pt", "_training_times.npy"),
+                    model_saved_path.replace(".pt", "_training_times.npy")
                 )
             else:
-                training_time, num_epochs = 0, 0
+                training_time, num_epochs  = 0, 0
         else:
+            #####################
+            ## Step 4: Train PCBM with CAVs
+            #####################
+            if pcbm.residual:
+                pcbm.residual_use = False
+
             pcbm_epochs = config.get('max_epochs')
-            print(f"\t\tTraining PCBM from scratch for {pcbm_epochs} epochs")
+            print(f"\tTraining PCBM from scratch for {pcbm_epochs} epochs")
             start_time = time.time()
 
             pcbm_callbacks, pcbm_ckpt_call = _make_callbacks(
@@ -352,7 +415,7 @@ def train_pcbm(
                 **trainer_args,
             )
             pcbm_trainer.fit(pcbm, train_dl, val_dl)
-            _check_interruption(pcbm)
+            _check_interruption(pcbm_trainer)
             _restore_checkpoint(
                 model=pcbm,
                 max_epochs=pcbm_epochs,
@@ -365,6 +428,51 @@ def train_pcbm(
                 f"\t\tDone with PCBM training "
                 f"after {pcbm_trainer.current_epoch} epochs ({times[-1]} sec)!"
             )
+
+
+            #####################
+            ## Step 5: Train Residuals
+            #####################
+            if pcbm.residual:
+                print(f"\tTraining Residual Model")
+                residual_epochs = config.get('max_residual_epochs', config['max_epochs'])
+
+                # Set up the model accordingly so that it starts using the residual
+                # output
+                pcbm.residual_use = True
+                pcbm.freeze_non_residual_components()
+                print(
+                    f"\t\tTraining PCBM's residual model from scratch "
+                    f"for {residual_epochs} epochs"
+                )
+                start_time = time.time()
+
+                residual_callbacks, residual_ckpt_call = _make_callbacks(
+                    config.get('residual_early_stop_config', config),
+                    result_dir,
+                    full_run_name,
+                )
+                residual_trainer = pl.Trainer(
+                    max_epochs=residual_epochs,
+                    callbacks=residual_callbacks,
+                    **trainer_args,
+                )
+                residual_trainer.fit(pcbm, train_dl, val_dl)
+                _check_interruption(residual_trainer)
+                _restore_checkpoint(
+                    model=pcbm,
+                    max_epochs=residual_epochs,
+                    ckpt_call=residual_ckpt_call,
+                    trainer=residual_trainer,
+                )
+                num_epochs.append(residual_trainer.current_epoch)
+                times.append(time.time() - start_time)
+                pcbm.unfreeze_non_residual_components()
+                print(
+                    f"\t\tDone with PCBM residual training "
+                    f"after {residual_trainer.current_epoch} epochs ({times[-1]} sec)!"
+                )
+
 
             if save_model:
                 joblib.dump(
@@ -382,8 +490,7 @@ def train_pcbm(
                     model_saved_path.replace(".pt", "_training_times.npy"),
                     np.array([np.sum(times), np.sum(num_epochs)]),
                 )
-        training_time, num_epochs = np.sum(times), np.sum(num_epochs)
-
+            training_time, num_epochs = np.sum(times), np.sum(num_epochs)
     eval_trainer = pl.Trainer(
         accelerator=accelerator,
         devices=devices,

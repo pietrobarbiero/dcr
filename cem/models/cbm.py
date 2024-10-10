@@ -395,7 +395,7 @@ class ConceptBottleneckModel(pl.LightningModule):
             inactive_intervention_values = self.inactive_intervention_values.to(
                 c_pred.device
             )
-            batched_inactive_intervention_values =  torch.tile(
+            batched_inactive_intervention_values = torch.tile(
                 torch.unsqueeze(inactive_intervention_values, 0),
                 (c_pred.shape[0], 1),
             ).to(c_true.device)

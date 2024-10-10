@@ -5,6 +5,7 @@ import torchvision
 import torchvision.transforms as v2
 from torchvision.models.feature_extraction import create_feature_extractor
 from pytorch_lightning import seed_everything
+import collections
 
 
 def freeze_model_weights(model):
@@ -21,6 +22,11 @@ def get_out_layer_name_from_config(
     **kwargs
 ):
     if "resnet" in model_name:
+        if kwargs.get('add_linear_layers'):
+            linear_layers = kwargs['add_linear_layers']
+            if len(linear_layers) >= 2:
+                return (f"fc.outlayer_{len(linear_layers) + 1}", f"fc.outlayer_{len(linear_layers)}")
+            return (f"fc.outlayer_1", f"fc.outlayer")
         return ("fc", "avgpool")
     elif "alexnet" in model_name:
         return ("classifier.6", "classifier.5")
@@ -64,6 +70,7 @@ def load_vision_model(
     imagenet_pretrained=False,
     output_last_layer=False,
     freeze_weights=False,
+    add_linear_layers=None,
 ):
     """Loads a pretrained ImageNet vision model from the torchvision library
     and modifies its output layer so that it outputs `output_classes` instead
@@ -295,8 +302,13 @@ def load_vision_model(
         freeze_model_weights(model)
 
     if "resnet" in name:
-        if "resnet50" in name:
-            model.fc = torch.nn.Linear(latent_dim_size, output_classes)
+        if add_linear_layers:
+            units = [latent_dim_size] + add_linear_layers + [output_classes]
+            layers = []
+            for i in range(1, len(units)):
+                layers.append((f"nonlin_{i}", torch.nn.LeakyReLU()))
+                layers.append((f"outlayer_{i}", torch.nn.Linear(units[i-1], units[i])))
+            model.fc = torch.nn.Sequential(collections.OrderedDict(layers))
         else:
             model.fc = torch.nn.Linear(latent_dim_size, output_classes)
         if output_last_layer:
@@ -309,6 +321,7 @@ def load_vision_model(
                 },
             )
     elif "alexnet" in name:
+        assert add_linear_layers is None, 'unsupported'
         model.classifier[6] = torch.nn.Linear(latent_dim_size, output_classes)
         if output_last_layer:
             logit_name, latent_name = get_out_layer_name_from_config(name)
@@ -320,6 +333,7 @@ def load_vision_model(
                 },
             )
     elif "vgg" in name:
+        assert add_linear_layers is None, 'unsupported'
         model.classifier[6] = torch.nn.Linear(latent_dim_size, output_classes)
         if output_last_layer:
             logit_name, latent_name = get_out_layer_name_from_config(name)
@@ -331,6 +345,7 @@ def load_vision_model(
                 },
             )
     elif "squeezenet" in name:
+        assert add_linear_layers is None, 'unsupported'
         model.classifier[1] = torch.nn.Conv2d(
             latent_dim_size,
             output_classes,
@@ -347,6 +362,7 @@ def load_vision_model(
                 },
             )
     elif "densenet" in name:
+        assert add_linear_layers is None, 'unsupported'
         model.classifier = torch.nn.Linear(latent_dim_size, output_classes)
         if output_last_layer:
             logit_name, latent_name = get_out_layer_name_from_config(name)
@@ -427,17 +443,18 @@ def construct_standard_model(
     if seed:
         seed_everything(seed)
     if is_torchvision_model(architecture):
-        if (input_shape[-1] != 224) or (input_shape[-2] != 224):
-            raise ValueError(
-                f"To use pretrain model {architecture} the input shape must "
-                f"be [..., 224, 224] but instead got {input_shape}"
-            )
+        # if (input_shape[-1] != 224) or (input_shape[-2] != 224):
+        #     raise ValueError(
+        #         f"To use pretrain model {architecture} the input shape must "
+        #         f"be [..., 224, 224] but instead got {input_shape}"
+        #     )
         model = load_vision_model(
             name=architecture,
             output_classes=kwargs.get('output_classes', n_labels),
             imagenet_pretrained=kwargs.get("imagenet_pretrained", False),
             output_last_layer=output_last_layer,
             freeze_weights=kwargs.get("freeze_weights", False),
+            add_linear_layers=kwargs.get('add_linear_layers'),
         )
         pretrained = kwargs.get("imagenet_pretrained", False)
 

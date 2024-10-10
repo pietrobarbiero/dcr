@@ -6,17 +6,18 @@ import torch
 
 from torchvision.models import resnet18, resnet34, resnet50, densenet121
 
+import cem.models.adversarial_cbm as adversarial_cbm
+import cem.models.backtracking as backtrack
 import cem.models.cbm as models_cbm
 import cem.models.cem as models_cem
+import cem.models.defer_cem as defer_cem
+import cem.models.direction_cem as direction_cem
 import cem.models.hybrid_cem as models_hcem
 import cem.models.intcbm as models_intcbm
 import cem.models.mixcem as models_mixcem
 import cem.models.posthoc_cbm as models_pcbm
 import cem.models.probcbm as models_probcbm
-import cem.models.backtracking as backtrack
-import cem.models.direction_cem as direction_cem
-import cem.models.defer_cem as defer_cem
-import cem.models.adversarial_cbm as adversarial_cbm
+import cem.models.standard as standard_models
 import cem.train.utils as utils
 
 
@@ -467,6 +468,101 @@ def construct_model(
             "interleave_steps": config.get('interleave_steps', 5),
         }
 
+    elif config["architecture"] in [
+        "PCBM",
+        "PosthocCBM",
+        "Post-hocCBM",
+        "PosthocConceptBottleneckModel",
+        "Post-hocConceptBottleneckModel",
+    ]:
+        if config.get('pretrained_model', None) is None:
+            blackbox_model_config = config["blackbox_model_config"]
+            bbox, _ = standard_models.construct_standard_model(
+                architecture=blackbox_model_config['name'],
+                input_shape=config.get('input_shape'),
+                n_labels=n_tasks,
+                **blackbox_model_config,
+            )
+            _, latent_name = standard_models.get_out_layer_name_from_config(
+                blackbox_model_config["name"],
+                add_linear_layers=blackbox_model_config.get('add_linear_layers'),
+            )
+            embedding_generator = standard_models.create_feature_extractor(
+                bbox,
+                return_nodes={latent_name: latent_name},
+            )
+            config['pretrained_model'] = embedding_generator
+        run_name = config["run_name"]
+        split = config.get("split", 0)
+        if split is not None:
+            full_run_name = (
+                f"{run_name}_fold_{split + 1}"
+            )
+        else:
+            full_run_name = (
+                f"{run_name}"
+            )
+        result_dir = config.get("result_dir", ".")
+        cav_path = os.path.join(
+            result_dir,
+            f'{full_run_name}_CAVs.npy'
+        )
+        intercept_path = os.path.join(
+            result_dir,
+            f'{full_run_name}_Intercepts.npy'
+        )
+        if (config.get('concept_vectors', None) is None) and (
+            os.path.exists(cav_path)
+        ):
+            config['concept_vectors'] = torch.FloatTensor(np.load(cav_path))
+
+
+        if (config.get('concept_vector_intercepts', None) is None) and (
+            os.path.exists(intercept_path)
+        ):
+            config['concept_vector_intercepts'] = torch.FloatTensor(
+                np.load(intercept_path)
+            )
+
+        if not config.get('emb_size'):
+            config['emb_size'] = list(
+                embedding_generator.modules()
+            )[-1].out_features
+        return models_pcbm.PCBM(
+            n_concepts=n_concepts,
+            n_tasks=n_tasks,
+            emb_size=config['emb_size'],
+            task_class_weights=(
+                torch.FloatTensor(task_class_weights)
+                if (task_class_weights is not None)
+                else None
+            ),
+            learning_rate=config['learning_rate'],
+            weight_decay=config.get('weight_decay', 0),
+            optimizer=config['optimizer'],
+            top_k_accuracy=config.get('top_k_accuracy'),
+            output_latent=output_latent,
+            output_interventions=output_interventions,
+            concept_vectors=config.get('concept_vectors'),
+            concept_vector_intercepts=config.get('concept_vector_intercepts'),
+            pretrained_model=config['pretrained_model'],
+            c2y_model=config.get('c2y_model'),
+            residual=config.get('residual', False),
+            residual_model=config.get('residual_model', None),
+            reg_strength=config.get('reg_strength', 1e-5),
+            l1_ratio=config.get('reg_strength', 0.99),
+            lr_scheduler_factor=config.get('lr_scheduler_factor', 0.1),
+            lr_scheduler_patience=config.get('lr_scheduler_patience', 10),
+            freeze_pretrained_model=config.get('freeze_pretrained_model', True),
+            freeze_concept_embeddings=config.get('freeze_concept_embeddings', True),
+            training_intervention_prob=config.get(
+                'training_intervention_prob',
+                0.0,
+            ),
+            active_intervention_values=active_intervention_values,
+            inactive_intervention_values=inactive_intervention_values,
+        )
+
     elif (
         "ConceptBottleneckModel" in config["architecture"] or
         "CBM" in config["architecture"]
@@ -489,49 +585,7 @@ def construct_model(
             "c2y_layers": config.get("c2y_layers", []),
         }
 
-    elif config["architecture"] in [
-        "PCBM",
-        "PosthocCBM",
-        "Post-hocCBM",
-        "PosthocConceptBottleneckModel",
-        "Post-hocConceptBottleneckModel",
-    ]:
-        return models_pcbm.PCBM(
-            n_concepts=n_concepts,
-            n_tasks=n_tasks,
-            weight_loss=(
-                torch.FloatTensor(imbalance)
-                if config['weight_loss'] and (imbalance is not None)
-                else None
-            ),
-            task_class_weights=(
-                torch.FloatTensor(task_class_weights)
-                if (task_class_weights is not None)
-                else None
-            ),
-            learning_rate=config['learning_rate'],
-            weight_decay=config.get('weight_decay', 0),
-            optimizer=config['optimizer'],
-            top_k_accuracy=config.get('top_k_accuracy'),
-            output_latent=output_latent,
-            output_interventions=output_interventions,
-            concept_vectors=config['concept_vectors'],
-            pretrained_model=config['pretrained_model'],
-            concept_vector_intercepts=config.get('concept_vector_intercepts'),
-            c2y_model=config.get('c2y_model'),
-            residual=config.get('residual', False),
-            residual_model=config.get('residual_model', None),
-            reg_strength=config.get('reg_strength', 1e-5),
-            l1_ratio=config.get('reg_strength', 0.99),
-            lr_scheduler_factor=config.get('lr_scheduler_factor', 0.1),
-            lr_scheduler_patience=config.get('lr_scheduler_patience', 10),
-            freeze_pretrained_model=config.get('freeze_pretrained_model', True),
-            freeze_concept_embeddings=config.get('freeze_concept_embeddings', True),
-            training_intervention_prob=config.get(
-                'training_intervention_prob',
-                0.0,
-            ),
-        )
+
     elif "NewMixingConceptEmbeddingModel" in config["architecture"]:
         if config['architecture'] == 'NeSyMixingConceptEmbeddingModel':
             model_cls = models_mixcem.NeSyMixingConceptEmbeddingModel
@@ -1060,10 +1114,10 @@ def load_trained_model(
         inactive_intervention_values = []
         for idx in range(n_concepts):
             active_intervention_values.append(
-                np.percentile(out_embs[:, idx], 95)
+                np.percentile(out_embs[:, idx], config.get('active_top_percentile', 95))
             )
             inactive_intervention_values.append(
-                np.percentile(out_embs[:, idx], 5)
+                np.percentile(out_embs[:, idx], config.get('bottom_top_percentile', 5))
             )
 
         active_intervention_values = torch.FloatTensor(

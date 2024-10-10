@@ -1390,8 +1390,8 @@ def test_interventions(
                 task_class_weights=task_class_weights,
             )
             print(
-                f"\tIntervening in {run_name} with "
-                f"policy {key_policy_name} and competence {competence_level}"
+                f"\tIntervening in {run_name} with dataset '{dl_name}', "
+                f"policy {key_policy_name}, and competence {competence_level}"
             )
             if competence_level == 1:
                 key = (

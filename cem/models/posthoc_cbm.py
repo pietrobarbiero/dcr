@@ -2,6 +2,7 @@ import numpy as np
 import pytorch_lightning as pl
 import torch
 
+from cem.metrics.accs import compute_accuracy
 from cem.models.cbm import ConceptBottleneckModel
 
 
@@ -15,14 +16,16 @@ class PCBM(ConceptBottleneckModel):
         self,
         n_concepts,
         n_tasks,
-        concept_vectors,
+        emb_size,
         pretrained_model,
+        concept_vectors=None,
         concept_vector_intercepts=None,
 
         c2y_model=None,
         output_latent=False,
         residual=False,
         residual_model=None,
+        residual_use=True,
         reg_strength=1e-5, # regularization strenght for downstream sparse classifier
         l1_ratio=0.99,
         freeze_pretrained_model=True,
@@ -52,6 +55,9 @@ class PCBM(ConceptBottleneckModel):
         self.n_concepts = n_concepts
         self.n_tasks = n_tasks
         self.top_k_accuracy = top_k_accuracy
+        self.concept_loss_weight = 0
+        self.extra_dims = 0
+        self.sigmoidal_prob = False
 
         # Let's first set up the embedding extractor from the pretrained model
         # The assumption here is that this model already generates the embedding
@@ -66,22 +72,29 @@ class PCBM(ConceptBottleneckModel):
 
         # Time to initialize our embedding projection matrix
         self.freeze_concept_embeddings = freeze_concept_embeddings
-        assert concept_vectors.shape[0] == n_concepts, (
-            f'Expected the concept vector matrix to be of shape '
-            f'(n_concepts, emb_size) however we got a matrix of size '
-            f'{concept_vectors.shape} even though we were told we would expect '
-            f'{self.n_concepts} concepts.'
-        )
-        self.concept_embeddings = torch.nn.Parameter(
-            concept_vectors,
-            requires_grad=(not freeze_concept_embeddings),
-        )
+        self.emb_size = emb_size
+        if concept_vectors is not None:
+            assert concept_vectors.shape == (n_concepts, emb_size), (
+                f'Expected the concept vector matrix to be of shape '
+                f'(n_concepts, emb_size) however we got a matrix of size '
+                f'{concept_vectors.shape} even though we were told we would expect '
+                f'{self.n_concepts} concepts with shape {emb_size}.'
+            )
+            self.concept_embeddings = torch.nn.Parameter(
+                concept_vectors,
+                requires_grad=(not freeze_concept_embeddings),
+            )
+        else:
+            self.concept_embeddings = torch.nn.Parameter(
+                torch.rand((self.n_concepts, self.emb_size)),
+                requires_grad=(not freeze_concept_embeddings),
+            )
         # Precompute the norms as we will use them during inference
         self.concept_norms = torch.norm(
             self.concept_embeddings,
             p=2,
             dim=1,
-            keepdim=True,
+            keepdim=False,
         )
         # Handle intercepts (if provided)
         if concept_vector_intercepts is None:
@@ -124,6 +137,18 @@ class PCBM(ConceptBottleneckModel):
 
 
 
+        # Set up the residual model, if any
+        self.residual = residual
+        self.residual_use = residual_use
+        self.residual_model = None
+        if self.residual:
+            if residual_model is None:
+                residual_model = torch.nn.Linear(
+                    emb_size,
+                    n_tasks,
+                )
+            self.residual_model = residual_model
+
         # And the losses. Notice we will still have a concept loss so that
         # we can use the CBM base class but this will be a no-op
         self.loss_concept = lambda *args, **kwargs: 0.0
@@ -153,10 +178,19 @@ class PCBM(ConceptBottleneckModel):
     ):
         if latent is None:
             latent = self.embedding_generator(x)
-
+        if isinstance(latent, dict):
+            if len(latent) == 1:
+                latent_key = list(latent.keys())[0]
+            else:
+                raise ValueError(
+                    'Currently only support dictionaries of length 1 for '
+                    'embedding_generator and instead got an output of size '
+                    f'{len(latent)}'
+                )
+            latent = latent[latent_key]
         # Embeddings are (B, m) and concept vectors are (k, m)
         projections = torch.matmul(latent, self.concept_embeddings.T)
-        projections = (projections + self.concept_intercepts)/self.concept_norms
+        projections = (projections + self.concept_intercepts.unsqueeze(0))/self.concept_norms.unsqueeze(0).to(projections.device)
         return projections, latent
 
 
@@ -193,6 +227,26 @@ class PCBM(ConceptBottleneckModel):
             self.n_concepts * self.n_tasks
         )
 
+    def freeze_non_residual_components(self):
+        if not self.freeze_pretrained_model:
+            # Then let's go ahead and freeze all the parameters in this model
+            for param in self.embedding_generator.parameters():
+                param.requires_grad = False
+        if not self.freeze_concept_embeddings:
+            self.concept_embeddings.requires_grad = False
+            self.concept_intercepts.requires_grad = False
+        if (self.residual_model is not None):
+            for param in self.residual_model.parameters():
+                param.requires_grad = True
+
+    def unfreeze_non_residual_components(self):
+        if not self.freeze_pretrained_model:
+            # Then let's go ahead and freeze all the parameters in this model
+            for param in self.embedding_generator.parameters():
+                param.requires_grad = True
+        if not self.freeze_concept_embeddings:
+            self.concept_embeddings.requires_grad = True
+            self.concept_intercepts.requires_grad = True
 
     def _forward(
         self,
@@ -285,6 +339,9 @@ class PCBM(ConceptBottleneckModel):
         )
 
         y_pred = self.c2y_model(c_pred)
+        # Then time to consider the residual
+        if self.residual_use and (self.residual_model is not None):
+            y_pred += self.residual_model(latent)
         tail_results = []
         if output_interventions:
             if (
@@ -303,3 +360,101 @@ class PCBM(ConceptBottleneckModel):
             tail_results.append(pos_embs)
             tail_results.append(neg_embs)
         return tuple([c_pred, c_pred, y_pred] + tail_results)
+
+
+    def _concept_intervention(
+        self,
+        c_pred,
+        intervention_idxs=None,
+        c_true=None,
+    ):
+        if (c_true is None) or (intervention_idxs is None):
+            return c_pred
+        c_pred_copy = c_pred.clone()
+        intervention_idxs = self._standardize_indices(
+            intervention_idxs=intervention_idxs,
+            batch_size=c_pred.shape[0],
+        )
+        intervention_idxs = intervention_idxs.to(c_pred.device)
+        active_intervention_values = self.active_intervention_values.to(
+            c_pred.device
+        )
+        batched_active_intervention_values = torch.unsqueeze(
+            active_intervention_values,
+            0,
+        ).expand(c_pred.shape[0], -1)
+
+        inactive_intervention_values = self.inactive_intervention_values.to(
+            c_pred.device
+        )
+        batched_inactive_intervention_values = torch.unsqueeze(
+            inactive_intervention_values,
+            0,
+        ).expand(c_pred.shape[0], -1)
+
+        ground_truth_vals = (
+            (
+                c_true *
+                batched_active_intervention_values
+            ) +
+            (
+                (c_true - 1) *
+                -batched_inactive_intervention_values
+            )
+        )
+        c_pred_copy = ground_truth_vals * intervention_idxs + (
+            torch.logical_not(intervention_idxs) * c_pred
+        )
+        return c_pred_copy
+
+
+    def _run_step(
+        self,
+        batch,
+        batch_idx,
+        train=False,
+        intervention_idxs=None,
+    ):
+        x, y, (c, g, competencies, prev_interventions) = self._unpack_batch(
+            batch
+        )
+        outputs = self._forward(
+            x,
+            intervention_idxs=intervention_idxs,
+            c=c,
+            y=y,
+            train=train,
+            competencies=competencies,
+            prev_interventions=prev_interventions,
+        )
+        c_sem, c_logits, y_logits = outputs[0], outputs[1], outputs[2]
+        task_loss = self.loss_task(
+            y_logits if y_logits.shape[-1] > 1 else y_logits.reshape(-1),
+            y,
+        )
+        task_loss_scalar = task_loss.detach()
+        loss = task_loss + self._extra_losses(
+            x=x,
+            y=y,
+            c=c,
+            c_sem=c_sem,
+            c_pred=c_logits,
+            y_pred=y_logits,
+            competencies=competencies,
+            prev_interventions=prev_interventions,
+        )
+        # compute accuracy
+        _, (y_accuracy, y_auc, y_f1) = compute_accuracy(
+            c_pred=None,
+            y_pred=y_logits,
+            c_true=None,
+            y_true=y,
+        )
+        result = {
+            "y_accuracy": y_accuracy,
+            "y_auc": y_auc,
+            "y_f1": y_f1,
+            "task_loss": task_loss_scalar,
+            "loss": loss.detach(),
+        }
+        return loss, result

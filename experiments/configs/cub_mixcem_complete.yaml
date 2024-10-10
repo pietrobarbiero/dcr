@@ -9,6 +9,8 @@ model_selection_groups:
   - ["^(IntCEM_).*(_Baseline).*$", "IntCEM (Baseline)"]
   - ["^(MixCEM_).*(_Baseline).*$", "MixCEM (Baseline)"]
   - ["^(ProbCBM_).*$", "ProbCBM (Baseline)"]
+  - ["^(PCBM_).*$", "Posthoc CBM (Baseline)"]
+  - ["^(HybridPCBM_).*$", "Posthoc Hybrid CBM (Baseline)"]
 
 
 model_selection_metrics:
@@ -405,3 +407,57 @@ runs:
     extra_dims: 0
     sigmoidal_extra_capacity: False
     sigmoidal_prob: False
+
+
+  - architecture: 'PosthocConceptBottleneckModel'
+    run_name: "PCBM_reg_{reg_strength}_l1_{l1_ratio}_penalty_{svd_penalty}"
+    residual: False
+    reg_strength: [0.000001, 0.001, 0.1]
+    l1_ratio: [0.99]
+    freeze_pretrained_model: True
+    freeze_concept_embeddings: True
+    emb_size: null
+
+    svd_penalty: [1]
+    active_top_percentile: 95
+    active_bottom_percentile: 5
+    blackbox_model_config:
+      name: resnet18
+      imagenet_pretrained: True
+      add_linear_layers: [112]  # Add an intermediate layer with the same size as the number of concepts so that the evaluation is fair
+    blackbox_training_epochs: 150
+    max_residual_epochs: 150
+    max_epochs: 150
+    blackbox_path: 'PCBM_BlackBox_Model_{blackbox_model_config[name]}_pre_{blackbox_model_config[imagenet_pretrained]}_fold_{split}_layers_{blackbox_model_config[add_linear_layers]}'
+
+
+    grid_variables:
+      - reg_strength
+      - l1_ratio
+      - svd_penalty
+    grid_search_mode: exhaustive
+
+  - architecture: 'PosthocConceptBottleneckModel'
+    run_name: "HybridPCBM_reg_{reg_strength}_l1_{l1_ratio}_penalty_{svd_penalty}"
+    residual: True  # TURN ON THE RESIDUAL MODEL!
+    reg_strength: [0.000001, 0.001, 0.1]
+    l1_ratio: [0.99]
+    freeze_pretrained_model: True
+    freeze_concept_embeddings: True
+    emb_size: null
+
+    svd_penalty: [1]
+    blackbox_model_config:
+      name: resnet18
+      imagenet_pretrained: True
+      add_linear_layers: [112]  # Add an intermediate layer with the same size as the number of concepts so that the evaluation is fair
+    blackbox_training_epochs: 150
+    max_residual_epochs: 150
+    max_epochs: 150
+    blackbox_path: 'PCBM_BlackBox_Model_{blackbox_model_config[name]}_pre_{blackbox_model_config[imagenet_pretrained]}_fold_{split}_layers_{blackbox_model_config[add_linear_layers]}'
+
+    grid_variables:
+      - reg_strength
+      - l1_ratio
+      - svd_penalty
+    grid_search_mode: exhaustive

@@ -36,7 +36,7 @@ def evaluate_cbm(
     eval_results = {}
     if test_dl is None:
         return eval_results
-    model.freeze()
+    # model.freeze()
     def _inner_call():
         # [eval_results] = trainer.test(model, test_dl)
         # output = [
@@ -117,6 +117,7 @@ def evaluate_cbm(
         key: val
         for (key, val) in zip(keys, values)
     })
+    # model.unfreeze()
     return eval_results
 
 

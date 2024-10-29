@@ -94,11 +94,14 @@ import cem.train.train_mixcem as train_mixcem
 import cem.train.train_pcbm as train_pcbm
 import cem.train.train_adversarial_cbm as train_adversarial_cbm
 import cem.train.train_defer_cem as train_defer_cem
+import cem.train.train_global_bank as train_global_bank
+import cem.train.train_global_approx as train_global_approx
+import cem.train.train_certificate_cem as train_certificate_cem
 import cem.train.training as training
 import cem.train.utils as utils
 
-import evaluate_models
-import experiment_utils
+import experiments.evaluate_models as evaluate_models
+import experiments.experiment_utils as experiment_utils
 
 ################################################################################
 ## DATASET MANIPULATION
@@ -618,7 +621,7 @@ def _multiprocess_run_trial(
         train_fn = train_mixcem.train_mixcem
 
     elif config["architecture"] in [
-        "ACBM",  # TODO: CHANGE THIS IF THIS WORKS!!!!!!!!!!!!!!
+        "ACBM",
         "AdversarialCBM",
         "AdversarialConceptBottleneckModel",
     ]:
@@ -626,6 +629,26 @@ def _multiprocess_run_trial(
 
     elif config["architecture"] == "DeferConceptEmbeddingModel":
         train_fn = train_defer_cem.train_defer_cem
+
+    elif config['architecture'] in [
+        'GlobalBankConceptEmbeddingModel',
+        'BankMixCEM',
+        'GlobalBankCEM',
+        'GlobalBankMixCEM',
+    ]:
+        train_fn = train_global_bank.train_global_bank_cem
+
+    elif config['architecture'] in [
+        'GlobalApproxConceptEmbeddingModel',
+        'GlobalApproxCEM',
+    ]:
+        train_fn = train_global_approx.train_global_approx_cem
+
+    elif config['architecture'] in [
+        'CertificateConceptEmbeddingModel',
+        'CertificateCEM',
+    ]:
+        train_fn = train_certificate_cem.train_certificate_cem
 
     elif config["architecture"] in [
         "PosthocCBM",

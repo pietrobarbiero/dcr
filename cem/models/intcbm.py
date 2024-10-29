@@ -188,6 +188,16 @@ class IntAwareConceptBottleneckModel(ConceptBottleneckModel):
             **task_loss_kwargs,
         )
 
+    def _construct_rank_model_input(self, bottleneck, prev_interventions):
+        cat_inputs = [
+            bottleneck.view(bottleneck.shape[0], -1),
+            prev_interventions,
+        ]
+        return torch.concat(
+            cat_inputs,
+            dim=-1,
+        )
+
     def _prior_int_distribution(
         self,
         prob,
@@ -238,14 +248,7 @@ class IntAwareConceptBottleneckModel(ConceptBottleneckModel):
         else:
             available_groups = (1 - prev_interventions).to(embeddings.device)
         used_groups = 1 - available_groups
-        cat_inputs = [
-            embeddings.view(embeddings.shape[0], -1),
-            prev_interventions,
-        ]
-        rank_input = torch.concat(
-            cat_inputs,
-            dim=-1,
-        )
+        rank_input = self._construct_rank_model_input(embeddings, prev_interventions)
         next_concept_group_scores = self.concept_rank_model(
             rank_input
         )
@@ -1058,9 +1061,12 @@ class IntAwareConceptEmbeddingModel(
         include_only_last_trajectory_loss=True,
         task_loss_weight=1,
         intervention_task_loss_weight=1,
+
+        bottleneck_size=None,
     ):
         self.task_loss_weight = task_loss_weight
         self.num_rollouts = num_rollouts
+        self.bottleneck_size = bottleneck_size or n_concepts * emb_size
         if concept_map is None:
             concept_map = dict([
                 (i, [i]) for i in range(n_concepts)
@@ -1106,7 +1112,7 @@ class IntAwareConceptEmbeddingModel(
 
         # Else we construct it here directly
         units = [
-            n_concepts * emb_size + # Bottleneck
+            self.bottleneck_size + # Bottleneck
             n_concepts # Prev interventions
         ] + (int_model_layers or [256, 128]) + [
             len(self.concept_map) if self.use_concept_groups else n_concepts

@@ -750,6 +750,12 @@ def construct_model(
             "mixed_probs": config.get('mixed_probs', False),
             "contrastive_reg": config.get('contrastive_reg', 0),
             "global_ood_prob": config.get('global_ood_prob', 0),
+            "init_dyn_temps": config.get('init_dyn_temps', 1.5),
+            "init_global_temps": config.get('init_global_temps', 0.5),
+            "global_temp_reg": config.get('global_temp_reg', 0),
+            "max_temperature": config.get("max_temperature", 1),
+            "inference_dyn_prob": config.get('inference_dyn_prob', False),
+            "learnable_temps": config.get("learnable_temps", False),
         }
 
     elif config['architecture'] in [

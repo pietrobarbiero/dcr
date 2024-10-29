@@ -271,7 +271,10 @@ def train_certificate_cem(
                 )
 
                 # Train it on the validation set!
-                calibration_trainer.fit(model, val_dl, val_dl)
+                if config.get('finetune_with_val', True):
+                    calibration_trainer.fit(model, val_dl, val_dl)
+                else:
+                    calibration_trainer.fit(model, train_dl, val_dl)
                 _check_interruption(calibration_trainer)
                 training_time += time.time() - start_time
                 num_epochs += calibration_trainer.current_epoch

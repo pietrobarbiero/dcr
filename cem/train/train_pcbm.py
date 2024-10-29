@@ -342,9 +342,7 @@ def train_pcbm(
         pcbm_config['concept_vectors'] = torch.FloatTensor(concept_vectors)
         pcbm_config['concept_vector_intercepts'] = torch.FloatTensor(cav_intercepts)
         pcbm_config['pretrained_model'] = embedding_generator.wrapped_model
-        pcbm_config['emb_size'] = list(
-            embedding_generator.wrapped_model.modules()
-        )[-1].out_features
+        pcbm_config['emb_size'] = pcbm_config['concept_vectors'].shape[-1]
         torch.save(
             bbox.state_dict(),
                 os.path.join(
@@ -475,13 +473,6 @@ def train_pcbm(
 
 
             if save_model:
-                joblib.dump(
-                    config,
-                    os.path.join(
-                        result_dir,
-                        f'{run_name}_experiment_config.joblib',
-                    ),
-                )
                 torch.save(
                     pcbm.state_dict(),
                     model_saved_path,

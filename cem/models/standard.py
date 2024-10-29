@@ -16,6 +16,66 @@ def unfreeze_model_weights(model):
     for param in model.parameters():
         param.requires_grad = True
 
+def get_mnist_extractor_arch(input_shape, in_channels):
+    def c_extractor_arch(output_dim):
+        intermediate_maps = 16
+        output_dim = output_dim or 128
+        first_dim_out = ((input_shape[-2] - (2-1) - 1) // 2) + 1
+        first_dim_out = ((first_dim_out - (2-1) - 1) // 2) + 1
+        first_dim_out = ((first_dim_out - (2-1) - 1) // 2) + 1
+        first_dim_out = ((first_dim_out - (3-1) - 1) // 3) + 1
+
+        second_dim_out = ((input_shape[-1] - (2-1) - 1) // 2) + 1
+        second_dim_out = ((second_dim_out - (2-1) - 1) // 2) + 1
+        second_dim_out = ((second_dim_out - (2-1) - 1) // 2) + 1
+        second_dim_out = ((second_dim_out - (3-1) - 1) // 3) + 1
+        out_shape = (first_dim_out, second_dim_out)
+        return torch.nn.Sequential(*[
+            torch.nn.Conv2d(
+                in_channels=in_channels,
+                out_channels=intermediate_maps,
+                kernel_size=(3,3),
+                padding='same',
+            ),
+            torch.nn.BatchNorm2d(num_features=intermediate_maps),
+            torch.nn.LeakyReLU(),
+            torch.nn.MaxPool2d((2, 2)),
+            torch.nn.Conv2d(
+                in_channels=intermediate_maps,
+                out_channels=intermediate_maps,
+                kernel_size=(3,3),
+                padding='same',
+            ),
+            torch.nn.MaxPool2d((2, 2)),
+            torch.nn.BatchNorm2d(num_features=intermediate_maps),
+            torch.nn.LeakyReLU(),
+            torch.nn.Conv2d(
+                in_channels=intermediate_maps,
+                out_channels=intermediate_maps,
+                kernel_size=(3,3),
+                padding='same',
+            ),
+            torch.nn.BatchNorm2d(num_features=intermediate_maps),
+            torch.nn.LeakyReLU(),
+            torch.nn.MaxPool2d((2, 2)),
+            torch.nn.Conv2d(
+                in_channels=intermediate_maps,
+                out_channels=intermediate_maps,
+                kernel_size=(3,3),
+                padding='same',
+            ),
+            torch.nn.BatchNorm2d(num_features=intermediate_maps),
+            torch.nn.LeakyReLU(),
+            torch.nn.MaxPool2d((3, 3)),
+            torch.nn.Flatten(),
+            torch.nn.Linear(
+                np.prod(out_shape) * intermediate_maps,
+                output_dim,
+            ),
+        ])
+    return c_extractor_arch
+
+
 
 def get_out_layer_name_from_config(
     model_name,
@@ -40,6 +100,8 @@ def get_out_layer_name_from_config(
         return (str(len(kwargs['layer_sizes'])*2 +1), str(len(kwargs['layer_sizes'])*2 - 1))
     elif model_name == "cnn":
         return (str(len(kwargs['layers'])*2 + 1), str(len(kwargs['layers'])*2 - 1))
+    elif model_name == "color_mnist_extractor":
+        return ("17", "16")
     else:
         raise ValueError(f"Unsupported architecture {model_name}")
 
@@ -457,7 +519,12 @@ def construct_standard_model(
             add_linear_layers=kwargs.get('add_linear_layers'),
         )
         pretrained = kwargs.get("imagenet_pretrained", False)
-
+    elif architecture == 'color_mnist_extractor':
+        model = get_mnist_extractor_arch(
+            input_shape=input_shape,
+            in_channels=3,
+        )(kwargs['output_dim'])
+        pretrained = False
     elif architecture.lower().replace(" ", "") == "mlp":
         layers = [torch.nn.Flatten()]
         current_shape = np.prod(input_shape)

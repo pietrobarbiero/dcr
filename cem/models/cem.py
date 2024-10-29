@@ -195,19 +195,20 @@ class ConceptEmbeddingModel(ConceptBottleneckModel):
                     2 * emb_size,
                     1,
                 ))
-        if c2y_model is None:
-            # Else we construct it here directly
-            units = [
-                n_concepts * emb_size
-            ] + (c2y_layers or []) + [n_tasks]
-            layers = []
-            for i in range(1, len(units)):
-                layers.append(torch.nn.Linear(units[i-1], units[i]))
-                if i != len(units) - 1:
-                    layers.append(torch.nn.LeakyReLU())
-            self.c2y_model = torch.nn.Sequential(*layers)
-        else:
-            self.c2y_model = c2y_model
+        if getattr(self, '_construct_c2y_model', True):
+            if c2y_model is None:
+                # Else we construct it here directly
+                units = [
+                    n_concepts * emb_size
+                ] + (c2y_layers or []) + [n_tasks]
+                layers = []
+                for i in range(1, len(units)):
+                    layers.append(torch.nn.Linear(units[i-1], units[i]))
+                    if i != len(units) - 1:
+                        layers.append(torch.nn.LeakyReLU())
+                self.c2y_model = torch.nn.Sequential(*layers)
+            else:
+                self.c2y_model = c2y_model
         self.sig = torch.nn.Sigmoid()
 
         self.loss_concept = torch.nn.BCELoss(weight=weight_loss)
@@ -263,11 +264,35 @@ class ConceptEmbeddingModel(ConceptBottleneckModel):
         intervention_idxs = intervention_idxs.to(prob.device)
         output = prob * (1 - intervention_idxs) + intervention_idxs * c_true
         # Then time to mix!
-        bottleneck = (
-            pos_embeddings * torch.unsqueeze(output, dim=-1) +
-            neg_embeddings * (1 - torch.unsqueeze(output, dim=-1))
+        bottleneck = self._construct_c2y_input(
+            pos_embeddings=pos_embeddings,
+            neg_embeddings=neg_embeddings,
+            probs=output,
+            **kwargs,
         )
         return output, intervention_idxs, bottleneck
+
+    def _predict_labels(self, bottleneck, **task_loss_kwargs):
+        return self.c2y_model(bottleneck)
+
+    def _construct_c2y_input(
+        self,
+        pos_embeddings,
+        neg_embeddings,
+        probs,
+        **task_loss_kwargs,
+    ):
+        bottleneck = (
+            pos_embeddings * torch.unsqueeze(probs, dim=-1) + (
+                neg_embeddings * (
+                    1 - torch.unsqueeze(probs, dim=-1)
+                )
+            )
+        )
+        bottleneck = bottleneck.view(
+            (-1, self.emb_size * self.n_concepts)
+        )
+        return bottleneck
 
     def _generate_concept_embeddings(
         self,
@@ -376,9 +401,7 @@ class ConceptEmbeddingModel(ConceptBottleneckModel):
             competencies=competencies,
             **out_kwargs
         )
-        if len(bottleneck.shape) > 2:
-            bottleneck = bottleneck.view((bottleneck.shape[0], -1))
-        y_pred = self.c2y_model(bottleneck)
+        y_pred = self._predict_labels(bottleneck=bottleneck)
         tail_results = []
         if output_interventions:
             if (

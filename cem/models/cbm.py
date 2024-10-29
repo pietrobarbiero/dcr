@@ -543,7 +543,25 @@ class ConceptBottleneckModel(pl.LightningModule):
         if output_embeddings:
             tail_results.append(pos_embeddings)
             tail_results.append(neg_embeddings)
+        tail_results += self._extra_tail_results(
+            x=x,
+            y=y,
+            c=c,
+            c_sem=c_sem,
+            competencies=competencies,
+            prev_interventions=prev_interventions,
+        )
         return tuple([c_sem, c_pred, y_pred] + tail_results)
+
+    def _extra_tail_results(
+        x,
+        y,
+        c,
+        c_sem,
+        competencies,
+        prev_interventions,
+    ):
+        return []
 
     def forward(
         self,
@@ -586,6 +604,7 @@ class ConceptBottleneckModel(pl.LightningModule):
             train=False,
             competencies=competencies,
             prev_interventions=prev_interventions,
+            output_embeddings=getattr(self, 'output_embeddings', False),
         )
 
     def _run_step(

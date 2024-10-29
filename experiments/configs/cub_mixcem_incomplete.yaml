@@ -8,7 +8,10 @@ model_selection_groups:
   - ["^(IntCEM_).*(_Baseline).*$", "IntCEM (Baseline)"]
   - ["^(MixCEM_).*(_Baseline).*$", "MixCEM (Baseline)"]
   - ["^(ProbCBM_).*$", "ProbCBM (Baseline)"]
-
+  - ["^(PCBM_).*$", "Posthoc CBM (Baseline)"]
+  - ["^(HybridPCBM_).*$", "Hybrid Posthoc CBM (Baseline)"]
+  - ["^(BankMixCEM_).*$", "BankMixCEM (Baseline)"]
+  - ["^(CertificateCEM).*", "CertificateCEM (Baseline)"]
 
 model_selection_metrics:
   - val_acc_y_random_group_level_True_use_prior_False_int_auc
@@ -303,320 +306,319 @@ runs:
     sigmoidal_prob: False
 
 
-
-  - architecture: 'ProjectionConceptEmbeddingModel'
-    run_name: "ACEM_mr_{mix_residuals}_{residual_sep_loss}_{manual_residual_scale}_alw_{adversary_loss_weight}_wp_{warmup_period}_cr_{conditional_residual}_rpd_{residual_drop_prob}_ex_{extra_capacity}_tl_{use_triplet_loss}_ep_{extra_capacity_dropout_prob}_{blackbox_warmup_epochs}_{concept_epochs}_{no_residual_epochs}_{e2e_epochs}_{fix_concept_embeddings_for_res}_{fix_backbone_for_res}_{freeze_emb_generators_for_res}_ip_{training_intervention_prob}_emb_size_{emb_size}_dis_{intervention_task_discount}_shared_{shared_emb_generator}_bp_{bottleneck_pooling}_cwl_{concept_loss_weight}"
-    ########################## IMPORTANT !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
-    simplified_mode: False
-    # learning_rate: 0.0001
-    training_intervention_prob: [0.25]
-    embedding_activation: null
-    shared_emb_generator: True
-    use_triplet_loss: True
-    learnable_orthogonal_dir: 0
-    single_residual_vector: True
-    extra_capacity_dropout_prob: [0]
-    intervention_task_discount: [1.1]
-    concept_model_path: 'ProjCEM_concept_model_{emb_size}_{blackbox_warmup_epochs}_{fix_backbone_for_concept}_{freeze_emb_generators_for_concept}_{split}'
-    adversary_loss_weight: [0]
-    use_learnable_residual: True
-    warmup_period: [0] #200]
-    intervention_weight: 0.1
-    emb_size: [16]
-    concept_loss_weight: [1]
-    bottleneck_pooling: ['concat'] #, 'per_class_mixing']
-    extra_capacity: [0]
-    sigmoidal_extra_capacity: False
-    conditional_residual: False
-    use_learnable_prob: False
-    dyn_scaling: 100
-    residual_weight_l2: 0 #0.01
-    residual_drop_prob: [0, 0.25]
-    mix_residuals: True
-    residual_sep_loss: 1
-    manual_residual_scale: 1 ############################################################ CHANGE TO 1 ################################
-
-
-    ###############################################################################################
-
-    # training_intervention_prob: [0.25]
-    use_concept_groups: True
-    int_model_use_bn: True
-    int_model_layers: [128, 128, 64, 64]
-    # embedding_activation: "leakyrelu"
-    max_horizon: 6
-    horizon_rate: 1.005
-    gradient_clip_val: 100
-    task_concept_loss: 1
-
-    blackbox_warmup_epochs: 0
-
-    concept_epochs: 0 #200 #150
-    fix_backbone_for_concept: False
-    freeze_emb_generators_for_concept: False
-
-    no_residual_epochs: 300 #50
-    fix_backbone_for_no_res: False
-    fix_concept_embeddings_for_no_res: False
-    use_ground_truth_mixing_for_no_res: False
-
-
-    e2e_epochs: 0 #50
-    fix_backbone_for_res: True
-    freeze_emb_generators_for_res: True
-    fix_concept_embeddings_for_res: True
-    fix_label_predictor_for_res: False
-    use_ground_truth_mixing_for_res: False
-
-    grid_variables:
-      - bottleneck_pooling
-      - concept_loss_weight
-      - training_intervention_prob
-      - intervention_task_discount
-      - emb_size
-      - extra_capacity_dropout_prob
-      - extra_capacity
-      - adversary_loss_weight
-      - warmup_period
-      - residual_drop_prob
-    grid_search_mode: exhaustive
-
-
-
-
-  - architecture: 'ProjectionConceptEmbeddingModel'
-    run_name: "ACEM_mr_{mix_residuals}_{residual_sep_loss}_{manual_residual_scale}_alw_{adversary_loss_weight}_wp_{warmup_period}_cr_{conditional_residual}_rpd_{residual_drop_prob}_ex_{extra_capacity}_tl_{use_triplet_loss}_ep_{extra_capacity_dropout_prob}_{blackbox_warmup_epochs}_{concept_epochs}_{no_residual_epochs}_{e2e_epochs}_{fix_concept_embeddings_for_res}_{fix_backbone_for_res}_{freeze_emb_generators_for_res}_ip_{training_intervention_prob}_emb_size_{emb_size}_dis_{intervention_task_discount}_shared_{shared_emb_generator}_bp_{bottleneck_pooling}_cwl_{concept_loss_weight}"
-    ########################## IMPORTANT !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
-    simplified_mode: False
-    # learning_rate: 0.0001
-    training_intervention_prob: [0.25]
-    embedding_activation: null
-    shared_emb_generator: True
-    use_triplet_loss: True
-    learnable_orthogonal_dir: 0
-    single_residual_vector: True
-    extra_capacity_dropout_prob: [0]
-    intervention_task_discount: [1.1]
-    concept_model_path: 'ProjCEM_concept_model_{emb_size}_{blackbox_warmup_epochs}_{fix_backbone_for_concept}_{freeze_emb_generators_for_concept}_{split}'
-    adversary_loss_weight: [0]
-    use_learnable_residual: True
-    warmup_period: [0] #200]
-    intervention_weight: 0.1
-    emb_size: [16]
-    concept_loss_weight: [1]
-    bottleneck_pooling: ['concat'] #, 'per_class_mixing']
-    extra_capacity: [128]
-    sigmoidal_extra_capacity: False
-    conditional_residual: False
-    use_learnable_prob: False
-    dyn_scaling: 100
-    residual_weight_l2: 0 #0.01
-    residual_drop_prob: [0, dyn_0.999_0.25, dyn_0.990_0.1, 0.1, 0.25] #[0.25]
-    mix_residuals: True
-    residual_sep_loss: 1
-    manual_residual_scale: 1 ############################################################ CHANGE TO 1 ################################
-
-
-    ###############################################################################################
-
-    # training_intervention_prob: [0.25]
-    use_concept_groups: True
-    int_model_use_bn: True
-    int_model_layers: [128, 128, 64, 64]
-    # embedding_activation: "leakyrelu"
-    max_horizon: 6
-    horizon_rate: 1.005
-    gradient_clip_val: 100
-    task_concept_loss: 1
-
-    blackbox_warmup_epochs: 0
-
-    concept_epochs: 0 #200 #150
-    fix_backbone_for_concept: False
-    freeze_emb_generators_for_concept: False
-
-    no_residual_epochs: 300 #50
-    fix_backbone_for_no_res: False
-    fix_concept_embeddings_for_no_res: False
-    use_ground_truth_mixing_for_no_res: False
-
-
-    e2e_epochs: 0 #50
-    fix_backbone_for_res: True
-    freeze_emb_generators_for_res: True
-    fix_concept_embeddings_for_res: True
-    fix_label_predictor_for_res: False
-    use_ground_truth_mixing_for_res: False
-
-    grid_variables:
-      - bottleneck_pooling
-      - concept_loss_weight
-      - training_intervention_prob
-      - intervention_task_discount
-      - emb_size
-      - extra_capacity_dropout_prob
-      - extra_capacity
-      - adversary_loss_weight
-      - warmup_period
-      - residual_drop_prob
-    grid_search_mode: exhaustive
-
-
-
-
-  - architecture: 'DeferConceptEmbeddingModel'
-    run_name: "DCEM_bp_{bottleneck_pooling}_emb_{emb_size}_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_cwl_{concept_loss_weight}_wr_{dynamic_weights_reg}_ar_{dynamic_activations_reg}_cpm_{conditional_pred_mixture}_{mixcem_concept_epochs}_{mixcem_epochs}_{dynamic_epochs}_{joint_epochs}"
-    ########################## IMPORTANT !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
-    simplified_mode: False
-    training_intervention_prob: [0.25]
-    embedding_activation: null
-    intervention_task_discount: [1.1]
-    intervention_weight: 0.1
-    emb_size: [16]
-    concept_loss_weight: [1]
-    bottleneck_pooling: ['concat'] #, 'pcm']
-
-    shared_emb_generator: True
-    dynamic_ood_detection: 1
-    dynamic_weights_reg: [0]
-    dynamic_weights_reg_norm: 2
-    dynamic_activations_reg: [0, 0.1, 1]
-    dynamic_activations_reg_norm: 2
-    dynamic_drop_prob: 0
-    conditional_pred_mixture: ['none']
-
-
-    ###############################################################################################
-
-    # IntCEM stuff
-
-    use_concept_groups: True
-    int_model_use_bn: True
-    int_model_layers: [128, 128, 64, 64]
-    max_horizon: 6
-    horizon_rate: 1.005
-    gradient_clip_val: 100
-    task_concept_loss: 1
-
-    ###############################################################################################
-
-    # Training stuff
-
-    mixcem_concept_model_path: 'DCEM_Concept_Trained_bp_{bottleneck_pooling}_emb_{emb_size}_cpm_{conditional_pred_mixture}_{mixcem_concept_epochs}_{split}'
-    mixcem_concept_epochs: 0
-
-    mixcem_entire_model_path: 'DCEM_Mixcem_Trained_bp_{bottleneck_pooling}_emb_{emb_size}_cpm_{conditional_pred_mixture}_{mixcem_concept_epochs}_{mixcem_epochs}_{mixcem_concept_epochs}_{fix_concept_embeddings_for_mixcem}_{fix_backbone_for_mixcem}_{freeze_emb_generators_for_mixcem}_{split}'
-    mixcem_epochs: 0 #150
-    fix_concept_embeddings_for_mixcem: False
-    fix_backbone_for_mixcem: False
-    freeze_emb_generators_for_mixcem: False
-
-
-    dynamic_entire_model_path: 'DCEM_Dynamic_Trained_bp_{bottleneck_pooling}_emb_{emb_size}_cpm_{conditional_pred_mixture}_{mixcem_concept_epochs}_{mixcem_epochs}_{dynamic_epochs}_{fix_backbone_for_dynamic}_{freeze_emb_generators_for_dynamic}_{mixcem_concept_epochs}_{fix_concept_embeddings_for_mixcem}_{fix_backbone_for_mixcem}_{freeze_emb_generators_for_mixcem}_{split}'
-    dynamic_epochs: 0 #150
-    fix_backbone_for_dynamic: True
-    freeze_emb_generators_for_dynamic: True
-
-
-    joint_epochs: 300 #150
-    fix_backbone_for_joint: False
-    freeze_emb_generators_for_joint: False
-    fix_concept_embeddings_for_joint: False
-    fix_dynamic_prob_generators_for_joint: False
-    fix_mixcem_label_predictor_for_joint: False
-    fix_dynamic_label_predictor_for_joint: False
-
-
-    grid_variables:
-      - bottleneck_pooling
-      - concept_loss_weight
-      - training_intervention_prob
-      - intervention_task_discount
-      - emb_size
-      - dynamic_weights_reg
-      - dynamic_activations_reg
-      - conditional_pred_mixture
-    grid_search_mode: exhaustive
-
-
-
-  - architecture: 'DeferConceptEmbeddingModel'
-    run_name: "DCEM_frozen_bp_{bottleneck_pooling}_emb_{emb_size}_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_cwl_{concept_loss_weight}_wr_{dynamic_weights_reg}_ar_{dynamic_activations_reg}_cpm_{conditional_pred_mixture}_{mixcem_concept_epochs}_{mixcem_epochs}_{dynamic_epochs}_{joint_epochs}"
-    ########################## IMPORTANT !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-
-    simplified_mode: False
-    training_intervention_prob: [0.25]
-    embedding_activation: null
-    intervention_task_discount: [1.1]
-    intervention_weight: 0.1
-    emb_size: [16]
-    concept_loss_weight: [1]
-    bottleneck_pooling: ['concat'] #, 'pcm']
-
-    shared_emb_generator: True
-    dynamic_ood_detection: 1
-    dynamic_weights_reg: [0]
-    dynamic_weights_reg_norm: 2
-    dynamic_activations_reg: [0, 0.1, 1]
-    dynamic_activations_reg_norm: 2
-    dynamic_drop_prob: 0
-    conditional_pred_mixture: ['none']
-
-
-    ###############################################################################################
-
-    # IntCEM stuff
-
-    use_concept_groups: True
-    int_model_use_bn: True
-    int_model_layers: [128, 128, 64, 64]
-    max_horizon: 6
-    horizon_rate: 1.005
-    gradient_clip_val: 100
-    task_concept_loss: 1
-
-    ###############################################################################################
-
-    # Training stuff
-
-    mixcem_concept_model_path: 'DCEM_Concept_Trained_bp_{bottleneck_pooling}_emb_{emb_size}_cpm_{conditional_pred_mixture}_{mixcem_concept_epochs}_{split}'
-    mixcem_concept_epochs: 0
-
-    mixcem_entire_model_path: 'DCEM_Mixcem_Trained_bp_{bottleneck_pooling}_emb_{emb_size}_cpm_{conditional_pred_mixture}_{mixcem_concept_epochs}_{mixcem_epochs}_{mixcem_concept_epochs}_{fix_concept_embeddings_for_mixcem}_{fix_backbone_for_mixcem}_{freeze_emb_generators_for_mixcem}_{split}'
-    mixcem_epochs: 150
-    fix_concept_embeddings_for_mixcem: False
-    fix_backbone_for_mixcem: False
-    freeze_emb_generators_for_mixcem: False
-
-
-    dynamic_entire_model_path: 'DCEM_Dynamic_Trained_bp_{bottleneck_pooling}_emb_{emb_size}_cpm_{conditional_pred_mixture}_{mixcem_concept_epochs}_{mixcem_epochs}_{dynamic_epochs}_{fix_backbone_for_dynamic}_{freeze_emb_generators_for_dynamic}_{mixcem_concept_epochs}_{fix_concept_embeddings_for_mixcem}_{fix_backbone_for_mixcem}_{freeze_emb_generators_for_mixcem}_{split}'
-    dynamic_epochs: 150
-    fix_backbone_for_dynamic: True
-    freeze_emb_generators_for_dynamic: True
-
-
-    joint_epochs: 150
-    fix_backbone_for_joint: True
-    freeze_emb_generators_for_joint: True
-    fix_concept_embeddings_for_joint: True
-    fix_dynamic_prob_generators_for_joint: True
-    fix_mixcem_label_predictor_for_joint: True
-    fix_dynamic_label_predictor_for_joint: True
-
-
-    grid_variables:
-      - bottleneck_pooling
-      - concept_loss_weight
-      - training_intervention_prob
-      - intervention_task_discount
-      - emb_size
-      - dynamic_weights_reg
-      - dynamic_activations_reg
-      - conditional_pred_mixture
-    grid_search_mode: exhaustive
+  # - architecture: 'ProjectionConceptEmbeddingModel'
+  #   run_name: "ACEM_mr_{mix_residuals}_{residual_sep_loss}_{manual_residual_scale}_alw_{adversary_loss_weight}_wp_{warmup_period}_cr_{conditional_residual}_rpd_{residual_drop_prob}_ex_{extra_capacity}_tl_{use_triplet_loss}_ep_{extra_capacity_dropout_prob}_{blackbox_warmup_epochs}_{concept_epochs}_{no_residual_epochs}_{e2e_epochs}_{fix_concept_embeddings_for_res}_{fix_backbone_for_res}_{freeze_emb_generators_for_res}_ip_{training_intervention_prob}_emb_size_{emb_size}_dis_{intervention_task_discount}_shared_{shared_emb_generator}_bp_{bottleneck_pooling}_cwl_{concept_loss_weight}"
+  #   ########################## IMPORTANT !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+  #   simplified_mode: False
+  #   # learning_rate: 0.0001
+  #   training_intervention_prob: [0.25]
+  #   embedding_activation: null
+  #   shared_emb_generator: True
+  #   use_triplet_loss: True
+  #   learnable_orthogonal_dir: 0
+  #   single_residual_vector: True
+  #   extra_capacity_dropout_prob: [0]
+  #   intervention_task_discount: [1.1]
+  #   concept_model_path: 'ProjCEM_concept_model_{emb_size}_{blackbox_warmup_epochs}_{fix_backbone_for_concept}_{freeze_emb_generators_for_concept}_{split}'
+  #   adversary_loss_weight: [0]
+  #   use_learnable_residual: True
+  #   warmup_period: [0] #200]
+  #   intervention_weight: 0.1
+  #   emb_size: [16]
+  #   concept_loss_weight: [1]
+  #   bottleneck_pooling: ['concat'] #, 'per_class_mixing']
+  #   extra_capacity: [0]
+  #   sigmoidal_extra_capacity: False
+  #   conditional_residual: False
+  #   use_learnable_prob: False
+  #   dyn_scaling: 100
+  #   residual_weight_l2: 0 #0.01
+  #   residual_drop_prob: [0, 0.25]
+  #   mix_residuals: True
+  #   residual_sep_loss: 1
+  #   manual_residual_scale: 1 ############################################################ CHANGE TO 1 ################################
+
+
+  #   ###############################################################################################
+
+  #   # training_intervention_prob: [0.25]
+  #   use_concept_groups: True
+  #   int_model_use_bn: True
+  #   int_model_layers: [128, 128, 64, 64]
+  #   # embedding_activation: "leakyrelu"
+  #   max_horizon: 6
+  #   horizon_rate: 1.005
+  #   gradient_clip_val: 100
+  #   task_concept_loss: 1
+
+  #   blackbox_warmup_epochs: 0
+
+  #   concept_epochs: 0 #200 #150
+  #   fix_backbone_for_concept: False
+  #   freeze_emb_generators_for_concept: False
+
+  #   no_residual_epochs: 300 #50
+  #   fix_backbone_for_no_res: False
+  #   fix_concept_embeddings_for_no_res: False
+  #   use_ground_truth_mixing_for_no_res: False
+
+
+  #   e2e_epochs: 0 #50
+  #   fix_backbone_for_res: True
+  #   freeze_emb_generators_for_res: True
+  #   fix_concept_embeddings_for_res: True
+  #   fix_label_predictor_for_res: False
+  #   use_ground_truth_mixing_for_res: False
+
+  #   grid_variables:
+  #     - bottleneck_pooling
+  #     - concept_loss_weight
+  #     - training_intervention_prob
+  #     - intervention_task_discount
+  #     - emb_size
+  #     - extra_capacity_dropout_prob
+  #     - extra_capacity
+  #     - adversary_loss_weight
+  #     - warmup_period
+  #     - residual_drop_prob
+  #   grid_search_mode: exhaustive
+
+
+
+
+  # - architecture: 'ProjectionConceptEmbeddingModel'
+  #   run_name: "ACEM_mr_{mix_residuals}_{residual_sep_loss}_{manual_residual_scale}_alw_{adversary_loss_weight}_wp_{warmup_period}_cr_{conditional_residual}_rpd_{residual_drop_prob}_ex_{extra_capacity}_tl_{use_triplet_loss}_ep_{extra_capacity_dropout_prob}_{blackbox_warmup_epochs}_{concept_epochs}_{no_residual_epochs}_{e2e_epochs}_{fix_concept_embeddings_for_res}_{fix_backbone_for_res}_{freeze_emb_generators_for_res}_ip_{training_intervention_prob}_emb_size_{emb_size}_dis_{intervention_task_discount}_shared_{shared_emb_generator}_bp_{bottleneck_pooling}_cwl_{concept_loss_weight}"
+  #   ########################## IMPORTANT !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+  #   simplified_mode: False
+  #   # learning_rate: 0.0001
+  #   training_intervention_prob: [0.25]
+  #   embedding_activation: null
+  #   shared_emb_generator: True
+  #   use_triplet_loss: True
+  #   learnable_orthogonal_dir: 0
+  #   single_residual_vector: True
+  #   extra_capacity_dropout_prob: [0]
+  #   intervention_task_discount: [1.1]
+  #   concept_model_path: 'ProjCEM_concept_model_{emb_size}_{blackbox_warmup_epochs}_{fix_backbone_for_concept}_{freeze_emb_generators_for_concept}_{split}'
+  #   adversary_loss_weight: [0]
+  #   use_learnable_residual: True
+  #   warmup_period: [0] #200]
+  #   intervention_weight: 0.1
+  #   emb_size: [16]
+  #   concept_loss_weight: [1]
+  #   bottleneck_pooling: ['concat'] #, 'per_class_mixing']
+  #   extra_capacity: [128]
+  #   sigmoidal_extra_capacity: False
+  #   conditional_residual: False
+  #   use_learnable_prob: False
+  #   dyn_scaling: 100
+  #   residual_weight_l2: 0 #0.01
+  #   residual_drop_prob: [0, dyn_0.999_0.25, dyn_0.990_0.1, 0.1, 0.25] #[0.25]
+  #   mix_residuals: True
+  #   residual_sep_loss: 1
+  #   manual_residual_scale: 1 ############################################################ CHANGE TO 1 ################################
+
+
+  #   ###############################################################################################
+
+  #   # training_intervention_prob: [0.25]
+  #   use_concept_groups: True
+  #   int_model_use_bn: True
+  #   int_model_layers: [128, 128, 64, 64]
+  #   # embedding_activation: "leakyrelu"
+  #   max_horizon: 6
+  #   horizon_rate: 1.005
+  #   gradient_clip_val: 100
+  #   task_concept_loss: 1
+
+  #   blackbox_warmup_epochs: 0
+
+  #   concept_epochs: 0 #200 #150
+  #   fix_backbone_for_concept: False
+  #   freeze_emb_generators_for_concept: False
+
+  #   no_residual_epochs: 300 #50
+  #   fix_backbone_for_no_res: False
+  #   fix_concept_embeddings_for_no_res: False
+  #   use_ground_truth_mixing_for_no_res: False
+
+
+  #   e2e_epochs: 0 #50
+  #   fix_backbone_for_res: True
+  #   freeze_emb_generators_for_res: True
+  #   fix_concept_embeddings_for_res: True
+  #   fix_label_predictor_for_res: False
+  #   use_ground_truth_mixing_for_res: False
+
+  #   grid_variables:
+  #     - bottleneck_pooling
+  #     - concept_loss_weight
+  #     - training_intervention_prob
+  #     - intervention_task_discount
+  #     - emb_size
+  #     - extra_capacity_dropout_prob
+  #     - extra_capacity
+  #     - adversary_loss_weight
+  #     - warmup_period
+  #     - residual_drop_prob
+  #   grid_search_mode: exhaustive
+
+
+
+
+  # - architecture: 'DeferConceptEmbeddingModel'
+  #   run_name: "DCEM_bp_{bottleneck_pooling}_emb_{emb_size}_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_cwl_{concept_loss_weight}_wr_{dynamic_weights_reg}_ar_{dynamic_activations_reg}_cpm_{conditional_pred_mixture}_{mixcem_concept_epochs}_{mixcem_epochs}_{dynamic_epochs}_{joint_epochs}"
+  #   ########################## IMPORTANT !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+  #   simplified_mode: False
+  #   training_intervention_prob: [0.25]
+  #   embedding_activation: null
+  #   intervention_task_discount: [1.1]
+  #   intervention_weight: 0.1
+  #   emb_size: [16]
+  #   concept_loss_weight: [1]
+  #   bottleneck_pooling: ['concat'] #, 'pcm']
+
+  #   shared_emb_generator: True
+  #   dynamic_ood_detection: 1
+  #   dynamic_weights_reg: [0]
+  #   dynamic_weights_reg_norm: 2
+  #   dynamic_activations_reg: [0, 0.1, 1]
+  #   dynamic_activations_reg_norm: 2
+  #   dynamic_drop_prob: 0
+  #   conditional_pred_mixture: ['none']
+
+
+  #   ###############################################################################################
+
+  #   # IntCEM stuff
+
+  #   use_concept_groups: True
+  #   int_model_use_bn: True
+  #   int_model_layers: [128, 128, 64, 64]
+  #   max_horizon: 6
+  #   horizon_rate: 1.005
+  #   gradient_clip_val: 100
+  #   task_concept_loss: 1
+
+  #   ###############################################################################################
+
+  #   # Training stuff
+
+  #   mixcem_concept_model_path: 'DCEM_Concept_Trained_bp_{bottleneck_pooling}_emb_{emb_size}_cpm_{conditional_pred_mixture}_{mixcem_concept_epochs}_{split}'
+  #   mixcem_concept_epochs: 0
+
+  #   mixcem_entire_model_path: 'DCEM_Mixcem_Trained_bp_{bottleneck_pooling}_emb_{emb_size}_cpm_{conditional_pred_mixture}_{mixcem_concept_epochs}_{mixcem_epochs}_{mixcem_concept_epochs}_{fix_concept_embeddings_for_mixcem}_{fix_backbone_for_mixcem}_{freeze_emb_generators_for_mixcem}_{split}'
+  #   mixcem_epochs: 0 #150
+  #   fix_concept_embeddings_for_mixcem: False
+  #   fix_backbone_for_mixcem: False
+  #   freeze_emb_generators_for_mixcem: False
+
+
+  #   dynamic_entire_model_path: 'DCEM_Dynamic_Trained_bp_{bottleneck_pooling}_emb_{emb_size}_cpm_{conditional_pred_mixture}_{mixcem_concept_epochs}_{mixcem_epochs}_{dynamic_epochs}_{fix_backbone_for_dynamic}_{freeze_emb_generators_for_dynamic}_{mixcem_concept_epochs}_{fix_concept_embeddings_for_mixcem}_{fix_backbone_for_mixcem}_{freeze_emb_generators_for_mixcem}_{split}'
+  #   dynamic_epochs: 0 #150
+  #   fix_backbone_for_dynamic: True
+  #   freeze_emb_generators_for_dynamic: True
+
+
+  #   joint_epochs: 300 #150
+  #   fix_backbone_for_joint: False
+  #   freeze_emb_generators_for_joint: False
+  #   fix_concept_embeddings_for_joint: False
+  #   fix_dynamic_prob_generators_for_joint: False
+  #   fix_mixcem_label_predictor_for_joint: False
+  #   fix_dynamic_label_predictor_for_joint: False
+
+
+  #   grid_variables:
+  #     - bottleneck_pooling
+  #     - concept_loss_weight
+  #     - training_intervention_prob
+  #     - intervention_task_discount
+  #     - emb_size
+  #     - dynamic_weights_reg
+  #     - dynamic_activations_reg
+  #     - conditional_pred_mixture
+  #   grid_search_mode: exhaustive
+
+
+
+  # - architecture: 'DeferConceptEmbeddingModel'
+  #   run_name: "DCEM_frozen_bp_{bottleneck_pooling}_emb_{emb_size}_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_cwl_{concept_loss_weight}_wr_{dynamic_weights_reg}_ar_{dynamic_activations_reg}_cpm_{conditional_pred_mixture}_{mixcem_concept_epochs}_{mixcem_epochs}_{dynamic_epochs}_{joint_epochs}"
+  #   ########################## IMPORTANT !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+  #   simplified_mode: False
+  #   training_intervention_prob: [0.25]
+  #   embedding_activation: null
+  #   intervention_task_discount: [1.1]
+  #   intervention_weight: 0.1
+  #   emb_size: [16]
+  #   concept_loss_weight: [1]
+  #   bottleneck_pooling: ['concat'] #, 'pcm']
+
+  #   shared_emb_generator: True
+  #   dynamic_ood_detection: 1
+  #   dynamic_weights_reg: [0]
+  #   dynamic_weights_reg_norm: 2
+  #   dynamic_activations_reg: [0, 0.1, 1]
+  #   dynamic_activations_reg_norm: 2
+  #   dynamic_drop_prob: 0
+  #   conditional_pred_mixture: ['none']
+
+
+  #   ###############################################################################################
+
+  #   # IntCEM stuff
+
+  #   use_concept_groups: True
+  #   int_model_use_bn: True
+  #   int_model_layers: [128, 128, 64, 64]
+  #   max_horizon: 6
+  #   horizon_rate: 1.005
+  #   gradient_clip_val: 100
+  #   task_concept_loss: 1
+
+  #   ###############################################################################################
+
+  #   # Training stuff
+
+  #   mixcem_concept_model_path: 'DCEM_Concept_Trained_bp_{bottleneck_pooling}_emb_{emb_size}_cpm_{conditional_pred_mixture}_{mixcem_concept_epochs}_{split}'
+  #   mixcem_concept_epochs: 0
+
+  #   mixcem_entire_model_path: 'DCEM_Mixcem_Trained_bp_{bottleneck_pooling}_emb_{emb_size}_cpm_{conditional_pred_mixture}_{mixcem_concept_epochs}_{mixcem_epochs}_{mixcem_concept_epochs}_{fix_concept_embeddings_for_mixcem}_{fix_backbone_for_mixcem}_{freeze_emb_generators_for_mixcem}_{split}'
+  #   mixcem_epochs: 150
+  #   fix_concept_embeddings_for_mixcem: False
+  #   fix_backbone_for_mixcem: False
+  #   freeze_emb_generators_for_mixcem: False
+
+
+  #   dynamic_entire_model_path: 'DCEM_Dynamic_Trained_bp_{bottleneck_pooling}_emb_{emb_size}_cpm_{conditional_pred_mixture}_{mixcem_concept_epochs}_{mixcem_epochs}_{dynamic_epochs}_{fix_backbone_for_dynamic}_{freeze_emb_generators_for_dynamic}_{mixcem_concept_epochs}_{fix_concept_embeddings_for_mixcem}_{fix_backbone_for_mixcem}_{freeze_emb_generators_for_mixcem}_{split}'
+  #   dynamic_epochs: 150
+  #   fix_backbone_for_dynamic: True
+  #   freeze_emb_generators_for_dynamic: True
+
+
+  #   joint_epochs: 150
+  #   fix_backbone_for_joint: True
+  #   freeze_emb_generators_for_joint: True
+  #   fix_concept_embeddings_for_joint: True
+  #   fix_dynamic_prob_generators_for_joint: True
+  #   fix_mixcem_label_predictor_for_joint: True
+  #   fix_dynamic_label_predictor_for_joint: True
+
+
+  #   grid_variables:
+  #     - bottleneck_pooling
+  #     - concept_loss_weight
+  #     - training_intervention_prob
+  #     - intervention_task_discount
+  #     - emb_size
+  #     - dynamic_weights_reg
+  #     - dynamic_activations_reg
+  #     - conditional_pred_mixture
+  #   grid_search_mode: exhaustive
 
 
 ################################## COMMENT FOR NOW!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -2431,3 +2433,852 @@ runs:
   #     - shared_per_concept_residual
   #     - residual_norm_loss
   #   grid_search_mode: exhaustive
+
+
+
+
+  - architecture: 'CertificateConceptEmbeddingModel'
+    run_name: "CertificateCEM_{selection_mode}_{pooling_mode}_{calibrate_global_logits}_{calibrate_dynamic_logits}_g_ood_{global_ood_prob}_emb_{emb_size}_ood_{ood_dropout_prob}_mp_{mixed_probs}_creg_{contrastive_reg}_hs_{hard_eval_selection}_cal_epochs_{calibration_epochs}_cw_{certificate_loss_weight}_ss_{selection_sample}_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_cwl_{concept_loss_weight}"
+
+    concept_loss_weight: [1]
+    emb_size: [16]
+    temperature: [10, 1]
+    shared_emb_generator: True
+
+    # OOD stuff
+    certificate_loss_weight: [0] #, 0.1]
+    ood_dropout_prob: [0] #, 0.75, 0.5, 0]
+    global_ood_prob: [0.5, 0.75, 0.25, 0] #, 0.75, 0.5, 0]
+    pooling_mode: ['individual_scores']
+    selection_mode: ['max_class_confidence']
+    hard_eval_selection: [0.5, null, 0.05, 0.95] #0.1, 0.5, 0.05] #, -0.999, 0.999]
+    selection_sample: [False]
+    calibration_epochs: 30
+    mixed_probs: True
+    contrastive_reg: 0
+    calibrate_dynamic_logits: True
+    calibrate_global_logits: True
+
+    ###############################################################################################
+
+    # IntCEM stuff
+    embedding_activation: null
+    training_intervention_prob: [0.25]
+    intervention_task_discount: [1.1]
+    use_concept_groups: True
+    int_model_use_bn: True
+    int_model_layers: [128, 128, 64, 64]
+    max_horizon: 6
+    horizon_rate: 1.005
+    gradient_clip_val: 100
+    intervention_weight: 0.1
+
+
+    grid_variables:
+      - concept_loss_weight
+      - training_intervention_prob
+      - intervention_task_discount
+      - emb_size
+      - certificate_loss_weight
+      - ood_dropout_prob
+      - selection_mode
+      - hard_eval_selection
+      - selection_sample
+      - pooling_mode
+      - global_ood_prob
+      - temperature
+    grid_search_mode: exhaustive
+
+  # - architecture: 'CertificateConceptEmbeddingModel'
+  #   run_name: "CertificateCEM_{selection_mode}_{pooling_mode}_{calibrate_global_logits}_{calibrate_dynamic_logits}_g_ood_{global_ood_prob}_emb_{emb_size}_ood_{ood_dropout_prob}_mp_{mixed_probs}_creg_{contrastive_reg}_hs_{hard_eval_selection}_cal_epochs_{calibration_epochs}_cw_{certificate_loss_weight}_ss_{selection_sample}_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_cwl_{concept_loss_weight}"
+
+  #   concept_loss_weight: [1]
+  #   emb_size: [16]
+  #   temperature: [1]
+  #   shared_emb_generator: True
+
+  #   # OOD stuff
+  #   certificate_loss_weight: [0] #, 0.1]
+  #   ood_dropout_prob: [0] #, 0.75, 0.5, 0]
+  #   global_ood_prob: [0.5, 0.75, 0.25] #, 0.75, 0.5, 0]
+  #   pooling_mode: ['individual_scores']
+  #   selection_mode: ['max_class_confidence']
+  #   hard_eval_selection: [0.5, null, 0.05, 0.95] #0.1, 0.5, 0.05] #, -0.999, 0.999]
+  #   selection_sample: [False]
+  #   calibration_epochs: 30
+  #   mixed_probs: False
+  #   contrastive_reg: [0.1, 1]
+  #   calibrate_dynamic_logits: True
+  #   calibrate_global_logits: True
+
+  #   ###############################################################################################
+
+  #   # IntCEM stuff
+  #   embedding_activation: null
+  #   training_intervention_prob: [0.25]
+  #   intervention_task_discount: [1.1]
+  #   use_concept_groups: True
+  #   int_model_use_bn: True
+  #   int_model_layers: [128, 128, 64, 64]
+  #   max_horizon: 6
+  #   horizon_rate: 1.005
+  #   gradient_clip_val: 100
+  #   intervention_weight: 0.1
+
+
+  #   grid_variables:
+  #     - concept_loss_weight
+  #     - training_intervention_prob
+  #     - intervention_task_discount
+  #     - temperature
+  #     - emb_size
+  #     - certificate_loss_weight
+  #     - ood_dropout_prob
+  #     - selection_mode
+  #     - hard_eval_selection
+  #     - selection_sample
+  #     - pooling_mode
+  #     - global_ood_prob
+  #     - contrastive_reg
+  #   grid_search_mode: exhaustive
+
+#   - architecture: 'CertificateConceptEmbeddingModel'
+#     run_name: "CertificateCEM_{selection_mode}_{pooling_mode}_emb_{emb_size}_ood_{ood_dropout_prob}_hs_{hard_eval_selection}_cw_{certificate_loss_weight}_ss_{selection_sample}_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_cwl_{concept_loss_weight}"
+
+#     concept_loss_weight: [1]
+#     emb_size: [16]
+#     temperature: [1]
+#     shared_emb_generator: True
+
+#     # OOD stuff
+#     certificate_loss_weight: [0.01] #, 0.1]
+#     ood_dropout_prob: [0.5, 0]
+#     pooling_mode: 'individual_scores' #'concat'
+#     selection_mode: ['global']
+#     hard_eval_selection: [-0.001, 0.001] #, -0.999, 0.999]
+#     selection_sample: [True, False]
+
+#     ###############################################################################################
+
+#     # IntCEM stuff
+#     embedding_activation: null
+#     training_intervention_prob: [0.25]
+#     intervention_task_discount: [1.1]
+#     use_concept_groups: True
+#     int_model_use_bn: True
+#     int_model_layers: [128, 128, 64, 64]
+#     max_horizon: 6
+#     horizon_rate: 1.005
+#     gradient_clip_val: 100
+#     intervention_weight: 0.1
+
+
+#     grid_variables:
+#       - concept_loss_weight
+#       - training_intervention_prob
+#       - intervention_task_discount
+#       - emb_size
+#       - temperature
+#       - ood_dropout_prob
+#       - certificate_loss_weight
+#       - selection_mode
+#       - hard_eval_selection
+#       - selection_sample
+#     grid_search_mode: exhaustive
+
+
+
+
+
+#   - architecture: 'CertificateConceptEmbeddingModel'
+#     run_name: "CertificateCEM_{selection_mode}_{pooling_mode}_emb_{emb_size}_ood_{ood_dropout_prob}_hs_{hard_eval_selection}_cw_{certificate_loss_weight}_ss_{selection_sample}_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_cwl_{concept_loss_weight}"
+
+#     concept_loss_weight: [1]
+#     emb_size: [16]
+#     temperature: [1]
+#     shared_emb_generator: True
+
+#     # OOD stuff
+#     certificate_loss_weight: [0.01, 0.001] #, 0.1]
+#     ood_dropout_prob: [0.5, 0.75]
+#     pooling_mode: ['individual_scores', 'concat']
+#     selection_mode: ['global', 'individual']
+#     hard_eval_selection: [0.001] #, -0.999, 0.999]
+#     selection_sample: [False]
+
+#     ###############################################################################################
+
+#     # IntCEM stuff
+#     embedding_activation: null
+#     training_intervention_prob: [0.25]
+#     intervention_task_discount: [1.1]
+#     use_concept_groups: True
+#     int_model_use_bn: True
+#     int_model_layers: [128, 128, 64, 64]
+#     max_horizon: 6
+#     horizon_rate: 1.005
+#     gradient_clip_val: 100
+#     intervention_weight: 0.1
+
+
+#     grid_variables:
+#       - concept_loss_weight
+#       - training_intervention_prob
+#       - intervention_task_discount
+#       - emb_size
+#       - temperature
+#       - ood_dropout_prob
+#       - certificate_loss_weight
+#       - selection_mode
+#       - hard_eval_selection
+#       - selection_sample
+#       - pooling_mode
+#     grid_search_mode: exhaustive
+
+
+
+
+
+#   - architecture: 'ProbConceptEmbeddingModel'
+#     run_name: "ProbCEM_{pooling_mode}_{selection_mode}_{separator_mode}_{attention_fn}_sam_{shared_attn_module}_emb_{emb_size}_n_vars_{n_concept_variants}_lce_{learnable_concept_embs}_ood_{ood_dropout_prob}_kl_weight_{kl_loss_weight}_threshold_{threshold}_bt_{box_temperature}_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_cwl_{concept_loss_weight}"
+
+#     concept_loss_weight: [1]
+#     emb_size: [16]
+#     n_concept_variants: [10]
+#     temperature: [1]
+#     shared_emb_generator: True
+#     attention_fn: ['hard_gumbel', 'softmax'] #'softmax'
+#     pooling_mode: 'concat'
+
+#     # OOD stuff
+#     ood_dropout_prob: [0]
+#     selection_mode: 'z_score'
+#     separator_mode: 'softmax'
+#     kl_loss_weight: [0.1, 0.01, 1]
+#     threshold: [1.5]
+#     box_temperature: 50 #10
+#     learnable_concept_embs: False
+#     shared_attn_module: True
+#     global_above_thresh: True
+
+#     ###############################################################################################
+
+#     # IntCEM stuff
+#     embedding_activation: null
+#     training_intervention_prob: [0.25]
+#     # intervention_task_discount: [1] # [1.1] # Turned into a standard CEM for now!
+#     intervention_task_discount: [1.1]
+#     use_concept_groups: True
+#     int_model_use_bn: True
+#     int_model_layers: [128, 128, 64, 64]
+#     # max_horizon: 1 # 6 # Turned into a standard CEM for now!
+#     max_horizon: 6
+#     # horizon_rate: 1 # 1.005 # Turned into a standard CEM for now!
+#     horizon_rate: 1.005
+#     # gradient_clip_val: null # 100 # Turned into a standard CEM for now!
+#     gradient_clip_val: 100
+#     # intervention_weight: 0 # 0.1 # Turned into a standard CEM for now!
+#     intervention_weight: 0.1
+
+
+#     grid_variables:
+#       - concept_loss_weight
+#       - training_intervention_prob
+#       - intervention_task_discount
+#       - emb_size
+#       - n_concept_variants
+#       - temperature
+#       - ood_dropout_prob
+#       - threshold
+#       - kl_loss_weight
+#       - attention_fn
+#     grid_search_mode: exhaustive
+
+
+#   - architecture: 'SeparatorConceptEmbeddingModel'
+#     run_name: "SeparatorCEM_{pooling_mode}_{selection_mode}_{separator_mode}_pd_{projection_dim}_emb_{emb_size}_n_vars_{n_concept_variants}_ood_{ood_dropout_prob}_spl_{sep_loss_weight}_warm_{separator_warmup_steps}_ibv_{init_bound_val}_bt_{box_temperature}_blw_{bounds_loss_weight}_mlw_{margin_loss_weight}_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_cwl_{concept_loss_weight}"
+
+#     concept_loss_weight: [1]
+#     emb_size: [16]
+#     n_concept_variants: [1]
+#     temperature: [1]
+#     shared_emb_generator: True
+#     attention_fn: 'softmax'
+#     separator_warmup_steps: 0
+#     pooling_mode: 'concat' #'individual_scores' # concat
+#     init_bound_val: 1 #5
+#     box_temperature: 1 #50
+
+#     # OOD stuff
+#     ood_dropout_prob: [0]
+#     margin_loss_weight: [0]
+#     bounds_loss_weight: [10, 0.1, 0.01, 0.001]
+#     selection_mode: 'distance'
+#     sep_loss_weight: [0.1, 0.01, 1]
+#     separator_mode: 'softmax'
+#     projection_dim: 16
+
+#     ###############################################################################################
+
+#     # IntCEM stuff
+#     embedding_activation: null
+#     training_intervention_prob: [0.25]
+#     # intervention_task_discount: [1] # [1.1] # Turned into a standard CEM for now!
+#     intervention_task_discount: [1.1]
+#     use_concept_groups: True
+#     int_model_use_bn: True
+#     int_model_layers: [128, 128, 64, 64]
+#     # max_horizon: 1 # 6 # Turned into a standard CEM for now!
+#     max_horizon: 6
+#     # horizon_rate: 1 # 1.005 # Turned into a standard CEM for now!
+#     horizon_rate: 1.005
+#     # gradient_clip_val: null # 100 # Turned into a standard CEM for now!
+#     gradient_clip_val: 100
+#     # intervention_weight: 0 # 0.1 # Turned into a standard CEM for now!
+#     intervention_weight: 0.1
+
+
+#     grid_variables:
+#       - concept_loss_weight
+#       - training_intervention_prob
+#       - intervention_task_discount
+#       - emb_size
+#       - n_concept_variants
+#       - temperature
+#       - margin_loss_weight
+#       - ood_dropout_prob
+#       - sep_loss_weight
+#       - bounds_loss_weight
+#     grid_search_mode: exhaustive
+
+
+#   - architecture: 'SeparatorConceptEmbeddingModel'
+#     run_name: "SeparatorCEM_{pooling_mode}_{selection_mode}_emb_{emb_size}_n_vars_{n_concept_variants}_ood_{ood_dropout_prob}_spl_{sep_loss_weight}_warm_{separator_warmup_steps}_ibv_{init_bound_val}_bt_{box_temperature}_blw_{bounds_loss_weight}_mlw_{margin_loss_weight}_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_cwl_{concept_loss_weight}"
+
+#     concept_loss_weight: [1]
+#     emb_size: [16]
+#     n_concept_variants: [1, 5]
+#     temperature: [1]
+#     shared_emb_generator: True
+#     attention_fn: 'softmax'
+#     separator_warmup_steps: 0
+#     pooling_mode: 'concat' #'individual_scores'
+#     init_bound_val: 5
+#     box_temperature: 50
+
+#     # OOD stuff
+#     ood_dropout_prob: [0, 0.1]
+#     margin_loss_weight: [0]
+#     bounds_loss_weight: 0
+#     selection_mode: 'distance'
+#     sep_loss_weight: [0.1, 0.01, 1]
+#     separator_mode: 'individual'
+#     projection_dim: null
+
+#     ###############################################################################################
+
+#     # IntCEM stuff
+#     embedding_activation: null
+#     training_intervention_prob: [0.25]
+#     intervention_task_discount: [1.1]
+#     use_concept_groups: True
+#     int_model_use_bn: True
+#     int_model_layers: [128, 128, 64, 64]
+#     max_horizon: 6
+#     horizon_rate: 1.005
+#     gradient_clip_val: 100
+#     task_concept_loss: 1
+#     intervention_weight: 0.1
+
+
+#     grid_variables:
+#       - concept_loss_weight
+#       - training_intervention_prob
+#       - intervention_task_discount
+#       - emb_size
+#       - n_concept_variants
+#       - temperature
+#       - margin_loss_weight
+#       - ood_dropout_prob
+#       - sep_loss_weight
+#     grid_search_mode: exhaustive
+
+
+
+#   - architecture: 'SeparatorConceptEmbeddingModel'
+#     run_name: "SeparatorCEM_emb_{emb_size}_n_vars_{n_concept_variants}_ood_{ood_dropout_prob}_bt_{box_temperature}_blw_{bounds_loss_weight}_mlw_{margin_loss_weight}_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_cwl_{concept_loss_weight}"
+
+#     concept_loss_weight: [1]
+#     emb_size: [16]
+#     n_concept_variants: [1]
+#     temperature: [1]
+#     shared_emb_generator: True
+#     attention_fn: 'softmax'
+#     separator_warmup_steps: 0
+#     pooling_mode: 'concat'
+#     init_bound_val: 5
+
+#     # OOD stuff
+#     ood_dropout_prob: [0, 0.1]
+#     margin_loss_weight: [0]
+#     box_temperature: 100
+#     bounds_loss_weight: 10
+
+#     ###############################################################################################
+
+#     # IntCEM stuff
+#     embedding_activation: null
+#     training_intervention_prob: [0.25]
+#     intervention_task_discount: [1.1]
+#     use_concept_groups: True
+#     int_model_use_bn: True
+#     int_model_layers: [128, 128, 64, 64]
+#     max_horizon: 6
+#     horizon_rate: 1.005
+#     gradient_clip_val: 100
+#     task_concept_loss: 1
+#     intervention_weight: 0.1
+
+
+#     grid_variables:
+#       - concept_loss_weight
+#       - training_intervention_prob
+#       - intervention_task_discount
+#       - emb_size
+#       - n_concept_variants
+#       - temperature
+#       - margin_loss_weight
+#       - ood_dropout_prob
+#     grid_search_mode: exhaustive
+
+
+
+#   - architecture: 'SeparatorConceptEmbeddingModel'
+#     run_name: "SeparatorCEM_{pooling_mode}_emb_{emb_size}_n_vars_{n_concept_variants}_ood_{ood_dropout_prob}_warm_{separator_warmup_steps}_ibv_{init_bound_val}_bt_{box_temperature}_blw_{bounds_loss_weight}_mlw_{margin_loss_weight}_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_cwl_{concept_loss_weight}"
+
+#     concept_loss_weight: [1]
+#     emb_size: [16]
+#     n_concept_variants: [1]
+#     temperature: [1]
+#     shared_emb_generator: True
+#     attention_fn: 'softmax'
+#     separator_warmup_steps: 0
+#     pooling_mode: 'individual_scores'
+#     init_bound_val: 5
+
+#     # OOD stuff
+#     ood_dropout_prob: [0]
+#     margin_loss_weight: [0]
+#     box_temperature: 100
+#     bounds_loss_weight: 10
+
+#     ###############################################################################################
+
+#     # IntCEM stuff
+#     embedding_activation: null
+#     training_intervention_prob: [0.25]
+#     intervention_task_discount: [1.1]
+#     use_concept_groups: True
+#     int_model_use_bn: True
+#     int_model_layers: [128, 128, 64, 64]
+#     max_horizon: 6
+#     horizon_rate: 1.005
+#     gradient_clip_val: 100
+#     task_concept_loss: 1
+#     intervention_weight: 0.1
+
+
+#     grid_variables:
+#       - concept_loss_weight
+#       - training_intervention_prob
+#       - intervention_task_discount
+#       - emb_size
+#       - n_concept_variants
+#       - temperature
+#       - margin_loss_weight
+#       - ood_dropout_prob
+#     grid_search_mode: exhaustive
+
+
+
+#   - architecture: 'GlobalApproxConceptEmbeddingModel'
+#     run_name: "NewGlobalApproxCEM_joint_{joint_trained}_emb_{emb_size}_n_vars_{n_concept_variants}_itp_{init_threshold_percentile}_e_{dynamic_epochs}_{approx_epochs}_{finetuning_epochs}_{ood_epochs}_p_{use_dynamic_for_probs}_dl_{distance_l2_loss}_ood_{ood_dropout_prob}_{thresh_l2_loss}_l2_{l2_dist_loss_weight}_freeze_{freeze_underlying_model}_{ood_freeze_underlying_model}_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_cwl_{concept_loss_weight}"
+
+#     concept_loss_weight: [1] #, 10]
+#     emb_size: [16]
+#     n_concept_variants: [5, 1, 2, 10] #, 20] #, 50]
+#     temperature: [5, 1]
+#     shared_emb_generator: True
+#     l2_dist_loss_weight: [0] #, 0.1, 0]
+#     attention_fn: 'softmax'
+#     init_threshold_percentile: [5, 10, 25, 50]
+#     approx_prediction_mode: 'new'
+#     mode: ood_beta #ood_same
+#     joint_trained: [True, False]
+#     # global_mixture_components: 10
+#     gmm_epochs: 50
+#     ood_loss_weight: 1
+
+
+#     # OOD stuff
+#     ood_dropout_prob: [0.25, 0.1, 0.5]
+#     thresh_l2_loss: [0] #0.0001]
+#     distance_l2_loss: [0]
+
+#     # Training:
+#     use_dynamic_for_probs: True
+#     freeze_centroids: False
+#     dynamic_epochs: 200
+#     prototypes_epochs: 0
+#     approx_epochs: 0 #100
+#     freeze_underlying_model: True
+#     finetuning_epochs: 0
+
+#     ood_epochs: 30 #150
+#     ood_freeze_underlying_model: True
+#     ood_freeze_label_predictor: False
+#     ood_freeze_concept_rank_model: False
+#     ood_freeze_global_concept_generators: False
+
+#     dynamic_model_path: "GlobalApproxCEM_BackBone_joint_fixed_{joint_trained}_n_concept_variants_{n_concept_variants}_epochs_{dynamic_epochs}_emb_size_{emb_size}_intervention_weight_{intervention_weight}_intervention_task_discount_{intervention_task_discount}_Baseline_cwl_{concept_loss_weight}_fold_{split}"
+
+#     ###############################################################################################
+
+#     # IntCEM stuff
+#     embedding_activation: null
+#     training_intervention_prob: [0.25]
+#     intervention_task_discount: [1.1]
+#     use_concept_groups: True
+#     int_model_use_bn: True
+#     int_model_layers: [128, 128, 64, 64]
+#     max_horizon: 6
+#     horizon_rate: 1.005
+#     gradient_clip_val: 100
+#     task_concept_loss: 1
+#     intervention_weight: 0.1
+
+
+#     grid_variables:
+#       - concept_loss_weight
+#       - training_intervention_prob
+#       - intervention_task_discount
+#       - emb_size
+#       - n_concept_variants
+#       - temperature
+#       - l2_dist_loss_weight
+#       - thresh_l2_loss
+#       - distance_l2_loss
+#       - init_threshold_percentile
+#       - ood_dropout_prob
+#       - joint_trained
+#     grid_search_mode: exhaustive
+
+
+
+
+
+#   - architecture: ''
+#     run_name: "GlobalApproxCEM_emb_{emb_size}_n_vars_{n_concept_variants}_itp_{init_threshold_percentile}_e_{dynamic_epochs}_{approx_epochs}_{finetuning_epochs}_{ood_epochs}_p_{use_dynamic_for_probs}_dl_{distance_l2_loss}_ood_{ood_dropout_prob}_{thresh_l2_loss}_l2_{l2_dist_loss_weight}_freeze_{freeze_underlying_model}_{ood_freeze_underlying_model}_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_cwl_{concept_loss_weight}"
+
+#     concept_loss_weight: [1] #, 10]
+#     emb_size: [16]
+#     n_concept_variants: [5] #, 20] #, 50]
+#     temperature: [1, 5]
+#     shared_emb_generator: True
+#     l2_dist_loss_weight: [0] #, 0.1, 0]
+#     attention_fn: 'softmax'
+#     init_threshold_percentile: [25, 50, 75, 90]
+
+
+#     # OOD stuff
+#     ood_dropout_prob: [0.1, 0, 0.25, 0.5]
+#     thresh_l2_loss: [0] #0.0001]
+#     distance_l2_loss: [0]
+
+#     # Training:
+#     use_dynamic_for_probs: True
+#     freeze_centroids: False
+#     dynamic_epochs: 150
+#     prototypes_epochs: 0
+#     approx_epochs: 100
+#     freeze_underlying_model: True
+#     finetuning_epochs: 0
+
+#     ood_epochs: 150
+#     ood_freeze_underlying_model: True
+#     ood_freeze_label_predictor: False
+#     ood_freeze_concept_rank_model: False
+#     ood_freeze_global_concept_generators: False
+
+#     dynamic_model_path: "GlobalApproxCEM_BackBone_epochs_{dynamic_epochs}_emb_size_{emb_size}_intervention_weight_{intervention_weight}_intervention_task_discount_{intervention_task_discount}_Baseline_cwl_{concept_loss_weight}_fold_{split}"
+
+#     ###############################################################################################
+
+#     # IntCEM stuff
+#     embedding_activation: null
+#     training_intervention_prob: [0.25]
+#     intervention_task_discount: [1.1]
+#     use_concept_groups: True
+#     int_model_use_bn: True
+#     int_model_layers: [128, 128, 64, 64]
+#     max_horizon: 6
+#     horizon_rate: 1.005
+#     gradient_clip_val: 100
+#     task_concept_loss: 1
+#     intervention_weight: 0.1
+
+
+#     grid_variables:
+#       - concept_loss_weight
+#       - training_intervention_prob
+#       - intervention_task_discount
+#       - emb_size
+#       - temperature
+#       - n_concept_variants
+#       - l2_dist_loss_weight
+#       - thresh_l2_loss
+#       - distance_l2_loss
+#       - init_threshold_percentile
+#       - ood_dropout_prob
+#     grid_search_mode: exhaustive
+
+
+
+#   - architecture: ''
+#     run_name: "GlobalApproxCEM_emb_{emb_size}_n_vars_{n_concept_variants}_e_{dynamic_epochs}_{approx_epochs}_{finetuning_epochs}_{ood_epochs}_ood_{ood_dropout_prob}_{thresh_l2_loss}_l2_{l2_dist_loss_weight}_freeze_{freeze_underlying_model}_{ood_freeze_underlying_model}_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_cwl_{concept_loss_weight}"
+
+#     concept_loss_weight: [1, 10]
+#     emb_size: [16]
+#     n_concept_variants: [10, 5, 2, 1]
+#     temperature: [5]
+#     shared_emb_generator: True
+#     l2_dist_loss_weight: [100] #, 0.1, 0]
+#     attention_fn: 'softmax'
+
+
+#     # OOD stuff
+#     ood_dropout_prob: [0.1, 0.25]
+#     thresh_l2_loss: [0.1]
+
+#     # Training:
+#     dynamic_epochs: 150
+#     freeze_underlying_model: True
+#     approx_epochs: 100
+#     finetuning_epochs: 0
+#     ood_epochs: 100
+#     ood_freeze_underlying_model: False
+#     dynamic_model_path: "IntCEM_emb_size_{emb_size}_intervention_weight_{intervention_weight}_intervention_task_discount_{intervention_task_discount}_Baseline_cwl_{concept_loss_weight}_fold_1"
+
+#     ###############################################################################################
+
+#     # IntCEM stuff
+#     embedding_activation: null
+#     training_intervention_prob: [0.25]
+#     intervention_task_discount: [1.1]
+#     use_concept_groups: True
+#     int_model_use_bn: True
+#     int_model_layers: [128, 128, 64, 64]
+#     max_horizon: 6
+#     horizon_rate: 1.005
+#     gradient_clip_val: 100
+#     task_concept_loss: 1
+#     intervention_weight: 0.1
+
+
+#     grid_variables:
+#       - concept_loss_weight
+#       - training_intervention_prob
+#       - intervention_task_discount
+#       - emb_size
+#       - temperature
+#       - n_concept_variants
+#       - l2_dist_loss_weight
+#       - thresh_l2_loss
+#       - ood_dropout_prob
+#     grid_search_mode: exhaustive
+
+
+
+# # THE NEXT CONFIG LED TO THIS
+# #   test c_acc: 94.96%, test y_acc: 71.04%, test c_auc: 89.62%, test y_auc: 98.92%
+# #         Intervening in GlobalApproxCEM_emb_16_n_vars_4_temp_5_l2_100_freeze_True_seg_True_tip_0.25_itd_1.1_iw_0.1_cwl_1 with dataset 'test', policy random_group_level_True_use_prior_False, and competence 1
+# # Global seed set to 42
+# #         Average intervention took 0.00150 seconds and construction took 0.00008 seconds.
+# # INFO:root:              test accuracy when intervening with 0 concept groups with claimed competence 1 and real competence same is 71.04% (avg int time is 0.00150s and construction time is 0.00008s).
+# # INFO:root:              test accuracy when intervening with 1 concept groups with claimed competence 1 and real competence same is 74.16% (avg int time is 0.00150s and construction time is 0.00008s).
+# # INFO:root:              test accuracy when intervening with 2 concept groups with claimed competence 1 and real competence same is 77.82% (avg int time is 0.00150s and construction time is 0.00008s).
+# # INFO:root:              test accuracy when intervening with 3 concept groups with claimed competence 1 and real competence same is 81.62% (avg int time is 0.00150s and construction time is 0.00008s).
+# # INFO:root:              test accuracy when intervening with 4 concept groups with claimed competence 1 and real competence same is 85.78% (avg int time is 0.00150s and construction time is 0.00008s).
+# # INFO:root:              test accuracy when intervening with 5 concept groups with claimed competence 1 and real competence same is 89.04% (avg int time is 0.00150s and construction time is 0.00008s).
+# # INFO:root:              test accuracy when intervening with 6 concept groups with claimed competence 1 and real competence same is 92.01% (avg int time is 0.00150s and construction time is 0.00008s).
+# # INFO:root:              test accuracy when intervening with 7 concept groups with claimed competence 1 and real competence same is 94.99% (avg int time is 0.00150s and construction time is 0.00008s).
+# # INFO:root:              test area under the intervention accuracy curve with policy random_group_level_True_use_prior_False, claimed competence 1, and real competence same is 666.47%.
+# # Global seed set to 42
+# #                 Selected concepts: [0, 1, 2, 3, 37, 38, 39, 40, 41, 42, 43, 44, 51, 52, 76, 77, 86, 87, 88, 99, 100, 101]
+# #                 Updated concept group map (with 7 groups):
+# #                         has_bill_shape -> [0, 1, 2, 3]
+# #                         has_head_pattern -> [4, 5]
+# #                         has_breast_color -> [6, 7, 8, 9, 10, 11]
+# #                         has_bill_length -> [12, 13]
+# #                         has_wing_shape -> [14, 15]
+# #                         has_tail_pattern -> [16, 17, 18]
+# #                         has_bill_color -> [19, 20, 21]
+# # Predicting DataLoader 0: 100%|████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 91/91 [00:14<00:00,  6.36it/s]
+# # OOD_test c_acc: 71.67%, OOD_test y_acc: 0.67%, OOD_test c_auc: 50.04%, OOD_test y_auc: 47.45%
+# #         Intervening in GlobalApproxCEM_emb_16_n_vars_4_temp_5_l2_100_freeze_True_seg_True_tip_0.25_itd_1.1_iw_0.1_cwl_1 with dataset 'OOD_test', policy random_group_level_True_use_prior_False, and competence 1
+# # Global seed set to 42
+# #         Average intervention took 0.00150 seconds and construction took 0.00007 seconds.
+# # INFO:root:              OOD_test accuracy when intervening with 0 concept groups with claimed competence 1 and real competence same is 0.60% (avg int time is 0.00150s and construction time is 0.00007s).
+# # INFO:root:              OOD_test accuracy when intervening with 1 concept groups with claimed competence 1 and real competence same is 1.24% (avg int time is 0.00150s and construction time is 0.00007s).
+# # INFO:root:              OOD_test accuracy when intervening with 2 concept groups with claimed competence 1 and real competence same is 3.14% (avg int time is 0.00150s and construction time is 0.00007s).
+# # INFO:root:              OOD_test accuracy when intervening with 3 concept groups with claimed competence 1 and real competence same is 6.87% (avg int time is 0.00150s and construction time is 0.00007s).
+# # INFO:root:              OOD_test accuracy when intervening with 4 concept groups with claimed competence 1 and real competence same is 14.36% (avg int time is 0.00150s and construction time is 0.00007s).
+# # INFO:root:              OOD_test accuracy when intervening with 5 concept groups with claimed competence 1 and real competence same is 26.65% (avg int time is 0.00150s and construction time is 0.00007s).
+# # INFO:root:              OOD_test accuracy when intervening with 6 concept groups with claimed competence 1 and real competence same is 44.17% (avg int time is 0.00150s and construction time is 0.00007s).
+# # INFO:root:              OOD_test accuracy when intervening with 7 concept groups with claimed competence 1 and real competence same is 65.43% (avg int time is 0.00150s and construction time is 0.00007s).
+# # INFO:root:              OOD_test area under the intervention accuracy curve with policy random_group_level_True_use_prior_False, claimed competence 1, and real competence same is 162.46%.
+
+#   - architecture: ''
+#     run_name: "GlobalApproxCEM_emb_{emb_size}_n_vars_{n_concept_variants}_temp_{temperature}_l2_{l2_dist_loss_weight}_freeze_{freeze_underlying_model}_seg_{shared_emb_generator}_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_cwl_{concept_loss_weight}"
+
+#     concept_loss_weight: [1, 10]
+#     emb_size: [16]
+#     n_concept_variants: [4, 20, 5]
+#     temperature: [5, 1]
+#     shared_emb_generator: True
+#     l2_dist_loss_weight: [100, 0.1, 0]
+#     attention_fn: 'sigmoid'
+
+#     # Training:
+#     dynamic_epochs: 150
+#     freeze_underlying_model: True
+#     approx_epochs: 50
+#     finetuning_epochs: 100
+#     dynamic_model_path: "IntCEM_emb_size_{emb_size}_intervention_weight_{intervention_weight}_intervention_task_discount_{intervention_task_discount}_Baseline_cwl_{concept_loss_weight}_fold_1"
+
+#     ###############################################################################################
+
+#     # IntCEM stuff
+#     embedding_activation: null
+#     training_intervention_prob: [0.25]
+#     intervention_task_discount: [1.1]
+#     use_concept_groups: True
+#     int_model_use_bn: True
+#     int_model_layers: [128, 128, 64, 64]
+#     max_horizon: 6
+#     horizon_rate: 1.005
+#     gradient_clip_val: 100
+#     task_concept_loss: 1
+#     intervention_weight: 0.1
+
+
+#     grid_variables:
+#       - concept_loss_weight
+#       - training_intervention_prob
+#       - intervention_task_discount
+#       - emb_size
+#       - temperature
+#       - n_concept_variants
+#       - l2_dist_loss_weight
+#     grid_search_mode: exhaustive
+
+
+
+
+
+
+
+
+
+#   - architecture: 'GlobalBankConceptEmbeddingModel'
+#     run_name: "BankMixCEM_{bottleneck_pooling}_{selection_mode}_ds_{distance_selection}_soft_{soft_select}_lp_{learnable_prob}_emb_{emb_size}_n_vars_{n_concept_variants}_ade_{add_dynamic_embedding}_seg_{shared_emb_generator}_rm_{remap_context}_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_cwl_{concept_loss_weight}"
+
+#     bottleneck_pooling: ['concat']
+#     concept_loss_weight: [1, 10] #0.1, 1, 10]
+#     emb_size: [16] #, 16, 32, 512]
+#     n_concept_variants: [5] #10, 5, 1]
+#     temperature: [1] #, 10]
+#     selection_mode: ['min_distance'] #'hierarchical'] #'attention'] #, 'learnt'] #, 'max_distance']
+#     learnable_prob: [False] #[True] #, False] #True]
+#     distance_selection: 'stochastic'
+#     soft_select: [False] #, False]
+#     shared_emb_generator: True
+#     remap_context: False
+#     add_dynamic_embedding: False #True
+
+#     # Training:
+#     concept_epochs: 0
+
+#     ###############################################################################################
+
+#     # IntCEM stuff
+#     embedding_activation: null
+#     training_intervention_prob: [0.25]
+#     intervention_task_discount: [1.1]
+#     use_concept_groups: True
+#     int_model_use_bn: True
+#     int_model_layers: [128, 128, 64, 64]
+#     max_horizon: 6
+#     horizon_rate: 1.005
+#     gradient_clip_val: 100
+#     task_concept_loss: 1
+#     intervention_weight: 0.1
+
+
+#     grid_variables:
+#       - bottleneck_pooling
+#       - concept_loss_weight
+#       - training_intervention_prob
+#       - intervention_task_discount
+#       - emb_size
+#       - temperature
+#       - n_concept_variants
+#       - learnable_prob
+#       - soft_select
+#       - selection_mode
+#     grid_search_mode: exhaustive
+
+
+#   - architecture: 'GlobalBankConceptEmbeddingModel'
+#     run_name: "BankMixCEM_{bottleneck_pooling}_{selection_mode}_soft_{soft_select}_lp_{learnable_prob}_emb_{emb_size}_n_vars_{n_concept_variants}_temp_{temperature}_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_cwl_{concept_loss_weight}"
+
+#     bottleneck_pooling: ['concat']
+#     concept_loss_weight: [1, 10] #0.1, 1, 10]
+#     emb_size: [512, 16, 32]
+#     n_concept_variants: [10, 5, 1]
+#     temperature: [1] #, 10]
+#     selection_mode: ['attention'] #, 'max_distance']
+#     learnable_prob: [False, True] #True]
+#     soft_select: [True] #, False]
+#     shared_emb_generator: True
+
+#     ###############################################################################################
+
+#     # IntCEM stuff
+#     embedding_activation: null
+#     training_intervention_prob: [0.25]
+#     intervention_task_discount: [1.1]
+#     use_concept_groups: True
+#     int_model_use_bn: True
+#     int_model_layers: [128, 128, 64, 64]
+#     max_horizon: 6
+#     horizon_rate: 1.005
+#     gradient_clip_val: 100
+#     task_concept_loss: 1
+#     intervention_weight: 0.1
+
+
+#     grid_variables:
+#       - bottleneck_pooling
+#       - concept_loss_weight
+#       - training_intervention_prob
+#       - intervention_task_discount
+#       - emb_size
+#       - temperature
+#       - n_concept_variants
+#       - selection_mode
+#       - learnable_prob
+#       - soft_select
+#     grid_search_mode: exhaustive
+
+

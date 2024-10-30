@@ -352,6 +352,12 @@ class CertificateConceptEmbeddingModel(IntAwareConceptEmbeddingModel):
         self.max_temperature = max_temperature
         self.inference_dyn_prob = inference_dyn_prob
 
+    def _predict_labels(self, bottleneck, **task_loss_kwargs):
+        out = self.c2y_model(bottleneck)
+        # print("torch.max(out) =", torch.max(out).detach().cpu().numpy())
+        # print("torch.min(out) =", torch.min(out).detach().cpu().numpy())
+        return out
+
     def _construct_c2y_input(
         self,
         pos_embeddings,
@@ -402,11 +408,16 @@ class CertificateConceptEmbeddingModel(IntAwareConceptEmbeddingModel):
                 global_selected[:, concept_idx:concept_idx+1] * global_logits +
                 (1 - global_selected[:, concept_idx:concept_idx+1]) * dynamic_logits
             )
+            # print("torch.max(global_logits) =", torch.max(global_logits).detach().cpu().numpy())
+            # print("torch.max(dynamic_logits) =", torch.max(dynamic_logits).detach().cpu().numpy())
+            # print("torch.max(combined_scores) =", torch.max(combined_scores).detach().cpu().numpy())
+            # print("torch.min(combined_scores) =", torch.min(combined_scores).detach().cpu().numpy())
 
             if output_logits is None:
                 output_logits = combined_scores
             else:
                 output_logits = output_logits + combined_scores
+            # print("torch.max(output_logits) =", torch.max(output_logits).detach().cpu().numpy())
 
         return output_logits
 
@@ -522,7 +533,7 @@ class CertificateConceptEmbeddingModel(IntAwareConceptEmbeddingModel):
                 neg_anchor = self.concept_embeddings[concept_idx:concept_idx+1, 1, :].expand(global_emb_center.shape[0], -1)
                 neg_dist = (neg_anchor - global_emb_center).pow(2).sum(-1).sqrt()
                 pos_dist = (pos_anchor - global_emb_center).pow(2).sum(-1).sqrt()
-                global_logits = self.concept_scales[concept_idx] * (pos_dist - neg_dist).unsqueeze(-1)
+                global_logits = self.concept_scales[concept_idx] * (neg_dist - pos_dist).unsqueeze(-1)
                 if self.selection_mode == 'max_concept_confidence':
                     dyn_logits = dyn_logits / self._get_dynamic_temps(concept_idx)
                     global_logits = global_logits / self._get_global_temps(concept_idx)
@@ -544,6 +555,8 @@ class CertificateConceptEmbeddingModel(IntAwareConceptEmbeddingModel):
                 prob = self.sig(c_logits[-1])
             c_sem.append(prob)
         c_sem = torch.cat(c_sem, axis=-1)
+        # print("torch.max(c_sem) =", torch.max(c_sem).detach().cpu().numpy())
+        # print("torch.min(c_sem) =", torch.min(c_sem).detach().cpu().numpy())
         if c_logits:
             c_logits = torch.cat(c_logits, axis=-1)
 
@@ -704,6 +717,10 @@ class CertificateConceptEmbeddingModel(IntAwareConceptEmbeddingModel):
                     ),
                     dim=-1,
                 )[:, 1:].unsqueeze(-1)
+                print("self._get_dynamic_temps(concept_idx) =", self._get_dynamic_temps(concept_idx))
+                print("self._get_global_temps(concept_idx) =", self._get_global_temps(concept_idx))
+                # print("torch.max(global_selected) =", torch.max(global_selected).detach().cpu().numpy())
+                # print("torch.min(global_selected) =", torch.min(global_selected).detach().cpu().numpy())
 
                 if training and self.global_ood_prob:
                     mask = torch.bernoulli(
@@ -814,7 +831,7 @@ class CertificateConceptEmbeddingModel(IntAwareConceptEmbeddingModel):
                     hard=True,
                 )[:, 1:].unsqueeze(1)
 
-            if (self.print_counter % 2 == 0) and (not training): # and (concept_idx in [0, 5, 10, 15, 20]) and (self.print_counter % 10 == 0):
+            if (self.print_counter % 20 == 0) and (not training): # and (concept_idx in [0, 5, 10, 15, 20]) and (self.print_counter % 10 == 0):
             #     # if concept_idx in [0, 10, 20] and (self.print_counter % 25 == 0):
                 # if (not training): # and np.mean((pos_global_selected > 0.2).detach().cpu().numpy()) > 0:
                     print()

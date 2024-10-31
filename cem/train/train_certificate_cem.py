@@ -138,6 +138,18 @@ def train_certificate_cem(
         else:
             training_time = 0
             num_epochs = 0
+            load_path_name = config.get('load_path_name', None)
+            loaded_weights = False
+            if load_path_name:
+                load_path_name = os.path.join(
+                    result_dir,
+                    load_path_name + f"_fold_{split + 1}.pt",
+                )
+            if load_path_name and os.path.exists(load_path_name):
+                # Then we simply load the model and proceed
+                print("\tFound model weights to load from for the initial finetuning!")
+                model.load_state_dict(torch.load(load_path_name))
+                loaded_weights = True
 
             ####################################################################
             ## Step 1: Train the underlying model without any approximations yet
@@ -145,7 +157,7 @@ def train_certificate_cem(
 
             start_time = time.time()
             max_epochs = config.get('max_epochs', 0)
-            if max_epochs:
+            if (not loaded_weights) and max_epochs:
                 print(
                     f"\tTraining up the end-to-end model for {max_epochs} epochs"
                 )

@@ -101,9 +101,17 @@ class CertificateConceptEmbeddingModel(IntAwareConceptEmbeddingModel):
         global_temp_reg=0,
         max_temperature=1,  # Temperature used when approximating the maximum operator using a logsoftmax function
         inference_dyn_prob=False,  # Whether or not we use the dynamically predicted probability as the outpt probability during inference
+        positive_calibration=False,
+        entire_global_prob=0, # Probability we will use the global embeddings for ALL concepts!
+        counter_limit=0, # For debugging purposes only
+        print_eval_only=True,
     ):
         self._construct_c2y_model = False
         bottleneck_size = 2 * emb_size * n_concepts if pooling_mode == 'combined' else emb_size * n_concepts
+        self.positive_calibration = positive_calibration
+        self.entire_global_prob = entire_global_prob
+        self.counter_limit = counter_limit
+        self.print_eval_only = print_eval_only
         super(CertificateConceptEmbeddingModel, self).__init__(
             n_concepts=n_concepts,
             n_tasks=n_tasks,
@@ -380,10 +388,15 @@ class CertificateConceptEmbeddingModel(IntAwareConceptEmbeddingModel):
     def _get_dynamic_temps(self, concept_idx):
         if self.learnable_temps:
             return 1e-8 + torch.exp(self.dynamic_logit_temperatures[concept_idx])
+        if self.positive_calibration:
+            return 1e-8 + torch.exp(self.dynamic_logit_temperatures[concept_idx])
+
         return 1e-8 + self.dynamic_logit_temperatures[concept_idx]
 
     def _get_global_temps(self, concept_idx):
         if self.learnable_temps:
+            return 1e-8 + torch.exp(self.global_logit_temperatures[concept_idx])
+        if self.positive_calibration:
             return 1e-8 + torch.exp(self.global_logit_temperatures[concept_idx])
         return 1e-8 + self.global_logit_temperatures[concept_idx]
 
@@ -564,6 +577,10 @@ class CertificateConceptEmbeddingModel(IntAwareConceptEmbeddingModel):
         combined_global_selected = []
         if self.contrastive_reg:
             self._c_logits_global = c_logits_global
+        if training and self.entire_global_prob:
+            entire_global_selection_mask = torch.bernoulli(
+                torch.ones(dynamic_contexts.shape[0], 1, 1) * self.entire_global_prob,
+            ).to(dynamic_contexts.device)
         for concept_idx in range(self.n_concepts):
             pos_idx = concept_idx
             neg_idx = concept_idx
@@ -577,6 +594,12 @@ class CertificateConceptEmbeddingModel(IntAwareConceptEmbeddingModel):
                     dim=-1,
                 )
                 global_selected = 1 - selection_probs[:, concept_idx:concept_idx+1].unsqueeze(1)
+                if training and self.entire_global_prob:
+                    global_selected = torch.where(
+                        entire_global_selection_mask == 1,
+                        torch.ones_like(global_selected),
+                        global_selected,
+                    )
                 if training and self.global_ood_prob:
                     mask = torch.bernoulli(
                         torch.ones(global_selected.shape[0], 1, 1) * self.global_ood_prob,
@@ -665,6 +688,13 @@ class CertificateConceptEmbeddingModel(IntAwareConceptEmbeddingModel):
                 prob_both_valid = pos_selection_probs[:, pos_idx:pos_idx+1].unsqueeze(1) * neg_selection_probs[:, neg_idx:neg_idx+1].unsqueeze(1)
                 global_selected = 1 - prob_both_valid
 
+                if training and self.entire_global_prob:
+                    global_selected = torch.where(
+                        entire_global_selection_mask == 1,
+                        torch.ones_like(global_selected),
+                        global_selected,
+                    )
+
                 if training and self.global_ood_prob:
                     mask = torch.bernoulli(
                         torch.ones(global_selected.shape[0], 1, 1) * self.global_ood_prob,
@@ -714,7 +744,16 @@ class CertificateConceptEmbeddingModel(IntAwareConceptEmbeddingModel):
                     dim=-1,
                 )[:, 1:].unsqueeze(-1)
 
-                if training and self.global_ood_prob:
+                if self.hard_selection_value is not None:
+                    # This is mostly use for exploration/debugging/analysis
+                    global_selected = torch.ones_like(global_selected) * self.hard_selection_value
+                elif training and self.entire_global_prob:
+                    global_selected = torch.where(
+                        entire_global_selection_mask == 1,
+                        torch.ones_like(global_selected),
+                        global_selected,
+                    )
+                elif training and self.global_ood_prob:
                     mask = torch.bernoulli(
                         torch.ones(global_selected.shape[0], 1, 1) * self.global_ood_prob,
                     ).to(global_selected.device)
@@ -726,6 +765,13 @@ class CertificateConceptEmbeddingModel(IntAwareConceptEmbeddingModel):
                 elif training:
                     forced_on = self.ood_dropout(torch.ones_like(global_selected))
                     global_selected = torch.ones_like(global_selected) * forced_on + (1 - forced_on) * global_selected
+
+                if (self.hard_eval_selection is not None) and (not training):
+                    global_selected = torch.where(
+                        global_selected >= self.hard_eval_selection if self.hard_eval_selection >= 0 else global_selected < self.hard_eval_selection,
+                        torch.ones_like(global_selected),
+                        torch.zeros_like(global_selected),
+                    )
                 pos_global_selected = global_selected
                 neg_global_selected = global_selected
                 if self.pooling_mode in ['individual_scores', 'individual_scores_shared']:
@@ -745,17 +791,14 @@ class CertificateConceptEmbeddingModel(IntAwareConceptEmbeddingModel):
                     dim=-1,
                 )[:, 1:].unsqueeze(-1)
 
-                if training and self.global_ood_prob:
-                    mask = torch.bernoulli(
-                        torch.ones(pos_global_selected.shape[0], 1, 1) * self.global_ood_prob,
-                    ).to(pos_global_selected.device)
+                if training and self.entire_global_prob:
                     global_selected = torch.where(
-                        mask == 1,
+                        entire_global_selection_mask == 1,
                         torch.ones_like(global_selected),
                         global_selected,
                     )
-
-                if training and self.global_ood_prob:
+                    print("entire_global_selection_mask =", entire_global_selection_mask)
+                elif training and self.global_ood_prob:
                     mask = torch.bernoulli(
                         torch.ones(global_selected.shape[0], 1, 1) * self.global_ood_prob,
                     ).to(global_selected.device)
@@ -823,7 +866,7 @@ class CertificateConceptEmbeddingModel(IntAwareConceptEmbeddingModel):
                     hard=True,
                 )[:, 1:].unsqueeze(1)
 
-            if (self.print_counter % 20 == 0) and (not training): # and (concept_idx in [0, 5, 10, 15, 20]) and (self.print_counter % 10 == 0):
+            if self.counter_limit and (self.print_counter % self.counter_limit == 0) and ((not training) or (not self.print_eval_only)): # and (not training): # and (concept_idx in [0, 5, 10, 15, 20]) and (self.print_counter % 10 == 0):
             #     # if concept_idx in [0, 10, 20] and (self.print_counter % 25 == 0):
                 # if (not training): # and np.mean((pos_global_selected > 0.2).detach().cpu().numpy()) > 0:
                     print()
@@ -844,19 +887,20 @@ class CertificateConceptEmbeddingModel(IntAwareConceptEmbeddingModel):
                     torch.ones_like(neg_global_selected),
                     torch.zeros_like(neg_global_selected),
                 )
-                if self.eval_majority_vote:
-                    og_type = pos_global_selected.type()
-                    pos_votes = pos_global_selected.sum(-1) >= pos_global_selected.shape[-1]//2
-                    neg_votes = neg_global_selected.sum(-1) >= neg_global_selected.shape[-1]//2
-                    total_votes = torch.logical_or(pos_votes, neg_votes)
-                    pos_global_selected = total_votes.unsqueeze(-1).type(og_type)
-                    neg_global_selected = total_votes.unsqueeze(-1).type(og_type)
+            if (not training) and self.eval_majority_vote:
+                og_type = pos_global_selected.type()
+                pos_votes = pos_global_selected.sum(-1) >= pos_global_selected.shape[-1]//2
+                neg_votes = neg_global_selected.sum(-1) >= neg_global_selected.shape[-1]//2
+                total_votes = torch.logical_or(pos_votes, neg_votes)
+                pos_global_selected = total_votes.unsqueeze(-1).type(og_type)
+                neg_global_selected = total_votes.unsqueeze(-1).type(og_type)
 
-            if self.hard_selection_value is not None:
-                # This is mostly use for exploration/debugging/analysis
-                pos_global_selected = torch.ones_like(pos_global_selected) * self.hard_selection_value
-                neg_global_selected = torch.ones_like(pos_global_selected) * self.hard_selection_value
-
+            if self.counter_limit and (self.print_counter % self.counter_limit == 0) and ((not training) or (not self.print_eval_only)): # and (concept_idx in [0, 5, 10, 15, 20]) and (self.print_counter % 10 == 0):
+            #     # if concept_idx in [0, 10, 20] and (self.print_counter % 25 == 0):
+                # if (not training): # and np.mean((pos_global_selected > 0.2).detach().cpu().numpy()) > 0:
+                    print()
+                    print(f"\t\tAt the end (concept {concept_idx}) Total positive global embeddings selected for {np.mean((pos_global_selected > (self.hard_eval_selection or 0.5)).detach().cpu().numpy())*100:.2f}% samples with a max value of ", torch.max(pos_global_selected[:]).detach().cpu().numpy(), "and a min value of", torch.min(pos_global_selected[:]).detach().cpu().numpy())
+                    print(f"\t\tAt the end (concept {concept_idx}) Total negative global embeddings selected for {np.mean((neg_global_selected > (self.hard_eval_selection or 0.5)).detach().cpu().numpy())*100:.2f}% samples with a max value of ", torch.max(neg_global_selected[:]).detach().cpu().numpy(), "and a min value of", torch.min(neg_global_selected[:]).detach().cpu().numpy())
 
 
             if self.pooling_mode == 'concat':
@@ -1002,8 +1046,15 @@ class CertificateConceptEmbeddingModel(IntAwareConceptEmbeddingModel):
             loss -= self.global_temp_reg * torch.mean(
                 torch.exp(self.dynamic_logit_temperatures)
             )
-
         return loss
+
+
+    def freeze_global_components(self):
+        self.concept_embeddings.requires_grad = False
+        self.concept_embeddings.requires_grad = False
+        self.concept_scales.requires_grad = False
+        for param in self.global_concept_context_generators.parameters():
+            param.requires_grad = False
 
 
 

@@ -756,6 +756,11 @@ def construct_model(
             "max_temperature": config.get("max_temperature", 1),
             "inference_dyn_prob": config.get('inference_dyn_prob', False),
             "learnable_temps": config.get("learnable_temps", False),
+            "positive_calibration": config.get("positive_calibration", False),
+            "class_wise_temperature": config.get('class_wise_temperature', True),
+            "entire_global_prob": config.get('entire_global_prob', 0),
+            "counter_limit": config.get('counter_limit', 0),
+            "print_eval_only": config.get('print_eval_only', True),
         }
 
     elif config['architecture'] in [

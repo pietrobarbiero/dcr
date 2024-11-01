@@ -863,6 +863,21 @@ class IntAwareConceptBottleneckModel(ConceptBottleneckModel):
         train=False,
         intervention_idxs=None,
     ):
+        if (
+            (self.intervention_task_loss_weight == 1) and
+            (self.intervention_weight == 0) and
+            (self.horizon_rate == 1) and
+            (self.max_horizon in [0, 1])
+        ):
+            # Then this is the same as CEM!
+            return ConceptBottleneckModel._run_step(
+                self=self,
+                batch=batch,
+                batch_idx=batch_idx,
+                train=train,
+                intervention_idxs=intervention_idxs,
+            )
+
         x, y, (c, g, competencies, prev_interventions) = self._unpack_batch(
             batch
         )

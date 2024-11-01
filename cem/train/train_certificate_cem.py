@@ -151,8 +151,88 @@ def train_certificate_cem(
                 model.load_state_dict(torch.load(load_path_name))
                 loaded_weights = True
 
+
             ####################################################################
-            ## Step 1: Train the underlying model without any approximations yet
+            ## Step 1: Train global embeddings
+            ####################################################################
+
+            start_time = time.time()
+            global_epochs = config.get('global_epochs', 0)
+            if (not loaded_weights) and global_epochs:
+                print(
+                    f"\tTraining up the global model for {global_epochs} epochs"
+                )
+                # Else it is time to train it
+                if (not rerun) and "global_model_path" in config and (
+                    os.path.exists(os.path.join(
+                        result_dir,
+                        f'{config["global_model_path"]}.pt'
+                    ))
+                ):
+                    global_model_saved_path = os.path.join(
+                        result_dir or ".",
+                        f'{config["global_model_path"]}.pt'
+                    )
+                    # Then we simply load the model and proceed
+                    print("\tFound cached concept model... loading it")
+                    state_dict = torch.load(global_model_saved_path)
+                    model.load_state_dict(state_dict, strict=False)
+                else:
+                    model.hard_selection_value = 1  # Force the selection to always use the global embeddings
+                    global_callbacks, global_ckpt_call = _make_callbacks(
+                        config,
+                        result_dir,
+                        full_run_name,
+                    )
+                    opt_configs = model.configure_optimizers()
+                    global_trainer = pl.Trainer(
+                        accelerator=accelerator,
+                        devices=devices,
+                        max_epochs=global_epochs,
+                        check_val_every_n_epoch=config.get("check_val_every_n_epoch", 5),
+                        callbacks=global_callbacks,
+                        logger=logger or False,
+                        enable_checkpointing=enable_checkpointing,
+                        gradient_clip_val=gradient_clip_val,
+                    )
+                    global_trainer.fit(model, train_dl, val_dl)
+                    _check_interruption(global_trainer)
+                    _restore_checkpoint(
+                        model=model,
+                        max_epochs=global_epochs,
+                        ckpt_call=global_ckpt_call,
+                        trainer=global_trainer,
+                    )
+                    # Restart the optimizer state!
+                    opts = model.optimizers()
+                    opts.load_state_dict(opt_configs['optimizer'].state_dict())
+                    if 'lr_scheduler' in opt_configs:
+                        lr_scheduler = model.lr_schedulers()
+                        lr_scheduler.load_state_dict(opt_configs['lr_scheduler'].state_dict())
+                        lr_scheduler._reset()
+
+                    training_time += time.time() - start_time
+                    num_epochs += global_trainer.current_epoch
+                    start_time = time.time()
+                    print(
+                        f"\t\tDone after {num_epochs} epochs and {training_time} secs"
+                    )
+                    # Restore state
+                    model.hard_selection_value = None
+                    if "global_model_path" in config:
+                        global_model_saved_path = os.path.join(
+                            result_dir or ".",
+                            f'{config["global_model_path"]}.pt'
+                        )
+                        torch.save(
+                            model.state_dict(),
+                            global_model_saved_path,
+                        )
+            if config.get('freeze_global_components', False):
+                model.freeze_global_components()
+
+            ####################################################################
+            ## Step 2: Train the end-to-end-model
             ####################################################################
 
             start_time = time.time()
@@ -178,7 +258,6 @@ def train_certificate_cem(
                     state_dict = torch.load(e2e_model_saved_path)
                     model.load_state_dict(state_dict, strict=False)
                 else:
-                    # Set the mode to dynamic!
                     e2e_callbacks, e2e_ckpt_call = _make_callbacks(
                         config,
                         result_dir,
@@ -235,7 +314,7 @@ def train_certificate_cem(
             )
 
             ####################################################################
-            ## Step 2: Calibrate logits
+            ## Step 3: Calibrate logits
             ####################################################################
 
             start_time = time.time()
@@ -253,49 +332,147 @@ def train_certificate_cem(
                     if param.requires_grad:
                         trainable_params.add(name)
                         param.requires_grad = False
-                model.dynamic_logit_temperatures.requires_grad = config.get('calibrate_dynamic_logits', True)
-                model.global_logit_temperatures.requires_grad = config.get('calibrate_global_logits', True)
-                calibration_callbacks, calibration_ckpt_call = _make_callbacks(
-                    config,
-                    result_dir,
-                    full_run_name,
-                )
-                print(
-                    "[Number of parameters in approximation model",
-                    sum(p.numel() for p in model.parameters() if p.requires_grad),
-                    "]"
-                )
-                print(
-                    "[Number of non-trainable parameters in approximation model",
-                    sum(p.numel() for p in model.parameters() if not p.requires_grad),
-                    "]",
-                )
-                opt_configs = model.configure_optimizers()
-                calibration_trainer = pl.Trainer(
-                    accelerator=accelerator,
-                    devices=devices,
-                    max_epochs=calibration_epochs,
-                    check_val_every_n_epoch=config.get("check_val_every_n_epoch", 5),
-                    callbacks=calibration_callbacks,
-                    logger=logger or False,
-                    enable_checkpointing=enable_checkpointing,
-                    gradient_clip_val=gradient_clip_val,
-                )
+                if config.get('separate_calibration', False):
+                    if config.get('calibrate_dynamic_logits', True):
+                        # First calibrate the dynamic logits
+                        model.dynamic_logit_temperatures.requires_grad = True
+                        model.global_logit_temperatures.requires_grad = False
+                        model.hard_selection_value = 0  # Force the selection to always use the dynamic embeddings
+                        calibration_callbacks, calibration_ckpt_call = _make_callbacks(
+                            config,
+                            result_dir,
+                            full_run_name,
+                        )
+                        print(
+                            "[Number of parameters in approximation model",
+                            sum(p.numel() for p in model.parameters() if p.requires_grad),
+                            "]"
+                        )
+                        print(
+                            "[Number of non-trainable parameters in approximation model",
+                            sum(p.numel() for p in model.parameters() if not p.requires_grad),
+                            "]",
+                        )
+                        opt_configs = model.configure_optimizers()
+                        calibration_trainer = pl.Trainer(
+                            accelerator=accelerator,
+                            devices=devices,
+                            max_epochs=calibration_epochs,
+                            check_val_every_n_epoch=config.get("check_val_every_n_epoch", 5),
+                            callbacks=calibration_callbacks,
+                            logger=logger or False,
+                            enable_checkpointing=enable_checkpointing,
+                            gradient_clip_val=gradient_clip_val,
+                        )
 
-                # Train it on the validation set!
-                if config.get('finetune_with_val', True):
-                    calibration_trainer.fit(model, val_dl, val_dl)
+                        # Train it on the validation set!
+                        if config.get('finetune_with_val', True):
+                            calibration_trainer.fit(model, val_dl, val_dl)
+                        else:
+                            calibration_trainer.fit(model, train_dl, val_dl)
+                        _check_interruption(calibration_trainer)
+                        training_time += time.time() - start_time
+                        num_epochs += calibration_trainer.current_epoch
+                        _restore_checkpoint(
+                            model=model,
+                            max_epochs=calibration_epochs,
+                            ckpt_call=calibration_ckpt_call,
+                            trainer=calibration_trainer,
+                        )
+
+                    if config.get('calibrate_global_logits', True):
+                        # Then calibrate the global logits
+                        model.hard_selection_value = 1  # Force the selection to always use the global embeddings
+                        model.dynamic_logit_temperatures.requires_grad = False
+                        model.global_logit_temperatures.requires_grad = True
+                        calibration_callbacks, calibration_ckpt_call = _make_callbacks(
+                            config,
+                            result_dir,
+                            full_run_name,
+                        )
+                        print(
+                            "[Number of parameters in approximation model",
+                            sum(p.numel() for p in model.parameters() if p.requires_grad),
+                            "]"
+                        )
+                        print(
+                            "[Number of non-trainable parameters in approximation model",
+                            sum(p.numel() for p in model.parameters() if not p.requires_grad),
+                            "]",
+                        )
+                        opt_configs = model.configure_optimizers()
+                        calibration_trainer = pl.Trainer(
+                            accelerator=accelerator,
+                            devices=devices,
+                            max_epochs=calibration_epochs,
+                            check_val_every_n_epoch=config.get("check_val_every_n_epoch", 5),
+                            callbacks=calibration_callbacks,
+                            logger=logger or False,
+                            enable_checkpointing=enable_checkpointing,
+                            gradient_clip_val=gradient_clip_val,
+                        )
+
+                        # Train it on the validation set!
+                        if config.get('finetune_with_val', True):
+                            calibration_trainer.fit(model, val_dl, val_dl)
+                        else:
+                            calibration_trainer.fit(model, train_dl, val_dl)
+                        _check_interruption(calibration_trainer)
+                        training_time += time.time() - start_time
+                        num_epochs += calibration_trainer.current_epoch
+                        _restore_checkpoint(
+                            model=model,
+                            max_epochs=calibration_epochs,
+                            ckpt_call=calibration_ckpt_call,
+                            trainer=calibration_trainer,
+                        )
                 else:
-                    calibration_trainer.fit(model, train_dl, val_dl)
-                _check_interruption(calibration_trainer)
-                training_time += time.time() - start_time
-                num_epochs += calibration_trainer.current_epoch
-                _restore_checkpoint(
-                    model=model,
-                    max_epochs=calibration_epochs,
-                    ckpt_call=calibration_ckpt_call,
-                    trainer=calibration_trainer,
-                )
+                    model.dynamic_logit_temperatures.requires_grad = config.get('calibrate_dynamic_logits', True)
+                    model.global_logit_temperatures.requires_grad = config.get('calibrate_global_logits', True)
+                    calibration_callbacks, calibration_ckpt_call = _make_callbacks(
+                        config,
+                        result_dir,
+                        full_run_name,
+                    )
+                    print(
+                        "[Number of parameters in approximation model",
+                        sum(p.numel() for p in model.parameters() if p.requires_grad),
+                        "]"
+                    )
+                    print(
+                        "[Number of non-trainable parameters in approximation model",
+                        sum(p.numel() for p in model.parameters() if not p.requires_grad),
+                        "]",
+                    )
+                    opt_configs = model.configure_optimizers()
+                    calibration_trainer = pl.Trainer(
+                        accelerator=accelerator,
+                        devices=devices,
+                        max_epochs=calibration_epochs,
+                        check_val_every_n_epoch=config.get("check_val_every_n_epoch", 5),
+                        callbacks=calibration_callbacks,
+                        logger=logger or False,
+                        enable_checkpointing=enable_checkpointing,
+                        gradient_clip_val=gradient_clip_val,
+                    )
+
+                    # Train it on the validation set!
+                    if config.get('finetune_with_val', True):
+                        calibration_trainer.fit(model, val_dl, val_dl)
+                    else:
+                        calibration_trainer.fit(model, train_dl, val_dl)
+                    _check_interruption(calibration_trainer)
+                    training_time += time.time() - start_time
+                    num_epochs += calibration_trainer.current_epoch
+                    _restore_checkpoint(
+                        model=model,
+                        max_epochs=calibration_epochs,
+                        ckpt_call=calibration_ckpt_call,
+                        trainer=calibration_trainer,
+                    )
+
+                # And restore the state
+                model.hard_selection_value = None
                 for name, param in model.named_parameters():
                     param.requires_grad = name in trainable_params
 

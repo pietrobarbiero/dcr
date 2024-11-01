@@ -33,6 +33,9 @@ model_selection_groups:
   - ["^(HybridPCBM).*(Baseline).*$", "Hybrid Posthoc CBM (Baseline)"]
   - ["^(HybridPCBM).*(Downstream_Spurious).*$", "Hybrid Posthoc CBM (Downstream Spurious)"]
   - ["^(HybridPCBM).*(Concept_Spurious).*$", "Hybrid Posthoc CBM (Concept Spurious)"]
+  - ["^(MixIntCEM).*(Baseline).*$", "MixIntCEM (Baseline)"]
+  - ["^(MixIntCEM).*(Downstream_Spurious).*$", "MixIntCEM (Downstream Spurious)"]
+  - ["^(MixIntCEM).*(Concept_Spurious).*$", "MixIntCEM (Concept Spurious)"]
 
 model_selection_metrics:
   - val_acc_y_random_group_level_True_use_prior_False_int_auc
@@ -83,8 +86,8 @@ shared_params:
   early_stopping_mode: min
   early_stopping_delta: 0.0001
   early_stopping_best_model: False
-  patience: 5 #15
-  check_val_every_n_epoch: 1 #5
+  lr_scheduler_patience: 15
+  check_val_every_n_epoch: 1
   momentum: 0.9
   sigmoidal_prob: False
   training_intervention_prob: 0.25
@@ -844,7 +847,7 @@ runs:
   #   normalize_embs: False
   #   task_concept_loss: 1
   #   intervention_task_discount: [1.1]
-  #   patience: 20 # TRYING OUT. BEFORE: 5 #15
+  #   lr_scheduler_patience: 20 # TRYING OUT. BEFORE: 5 #15
   #   lr_scheduler_patience: 10
   #   learning_rate: 0.001
   #   use_cosine_similarity: False
@@ -939,8 +942,7 @@ runs:
     normalize_embs: False
     task_concept_loss: 1
     intervention_task_discount: [1.1, 1.5]
-    patience: 20 # TRYING OUT. BEFORE: 5 #15
-    lr_scheduler_patience: 10
+    lr_scheduler_patience: 15
     learning_rate: 0.001
     use_cosine_similarity: False
     check_val_every_n_epoch: 1
@@ -1043,8 +1045,7 @@ runs:
   #   normalize_embs: False
   #   task_concept_loss: 1
   #   intervention_task_discount: [1.1]
-  #   patience: 20 # TRYING OUT. BEFORE: 5 #15
-  #   lr_scheduler_patience: 10
+  #   lr_scheduler_patience: 15
   #   learning_rate: 0.001
   #   use_cosine_similarity: False
   #   check_val_every_n_epoch: 1
@@ -1140,7 +1141,7 @@ runs:
   #   normalize_embs: False
   #   task_concept_loss: 1
   #   intervention_task_discount: [1.1]
-  #   patience: 20 # TRYING OUT. BEFORE: 5 #15
+  #   lr_scheduler_patience: 15
   #   learning_rate: 0.001
   #   use_cosine_similarity: False
   #   check_val_every_n_epoch: 1
@@ -1242,8 +1243,7 @@ runs:
     normalize_embs: False
     task_concept_loss: 1
     intervention_task_discount: [1.1]
-    patience: 20 # TRYING OUT. BEFORE: 5 #15
-    lr_scheduler_patience: 10
+    lr_scheduler_patience: 15
     learning_rate: 0.001
     use_cosine_similarity: False
     check_val_every_n_epoch: 1
@@ -1338,8 +1338,7 @@ runs:
     normalize_embs: False
     task_concept_loss: 1
     intervention_task_discount: [1.1]
-    patience: 20 # TRYING OUT. BEFORE: 5 #15
-    lr_scheduler_patience: 10
+    lr_scheduler_patience: 15
     learning_rate: 0.001
     use_cosine_similarity: False
     check_val_every_n_epoch: 1
@@ -1433,8 +1432,7 @@ runs:
     normalize_embs: False
     task_concept_loss: 1
     intervention_task_discount: [1.1]
-    patience: 20 # TRYING OUT. BEFORE: 5 #15
-    lr_scheduler_patience: 10
+    lr_scheduler_patience: 15
     learning_rate: 0.001
     use_cosine_similarity: False
     check_val_every_n_epoch: 1
@@ -1545,7 +1543,7 @@ runs:
   #   intervention_task_discount: [1.1] # TRYING OUT. BEFORE: [1.1, 1.5] #[1.01, 1.1, 1.5]
   #   discovered_probs_entropy: 0
   #   dyn_training_intervention_prob: [0.1] # TRYING OUT. BEFORE: [0.1, 0.25] #, 0.5, 1] #[0, 1]
-  #   patience: 20 # TRYING OUT. BEFORE: 5 #15
+  #   lr_scheduler_patience: 20 # TRYING OUT. BEFORE: 5 #15
   #   learning_rate: 0.001 # TRYING OUT. BEFORE: 0.001
   #   use_cosine_similarity: False # TRYING OUT. BEFORE: False
   #   check_val_every_n_epoch: 1 #5
@@ -2976,6 +2974,691 @@ runs:
         8: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
         9: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  - architecture: 'CertificateConceptEmbeddingModel'
+    run_name: "CertificateCEM_{selection_mode}_{pooling_mode}_t_{temperature}_{calibrate_global_logits}_{calibrate_dynamic_logits}_{init_dyn_temps}_{init_global_temps}_gr_{global_temp_reg}_g_ood_{global_ood_prob}_emb_{emb_size}_idp_{inference_dyn_prob}_hs_{hard_eval_selection}_ce_{calibration_epochs}_{finetune_with_val}_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_Baseline_{dataset_config[num_operands]}_cwl_{concept_loss_weight}"
+    load_path_name: "CertificateCEM_{selection_mode}_{pooling_mode}_t_{temperature}_{calibrate_global_logits}_{calibrate_dynamic_logits}_{init_dyn_temps}_{init_global_temps}_gr_{global_temp_reg}_g_ood_{global_ood_prob}_emb_{emb_size}_idp_{inference_dyn_prob}_hs_None_ce_0_{finetune_with_val}_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_Baseline_{dataset_config[num_operands]}_cwl_{concept_loss_weight}"
+
+    concept_loss_weight: [10, 5]
+    emb_size: [16]
+    temperature: [10] #, 1]
+    shared_emb_generator: True
+
+    # OOD stuff
+    certificate_loss_weight: [0]
+    ood_dropout_prob: [0]
+    global_ood_prob: [0.5]
+    pooling_mode: ['iss'] #, 'is']
+    selection_mode: ['max_class_confidence']
+    hard_eval_selection: [null, 0.5] #, 0.05, 0.95]
+    selection_sample: [False]
+    calibration_epochs: [0, 30]
+    mixed_probs: True
+    contrastive_reg: 0
+    calibrate_dynamic_logits: True
+    calibrate_global_logits: True
+    finetune_with_val: [True]
+    init_dyn_temps: 1.5
+    init_global_temps: 0.5
+    global_temp_reg: 0
+    inference_dyn_prob: False
+    learnable_temps: False
+
+    ###############################################################################################
+
+    # IntCEM stuff
+    embedding_activation: "leakyrelu"
+    training_intervention_prob: [0.25]
+    intervention_task_discount: [1.5]
+    use_concept_groups: True
+    int_model_use_bn: True
+    int_model_layers: [128, 128, 64, 64]
+    max_horizon: 6
+    horizon_rate: 1.005
+    intervention_weight: 5
+
+    grid_variables:
+      - dataset_config.num_operands
+      - training_intervention_prob
+      - intervention_task_discount
+      - emb_size
+      - certificate_loss_weight
+      - ood_dropout_prob
+      - selection_mode
+      - hard_eval_selection
+      - selection_sample
+      - global_ood_prob
+      - temperature
+      - finetune_with_val
+      - calibration_epochs
+      - concept_loss_weight
+      - pooling_mode
+    grid_search_mode: exhaustive
+
+    # Dataset Configuration
+    dataset_config:
+      dataset: color_mnist_add
+      root_dir: data/
+      num_workers: 8
+      batch_size: 2048 # CHANGING CAUSE GPU MEMORY IS NOT ENOUGH
+      num_operands: [10] #[10, 20]
+      selected_digits: [0, 1, 2, 3]
+      count_labels: False
+      range_labels: [5, 10, 15, 20, 25]
+      low_noise_level: 1
+      noise_level: 0.25
+      test_low_noise_level: 1
+      test_noise_level: 0.25
+      train_dataset_size: 5000
+      test_dataset_size: 5000
+      sampling_percent: 0.8
+      sampling_groups: True
+      test_subsampling: 1
+      weight_loss: False
+
+      spurious_strength: 0.1
+      color_by_label: False
+      colors: ["random_1", "random_2", "random_3", "random_4", "random_5", "random_6", "random_7", "random_8", "random_9", "random_10"]
+      digit_color_distribution:
+        0: ["spurious", null, null, null, null, null, null, null, null, null]
+        1: [null, "spurious", null, null, null, null, null, null, null, null]
+        2: [null, null, "spurious", null, null, null, null, null, null, null]
+        3: [null, null, null, "spurious", null, null, null, null, null, null]
+        4: [null, null, null, null, "spurious", null, null, null, null, null]
+        5: [null, null, null, null, null, "spurious", null, null, null, null]
+        6: [null, null, null, null, null, null, "spurious", null, null, null]
+        7: [null, null, null, null, null, null, null, "spurious", null, null]
+        8: [null, null, null, null, null, null, null, null, "spurious", null]
+        9: [null, null, null, null, null, null, null, null, null, "spurious"]
+
+      test_digit_color_distribution:
+        0: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        1: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        2: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        3: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        4: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        5: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        6: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        7: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        8: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        9: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+
+  - architecture: 'CertificateConceptEmbeddingModel'
+    run_name: "CertificateCEM_{selection_mode}_{pooling_mode}_t_{temperature}_{calibrate_global_logits}_{calibrate_dynamic_logits}_{init_dyn_temps}_{init_global_temps}_gr_{global_temp_reg}_g_ood_{global_ood_prob}_emb_{emb_size}_idp_{inference_dyn_prob}_hs_{hard_eval_selection}_ce_{calibration_epochs}_{finetune_with_val}_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_Downstream_Spurious_{dataset_config[num_operands]}_cwl_{concept_loss_weight}"
+    load_path_name: "CertificateCEM_{selection_mode}_{pooling_mode}_t_{temperature}_{calibrate_global_logits}_{calibrate_dynamic_logits}_{init_dyn_temps}_{init_global_temps}_gr_{global_temp_reg}_g_ood_{global_ood_prob}_emb_{emb_size}_idp_{inference_dyn_prob}_hs_None_ce_0_{finetune_with_val}_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_Downstream_Spurious_{dataset_config[num_operands]}_cwl_{concept_loss_weight}"
+
+    concept_loss_weight: [10, 5]
+    emb_size: [16]
+    temperature: [10] #, 1]
+    shared_emb_generator: True
+
+    # OOD stuff
+    certificate_loss_weight: [0]
+    ood_dropout_prob: [0]
+    global_ood_prob: [0.5]
+    pooling_mode: ['iss'] #, 'is']
+    selection_mode: ['max_class_confidence']
+    hard_eval_selection: [null, 0.5] #, 0.05, 0.95]
+    selection_sample: [False]
+    calibration_epochs: [0, 30]
+    mixed_probs: True
+    contrastive_reg: 0
+    calibrate_dynamic_logits: True
+    calibrate_global_logits: True
+    finetune_with_val: [True]
+    init_dyn_temps: 1.5
+    init_global_temps: 0.5
+    global_temp_reg: 0
+    inference_dyn_prob: False
+    learnable_temps: False
+
+    ###############################################################################################
+
+    # IntCEM stuff
+    embedding_activation: null
+    training_intervention_prob: [0.25]
+    intervention_task_discount: [1.5]
+    use_concept_groups: True
+    int_model_use_bn: True
+    int_model_layers: [128, 128, 64, 64]
+    max_horizon: 6
+    horizon_rate: 1.005
+    intervention_weight: 5
+
+    grid_variables:
+      - dataset_config.num_operands
+      - training_intervention_prob
+      - intervention_task_discount
+      - emb_size
+      - certificate_loss_weight
+      - ood_dropout_prob
+      - selection_mode
+      - hard_eval_selection
+      - selection_sample
+      - global_ood_prob
+      - temperature
+      - finetune_with_val
+      - calibration_epochs
+      - concept_loss_weight
+      - pooling_mode
+    grid_search_mode: exhaustive
+
+    # Dataset Configuration
+    dataset_config:
+      dataset: color_mnist_add
+      root_dir: data/
+      num_workers: 8
+      batch_size: 2048
+      num_operands: [10] #[10, 20]
+      selected_digits: [0, 1, 2, 3]
+      count_labels: False
+      range_labels: [5, 10, 15, 20, 25]
+      low_noise_level: 1
+      noise_level: 0.25
+      test_low_noise_level: 1
+      test_noise_level: 0.25
+      train_dataset_size: 5000
+      test_dataset_size: 5000
+      sampling_percent: 0.8
+      sampling_groups: True
+      test_subsampling: 1
+      weight_loss: False
+
+      spurious_strength: 0.95
+      color_by_label: True    # So that the spurious correlation is label-based!
+      colors: ["random_1", "random_2", "random_3", "random_4", "random_5", "random_6", "random_7", "random_8", "random_9", "random_10"]
+      digit_color_distribution:
+        0: ["spurious", null, null, null, null, null, null, null, null, null]
+        1: [null, "spurious", null, null, null, null, null, null, null, null]
+        2: [null, null, "spurious", null, null, null, null, null, null, null]
+        3: [null, null, null, "spurious", null, null, null, null, null, null]
+        4: [null, null, null, null, "spurious", null, null, null, null, null]
+        5: [null, null, null, null, null, "spurious", null, null, null, null]
+        6: [null, null, null, null, null, null, "spurious", null, null, null]
+        7: [null, null, null, null, null, null, null, "spurious", null, null]
+        8: [null, null, null, null, null, null, null, null, "spurious", null]
+        9: [null, null, null, null, null, null, null, null, null, "spurious"]
+
+      test_digit_color_distribution:
+        0: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        1: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        2: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        3: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        4: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        5: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        6: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        7: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        8: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        9: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+
+
+
+
+
+  - architecture: 'CertificateConceptEmbeddingModel'
+    run_name: "MixIntCEM_{pooling_mode}_t_{temperature}_mt_{max_temperature}_pc_{positive_calibration}_cwc_{class_wise_temperature}_{calibrate_global_logits}_{calibrate_dynamic_logits}_{init_dyn_temps}_{init_global_temps}_gr_{global_temp_reg}_g_ood_{global_ood_prob}_{entire_global_prob}_emb_{emb_size}_idp_{inference_dyn_prob}_hs_{hard_eval_selection}_ce_{calibration_epochs}_{finetune_with_val}_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_Concept_Spurious_{dataset_config[num_operands]}_cwl_{concept_loss_weight}"
+    load_path_name: "MixIntCEM_{pooling_mode}_t_{temperature}_mt_{max_temperature}_pc_{positive_calibration}_cwc_{class_wise_temperature}_{calibrate_global_logits}_{calibrate_dynamic_logits}_{init_dyn_temps}_{init_global_temps}_gr_{global_temp_reg}_g_ood_{global_ood_prob}_{entire_global_prob}_emb_{emb_size}_idp_{inference_dyn_prob}_hs_None_ce_0_{finetune_with_val}_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_Concept_Spurious_{dataset_config[num_operands]}_cwl_{concept_loss_weight}"
+
+    concept_loss_weight: [10]
+    emb_size: [16]
+    temperature: [10]
+    max_temperature: 10 # CHANGE!!!!!!!!!!!!!!!!!!!!!!!!
+    shared_emb_generator: True
+
+    # OOD stuff
+    certificate_loss_weight: [0]
+    ood_dropout_prob: [0]
+    global_ood_prob: [0]
+    entire_global_prob: [0]
+    pooling_mode: ['iss']
+    selection_mode: ['max_class_confidence']
+    hard_eval_selection: [null, 0.5] #, 0.05, 0.95]
+    selection_sample: [False]
+    calibration_epochs: [0, 30]
+    mixed_probs: True
+    contrastive_reg: 0
+    calibrate_dynamic_logits: True
+    calibrate_global_logits: True
+    finetune_with_val: [True]
+    init_dyn_temps: 1.5
+    init_global_temps: 0.5
+    global_temp_reg: 0
+    inference_dyn_prob: False
+    learnable_temps: False
+    positive_calibration: True # CHANGE!!!!!!!!!!!!!!!!!!!!!!!!!!
+    class_wise_temperature: False # CHANGE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    separate_calibration: True # CHANGE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    lr_scheduler_patience: 15 # CHANGE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    check_val_every_n_epoch: 5 # CHANGE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    freeze_global_components: True # CHANGE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    global_epochs: 50 # CHANGE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    max_epochs: 50 # CHANGE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    print_eval_only: True
+    counter_limit: 0
+
+    ###############################################################################################
+
+    # IntCEM stuff
+    embedding_activation: null
+    training_intervention_prob: [0.25]
+    intervention_task_discount: [1.5]
+    use_concept_groups: True
+    int_model_use_bn: True
+    int_model_layers: [128, 128, 64, 64]
+    max_horizon: 6
+    horizon_rate: 1.005
+    intervention_weight: [0.1] #, 5]
+
+    grid_variables:
+      - dataset_config.num_operands
+      - training_intervention_prob
+      - intervention_task_discount
+      - emb_size
+      - certificate_loss_weight
+      - ood_dropout_prob
+      - selection_mode
+      - hard_eval_selection
+      - selection_sample
+      - global_ood_prob
+      - entire_global_prob
+      - temperature
+      - finetune_with_val
+      - calibration_epochs
+      - concept_loss_weight
+      - pooling_mode
+      - intervention_weight
+    grid_search_mode: exhaustive
+
+    dataset_config:
+      dataset: color_mnist_add
+      root_dir: data/
+      num_workers: 8
+      batch_size: 256 # 2048
+      num_operands: [10] #[10, 20]
+      selected_digits: [0, 1, 2, 3]
+      count_labels: False
+      range_labels: [5, 10, 15, 20, 25]
+      low_noise_level: 1
+      noise_level: 0.25
+      test_low_noise_level: 1
+      test_noise_level: 0.25
+      train_dataset_size: 5000
+      test_dataset_size: 5000
+      sampling_percent: 0.8
+      sampling_groups: True
+      test_subsampling: 1
+      weight_loss: False
+
+      spurious_strength: 0.95
+      color_by_label: False    # So that the spurious correlation is concept-based!
+      colors: ["random_1", "random_2", "random_3", "random_4", "random_5", "random_6", "random_7", "random_8", "random_9", "random_10"]
+      digit_color_distribution:
+        0: ["spurious", null, null, null, null, null, null, null, null, null]
+        1: [null, "spurious", null, null, null, null, null, null, null, null]
+        2: [null, null, "spurious", null, null, null, null, null, null, null]
+        3: [null, null, null, "spurious", null, null, null, null, null, null]
+        4: [null, null, null, null, "spurious", null, null, null, null, null]
+        5: [null, null, null, null, null, "spurious", null, null, null, null]
+        6: [null, null, null, null, null, null, "spurious", null, null, null]
+        7: [null, null, null, null, null, null, null, "spurious", null, null]
+        8: [null, null, null, null, null, null, null, null, "spurious", null]
+        9: [null, null, null, null, null, null, null, null, null, "spurious"]
+
+      test_digit_color_distribution:
+        0: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        1: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        2: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        3: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        4: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        5: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        6: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        7: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        8: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+        9: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+
+
+  # - architecture: 'CertificateConceptEmbeddingModel'
+  #   run_name: "CertificateVanillaCEM_{selection_mode}_{pooling_mode}_t_{temperature}_{calibrate_global_logits}_{calibrate_dynamic_logits}_{init_dyn_temps}_{init_global_temps}_gr_{global_temp_reg}_g_ood_{global_ood_prob}_emb_{emb_size}_idp_{inference_dyn_prob}_hs_{hard_eval_selection}_ce_{calibration_epochs}_{finetune_with_val}_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_Concept_Spurious_{dataset_config[num_operands]}_cwl_{concept_loss_weight}"
+  #   load_path_name: "CertificateVanillaCEM_{selection_mode}_{pooling_mode}_t_{temperature}_{calibrate_global_logits}_{calibrate_dynamic_logits}_{init_dyn_temps}_{init_global_temps}_gr_{global_temp_reg}_g_ood_{global_ood_prob}_emb_{emb_size}_idp_{inference_dyn_prob}_hs_None_ce_0_{finetune_with_val}_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_Concept_Spurious_{dataset_config[num_operands]}_cwl_{concept_loss_weight}"
+
+  #   concept_loss_weight: [10, 5]
+  #   emb_size: [16]
+  #   temperature: [10] #, 1]
+  #   shared_emb_generator: True
+
+  #   # OOD stuff
+  #   certificate_loss_weight: [0]
+  #   ood_dropout_prob: [0]
+  #   global_ood_prob: [0.5]
+  #   pooling_mode: ['iss'] #, 'is']
+  #   selection_mode: ['max_class_confidence']
+  #   hard_eval_selection: [null, 0.5] #, 0.05, 0.95]
+  #   selection_sample: [False]
+  #   calibration_epochs: [0, 30]
+  #   mixed_probs: True
+  #   contrastive_reg: 0
+  #   calibrate_dynamic_logits: True
+  #   calibrate_global_logits: True
+  #   finetune_with_val: [True]
+  #   init_dyn_temps: 1.5
+  #   init_global_temps: 0.5
+  #   global_temp_reg: 0
+  #   inference_dyn_prob: False
+  #   learnable_temps: False
+
+  #   ###############################################################################################
+
+  #   # IntCEM stuff
+  #   embedding_activation: null
+  #   training_intervention_prob: [0.25]
+  #   intervention_task_discount: [1]
+  #   use_concept_groups: True
+  #   int_model_use_bn: True
+  #   int_model_layers: [128, 128, 64, 64]
+  #   max_horizon: 1
+  #   horizon_rate: 1
+  #   intervention_weight: [0]
+  #   lr_scheduler_patience: 15
+  #   check_val_every_n_epoch: 5
+
+  #   grid_variables:
+  #     - dataset_config.num_operands
+  #     - training_intervention_prob
+  #     - intervention_task_discount
+  #     - emb_size
+  #     - certificate_loss_weight
+  #     - ood_dropout_prob
+  #     - selection_mode
+  #     - hard_eval_selection
+  #     - selection_sample
+  #     - global_ood_prob
+  #     - temperature
+  #     - finetune_with_val
+  #     - calibration_epochs
+  #     - concept_loss_weight
+  #     - pooling_mode
+  #     - intervention_weight
+  #   grid_search_mode: exhaustive
+
+  #   dataset_config:
+  #     dataset: color_mnist_add
+  #     root_dir: data/
+  #     num_workers: 8
+  #     batch_size: 256 # 2048
+  #     num_operands: [10] #[10, 20]
+  #     selected_digits: [0, 1, 2, 3]
+  #     count_labels: False
+  #     range_labels: [5, 10, 15, 20, 25]
+  #     low_noise_level: 1
+  #     noise_level: 0.25
+  #     test_low_noise_level: 1
+  #     test_noise_level: 0.25
+  #     train_dataset_size: 5000
+  #     test_dataset_size: 5000
+  #     sampling_percent: 0.8
+  #     sampling_groups: True
+  #     test_subsampling: 1
+  #     weight_loss: False
+
+  #     spurious_strength: 0.95
+  #     color_by_label: False    # So that the spurious correlation is concept-based!
+  #     colors: ["random_1", "random_2", "random_3", "random_4", "random_5", "random_6", "random_7", "random_8", "random_9", "random_10"]
+  #     digit_color_distribution:
+  #       0: ["spurious", null, null, null, null, null, null, null, null, null]
+  #       1: [null, "spurious", null, null, null, null, null, null, null, null]
+  #       2: [null, null, "spurious", null, null, null, null, null, null, null]
+  #       3: [null, null, null, "spurious", null, null, null, null, null, null]
+  #       4: [null, null, null, null, "spurious", null, null, null, null, null]
+  #       5: [null, null, null, null, null, "spurious", null, null, null, null]
+  #       6: [null, null, null, null, null, null, "spurious", null, null, null]
+  #       7: [null, null, null, null, null, null, null, "spurious", null, null]
+  #       8: [null, null, null, null, null, null, null, null, "spurious", null]
+  #       9: [null, null, null, null, null, null, null, null, null, "spurious"]
+
+  #     test_digit_color_distribution:
+  #       0: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       1: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       2: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       3: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       4: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       5: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       6: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       7: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       8: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       9: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+
+
+
+  # - architecture: 'CertificateConceptEmbeddingModel'
+  #   run_name: "CertificateCEM_{selection_mode}_{pooling_mode}_t_{temperature}_{calibrate_global_logits}_{calibrate_dynamic_logits}_{init_dyn_temps}_{init_global_temps}_gr_{global_temp_reg}_g_ood_{global_ood_prob}_emb_{emb_size}_idp_{inference_dyn_prob}_hs_{hard_eval_selection}_ce_{calibration_epochs}_{finetune_with_val}_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_Concept_Spurious_{dataset_config[num_operands]}_cwl_{concept_loss_weight}"
+  #   load_path_name: "CertificateCEM_{selection_mode}_{pooling_mode}_t_{temperature}_{calibrate_global_logits}_{calibrate_dynamic_logits}_{init_dyn_temps}_{init_global_temps}_gr_{global_temp_reg}_g_ood_{global_ood_prob}_emb_{emb_size}_idp_{inference_dyn_prob}_hs_None_ce_0_{finetune_with_val}_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_Concept_Spurious_{dataset_config[num_operands]}_cwl_{concept_loss_weight}"
+
+  #   concept_loss_weight: [10, 5]
+  #   emb_size: [16]
+  #   temperature: [10] #, 1]
+  #   shared_emb_generator: True
+
+  #   # OOD stuff
+  #   certificate_loss_weight: [0]
+  #   ood_dropout_prob: [0]
+  #   global_ood_prob: [0.5]
+  #   pooling_mode: ['iss'] #, 'is']
+  #   selection_mode: ['max_class_confidence']
+  #   hard_eval_selection: [null, 0.5] #, 0.05, 0.95]
+  #   selection_sample: [False]
+  #   calibration_epochs: [0, 30]
+  #   mixed_probs: True
+  #   contrastive_reg: 0
+  #   calibrate_dynamic_logits: True
+  #   calibrate_global_logits: True
+  #   finetune_with_val: [True]
+  #   init_dyn_temps: 1.5
+  #   init_global_temps: 0.5
+  #   global_temp_reg: 0
+  #   inference_dyn_prob: False
+  #   learnable_temps: False
+
+  #   ###############################################################################################
+
+  #   # IntCEM stuff
+  #   embedding_activation: null
+  #   training_intervention_prob: [0.25]
+  #   intervention_task_discount: [1.5]
+  #   use_concept_groups: True
+  #   int_model_use_bn: True
+  #   int_model_layers: [128, 128, 64, 64]
+  #   max_horizon: 6
+  #   horizon_rate: 1.005
+  #   intervention_weight: [0.1, 5]
+
+  #   grid_variables:
+  #     - dataset_config.num_operands
+  #     - training_intervention_prob
+  #     - intervention_task_discount
+  #     - emb_size
+  #     - certificate_loss_weight
+  #     - ood_dropout_prob
+  #     - selection_mode
+  #     - hard_eval_selection
+  #     - selection_sample
+  #     - global_ood_prob
+  #     - temperature
+  #     - finetune_with_val
+  #     - calibration_epochs
+  #     - concept_loss_weight
+  #     - pooling_mode
+  #     - intervention_weight
+  #   grid_search_mode: exhaustive
+
+  #   dataset_config:
+  #     dataset: color_mnist_add
+  #     root_dir: data/
+  #     num_workers: 8
+  #     batch_size: 256 # 2048
+  #     num_operands: [10] #[10, 20]
+  #     selected_digits: [0, 1, 2, 3]
+  #     count_labels: False
+  #     range_labels: [5, 10, 15, 20, 25]
+  #     low_noise_level: 1
+  #     noise_level: 0.25
+  #     test_low_noise_level: 1
+  #     test_noise_level: 0.25
+  #     train_dataset_size: 5000
+  #     test_dataset_size: 5000
+  #     sampling_percent: 0.8
+  #     sampling_groups: True
+  #     test_subsampling: 1
+  #     weight_loss: False
+
+  #     spurious_strength: 0.95
+  #     color_by_label: False    # So that the spurious correlation is concept-based!
+  #     colors: ["random_1", "random_2", "random_3", "random_4", "random_5", "random_6", "random_7", "random_8", "random_9", "random_10"]
+  #     digit_color_distribution:
+  #       0: ["spurious", null, null, null, null, null, null, null, null, null]
+  #       1: [null, "spurious", null, null, null, null, null, null, null, null]
+  #       2: [null, null, "spurious", null, null, null, null, null, null, null]
+  #       3: [null, null, null, "spurious", null, null, null, null, null, null]
+  #       4: [null, null, null, null, "spurious", null, null, null, null, null]
+  #       5: [null, null, null, null, null, "spurious", null, null, null, null]
+  #       6: [null, null, null, null, null, null, "spurious", null, null, null]
+  #       7: [null, null, null, null, null, null, null, "spurious", null, null]
+  #       8: [null, null, null, null, null, null, null, null, "spurious", null]
+  #       9: [null, null, null, null, null, null, null, null, null, "spurious"]
+
+  #     test_digit_color_distribution:
+  #       0: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       1: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       2: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       3: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       4: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       5: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       6: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       7: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       8: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       9: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+
+
+
+  # - architecture: 'CertificateConceptEmbeddingModel'
+  #   run_name: "CertificateCEM_{selection_mode}_{pooling_mode}_t_{temperature}_{calibrate_global_logits}_{calibrate_dynamic_logits}_{init_dyn_temps}_{init_global_temps}_gr_{global_temp_reg}_g_ood_{global_ood_prob}_emb_{emb_size}_idp_{inference_dyn_prob}_hs_{hard_eval_selection}_ce_{calibration_epochs}_{finetune_with_val}_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_Concept_Spurious_{dataset_config[num_operands]}_cwl_{concept_loss_weight}"
+  #   load_path_name: "CertificateCEM_{selection_mode}_{pooling_mode}_t_{temperature}_{calibrate_global_logits}_{calibrate_dynamic_logits}_{init_dyn_temps}_{init_global_temps}_gr_{global_temp_reg}_g_ood_{global_ood_prob}_emb_{emb_size}_idp_{inference_dyn_prob}_hs_None_ce_0_{finetune_with_val}_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_Concept_Spurious_{dataset_config[num_operands]}_cwl_{concept_loss_weight}"
+
+  #   concept_loss_weight: [10, 5]
+  #   emb_size: [16]
+  #   temperature: [10] #, 1]
+  #   shared_emb_generator: True
+
+  #   # OOD stuff
+  #   certificate_loss_weight: [0]
+  #   ood_dropout_prob: [0]
+  #   global_ood_prob: [0.5]
+  #   pooling_mode: ['iss'] #, 'is']
+  #   selection_mode: ['max_class_confidence']
+  #   hard_eval_selection: [null, 0.5] #, 0.05, 0.95]
+  #   selection_sample: [False]
+  #   calibration_epochs: [0, 30]
+  #   mixed_probs: True
+  #   contrastive_reg: 0
+  #   calibrate_dynamic_logits: True
+  #   calibrate_global_logits: True
+  #   finetune_with_val: [True]
+  #   init_dyn_temps: 1
+  #   init_global_temps: 1
+  #   global_temp_reg: 0
+  #   inference_dyn_prob: False
+  #   learnable_temps: False
+
+  #   ###############################################################################################
+
+  #   # IntCEM stuff
+  #   embedding_activation: null
+  #   training_intervention_prob: [0.25]
+  #   intervention_task_discount: [1.5]
+  #   use_concept_groups: True
+  #   int_model_use_bn: True
+  #   int_model_layers: [128, 128, 64, 64]
+  #   max_horizon: 6
+  #   horizon_rate: 1.005
+  #   intervention_weight: [0.1, 5]
+
+  #   grid_variables:
+  #     - dataset_config.num_operands
+  #     - training_intervention_prob
+  #     - intervention_task_discount
+  #     - emb_size
+  #     - certificate_loss_weight
+  #     - ood_dropout_prob
+  #     - selection_mode
+  #     - hard_eval_selection
+  #     - selection_sample
+  #     - global_ood_prob
+  #     - temperature
+  #     - finetune_with_val
+  #     - calibration_epochs
+  #     - concept_loss_weight
+  #     - pooling_mode
+  #     - intervention_weight
+  #   grid_search_mode: exhaustive
+
+  #   dataset_config:
+  #     dataset: color_mnist_add
+  #     root_dir: data/
+  #     num_workers: 8
+  #     batch_size: 256 # 2048
+  #     num_operands: [10] #[10, 20]
+  #     selected_digits: [0, 1, 2, 3]
+  #     count_labels: False
+  #     range_labels: [5, 10, 15, 20, 25]
+  #     low_noise_level: 1
+  #     noise_level: 0.25
+  #     test_low_noise_level: 1
+  #     test_noise_level: 0.25
+  #     train_dataset_size: 5000
+  #     test_dataset_size: 5000
+  #     sampling_percent: 0.8
+  #     sampling_groups: True
+  #     test_subsampling: 1
+  #     weight_loss: False
+
+  #     spurious_strength: 0.95
+  #     color_by_label: False    # So that the spurious correlation is concept-based!
+  #     colors: ["random_1", "random_2", "random_3", "random_4", "random_5", "random_6", "random_7", "random_8", "random_9", "random_10"]
+  #     digit_color_distribution:
+  #       0: ["spurious", null, null, null, null, null, null, null, null, null]
+  #       1: [null, "spurious", null, null, null, null, null, null, null, null]
+  #       2: [null, null, "spurious", null, null, null, null, null, null, null]
+  #       3: [null, null, null, "spurious", null, null, null, null, null, null]
+  #       4: [null, null, null, null, "spurious", null, null, null, null, null]
+  #       5: [null, null, null, null, null, "spurious", null, null, null, null]
+  #       6: [null, null, null, null, null, null, "spurious", null, null, null]
+  #       7: [null, null, null, null, null, null, null, "spurious", null, null]
+  #       8: [null, null, null, null, null, null, null, null, "spurious", null]
+  #       9: [null, null, null, null, null, null, null, null, null, "spurious"]
+
+  #     test_digit_color_distribution:
+  #       0: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       1: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       2: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       3: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       4: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       5: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       6: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       7: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       8: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+  #       9: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
 
 
 

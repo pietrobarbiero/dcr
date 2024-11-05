@@ -258,6 +258,16 @@ def train_certificate_cem(
                     state_dict = torch.load(e2e_model_saved_path)
                     model.load_state_dict(state_dict, strict=False)
                 else:
+                    print(
+                        "[Number of parameters in model",
+                        sum(p.numel() for p in model.parameters() if p.requires_grad),
+                        "]"
+                    )
+                    print(
+                        "[Number of non-trainable parameters in model",
+                        sum(p.numel() for p in model.parameters() if not p.requires_grad),
+                        "]",
+                    )
                     e2e_callbacks, e2e_ckpt_call = _make_callbacks(
                         config,
                         result_dir,
@@ -307,6 +317,9 @@ def train_certificate_cem(
                             e2e_model_saved_path,
                         )
 
+            if config.get('freeze_global_components', False):
+                model.unfreeze_global_components()
+
             eval_trainer = pl.Trainer(
                 accelerator=accelerator,
                 devices=devices,
@@ -344,12 +357,12 @@ def train_certificate_cem(
                             full_run_name,
                         )
                         print(
-                            "[Number of parameters in approximation model",
+                            "[Number of parameters in model",
                             sum(p.numel() for p in model.parameters() if p.requires_grad),
                             "]"
                         )
                         print(
-                            "[Number of non-trainable parameters in approximation model",
+                            "[Number of non-trainable parameters in model",
                             sum(p.numel() for p in model.parameters() if not p.requires_grad),
                             "]",
                         )
@@ -391,12 +404,12 @@ def train_certificate_cem(
                             full_run_name,
                         )
                         print(
-                            "[Number of parameters in approximation model",
+                            "[Number of parameters in model",
                             sum(p.numel() for p in model.parameters() if p.requires_grad),
                             "]"
                         )
                         print(
-                            "[Number of non-trainable parameters in approximation model",
+                            "[Number of non-trainable parameters in model",
                             sum(p.numel() for p in model.parameters() if not p.requires_grad),
                             "]",
                         )
@@ -435,12 +448,12 @@ def train_certificate_cem(
                         full_run_name,
                     )
                     print(
-                        "[Number of parameters in approximation model",
+                        "[Number of parameters in model",
                         sum(p.numel() for p in model.parameters() if p.requires_grad),
                         "]"
                     )
                     print(
-                        "[Number of non-trainable parameters in approximation model",
+                        "[Number of non-trainable parameters in model",
                         sum(p.numel() for p in model.parameters() if not p.requires_grad),
                         "]",
                     )

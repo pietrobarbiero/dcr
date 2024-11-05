@@ -744,7 +744,7 @@ def construct_model(
             "pooling_mode": config.get('pooling_mode', 'concat'),
             "certificate_loss_weight": config.get('certificate_loss_weight', 0),
             "selection_mode": config.get("selection_mode", "individual"),
-            "hard_eval_selection": config.get("hard_eval_selection", True),
+            "hard_eval_selection": config.get("hard_eval_selection", None),
             "selection_sample": config.get("selection_sample", False),
             "eval_majority_vote": config.get('eval_majority_vote', False),
             "mixed_probs": config.get('mixed_probs', False),
@@ -761,6 +761,11 @@ def construct_model(
             "entire_global_prob": config.get('entire_global_prob', 0),
             "counter_limit": config.get('counter_limit', 0),
             "print_eval_only": config.get('print_eval_only', True),
+            "hard_selection_value": config.get('hard_selection_value', None),
+            "threshold_probs": config.get('threshold_probs', None),
+            "global_prediction_reg": config.get('global_prediction_reg', 0),
+            "hard_train_selection": config.get('hard_train_selection', None),
+            "train_prob_thresh": config.get('train_prob_thresh', None),
         }
 
     elif config['architecture'] in [

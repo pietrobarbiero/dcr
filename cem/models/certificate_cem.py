@@ -110,6 +110,7 @@ class CertificateConceptEmbeddingModel(IntAwareConceptEmbeddingModel):
         threshold_probs=None,  # Threhsold to apply to concept probabilities when determining confidence values from mixing!
         global_prediction_reg=0,
         train_prob_thresh=None,  # Threshold to be used at training time to determine whether we should use the global embedding or not
+        random_selection_prob=0, # Probability that we will simply change a concept global selection to either 1 or 0 with 50/50 chance
     ):
         self._construct_c2y_model = False
         bottleneck_size = 2 * emb_size * n_concepts if pooling_mode == 'combined' else emb_size * n_concepts
@@ -120,6 +121,7 @@ class CertificateConceptEmbeddingModel(IntAwareConceptEmbeddingModel):
         self.threshold_probs = threshold_probs
         self.global_prediction_reg = global_prediction_reg
         self.train_prob_thresh = train_prob_thresh
+        self.random_selection_prob = random_selection_prob
         if (train_prob_thresh is not None) and (hard_eval_selection is None):
             hard_eval_selection = train_prob_thresh
         super(CertificateConceptEmbeddingModel, self).__init__(
@@ -299,12 +301,12 @@ class CertificateConceptEmbeddingModel(IntAwareConceptEmbeddingModel):
             self._neg_dynamic_selections = None
         elif self.selection_mode.startswith('fixed_'):
             pass
-        elif self.selection_mode == 'max_class_confidence':
+        elif self.selection_mode in ['max_class_confidence']:
+            self.learnable_temps = learnable_temps
             self.concept_scales = torch.nn.Parameter(
                 torch.rand(n_concepts),
                 requires_grad=True,
             )
-            self.learnable_temps = learnable_temps
             if class_wise_temperature:
                 self.dynamic_logit_temperatures = torch.nn.Parameter(
                     init_dyn_temps * (torch.zeros(n_concepts, n_tasks) if learnable_temps else torch.ones(n_concepts, n_tasks)),
@@ -335,34 +337,40 @@ class CertificateConceptEmbeddingModel(IntAwareConceptEmbeddingModel):
 
 
         elif self.selection_mode == 'max_concept_confidence':
+            self.learnable_temps = learnable_temps
+
             self.global_concept_context_generators = torch.nn.ModuleList()
             self.concept_scales = torch.nn.Parameter(
                 torch.rand(n_concepts),
                 requires_grad=True,
             )
-            self.learnable_temps = learnable_temps
-            self.dynamic_logit_temperatures = torch.nn.Parameter(
-                init_dyn_temps * (torch.zeros(n_concepts) if learnable_temps else torch.ones(n_concepts)),
-                requires_grad=learnable_temps,
+
+            self.dynamic_platt_scales = torch.nn.Parameter(
+                init_dyn_temps * torch.ones(n_concepts),
+                requires_grad=False,
+            )
+            self.dynamic_platt_biases = torch.nn.Parameter(
+                torch.zeros(n_concepts),
+                requires_grad=False,
             )
 
-            self.global_logit_temperatures = torch.nn.Parameter(
-                init_global_temps * (torch.zeros(n_concepts) if learnable_temps else torch.ones(n_concepts)),
-                requires_grad=learnable_temps,
+            self.global_platt_scales = torch.nn.Parameter(
+                init_global_temps * torch.ones(n_concepts),
+                requires_grad=False,
             )
-            for i in range(n_concepts):
-                self.global_concept_context_generators.append(
-                    torch.nn.Sequential(*([
-                        torch.nn.Linear(
-                            list(
-                                self.pre_concept_model.modules()
-                            )[-1].out_features,
-                            # Two as each concept will have a positive and a
-                            # negative embedding portion which are later mixed
-                            self.emb_size,
-                        ),
-                    ]))
-                )
+            self.global_platt_biases = torch.nn.Parameter(
+                torch.zeros(n_concepts),
+                requires_grad=False,
+            )
+
+
+            self.global_concept_context_generators = torch.nn.Linear(
+                list(
+                    self.pre_concept_model.modules()
+                )[-1].out_features,
+                self.emb_size,
+            )
+
         else:
             raise ValueError(
                 f'Unsupported selection mode "{self.selection_mode}"'
@@ -419,6 +427,20 @@ class CertificateConceptEmbeddingModel(IntAwareConceptEmbeddingModel):
             return 1e-8 + torch.exp(self.global_logit_temperatures[concept_idx])
         return 1e-8 + self.global_logit_temperatures[concept_idx]
 
+
+
+    def _dynamic_platt_scaling(self, logits, concept_idx):
+        return (
+            self.dynamic_platt_scales[concept_idx] * logits +
+            self.dynamic_platt_biases[concept_idx]
+        )
+
+    def _global_platt_scaling(self, logits, concept_idx):
+        return (
+            self.global_platt_scales[concept_idx] * logits +
+            self.global_platt_biases[concept_idx]
+        )
+
     def _individual_score_mix(self, bottleneck, only_global=False):
         # global_selected will have shape (B, n_concepts)
         global_selected = self._combined_global_selected.squeeze(-1)
@@ -428,13 +450,13 @@ class CertificateConceptEmbeddingModel(IntAwareConceptEmbeddingModel):
         output_logits = None
         for concept_idx in range(self.n_concepts):
             global_embs = bottleneck[:, concept_idx, :self.emb_size]
-            if self.selection_mode == 'max_class_confidence':
+            if self.selection_mode in ['max_class_confidence']:
                 global_logits = self.global_score_models[concept_idx](global_embs) / self._get_global_temps(concept_idx).unsqueeze(0)
             else:
                 global_logits = self.global_score_models[concept_idx](global_embs)
 
             dynamic_embs = bottleneck[:, concept_idx, self.emb_size:]
-            if self.selection_mode == 'max_class_confidence':
+            if self.selection_mode in ['max_class_confidence']:
                 dynamic_logits = self.dynamic_score_models[concept_idx](dynamic_embs) / self._get_dynamic_temps(concept_idx).unsqueeze(0)
             else:
                 dynamic_logits = self.dynamic_score_models[concept_idx](dynamic_embs)
@@ -485,7 +507,8 @@ class CertificateConceptEmbeddingModel(IntAwareConceptEmbeddingModel):
             dynamic_contexts = []
             global_contexts = []
             global_shifts = []
-            global_emb_center = None
+            if self.selection_mode in ['max_class_confidence', 'max_concept_confidence']:
+                global_emb_center = self.global_concept_context_generators(pre_c)
 
             # First predict all the concept probabilities
             for concept_idx in range(self.n_concepts):
@@ -504,8 +527,6 @@ class CertificateConceptEmbeddingModel(IntAwareConceptEmbeddingModel):
                     global_context_pos = self.concept_embeddings[concept_idx:concept_idx+1, 0, :].expand(pre_c.shape[0], -1)
                     global_context_neg = self.concept_embeddings[concept_idx:concept_idx+1, 1, :].expand(pre_c.shape[0], -1)
                 elif self.selection_mode in ['max_class_confidence', 'max_concept_confidence']:
-                    if global_emb_center is None:
-                        global_emb_center = self.global_concept_context_generators(pre_c)
                     dynamic_context = dynamic_context + torch.concat(
                         [
                             self.concept_embeddings[concept_idx:concept_idx+1, 0, :].expand(pre_c.shape[0], -1),
@@ -566,8 +587,8 @@ class CertificateConceptEmbeddingModel(IntAwareConceptEmbeddingModel):
                 pos_dist = (pos_anchor - global_emb_center).pow(2).sum(-1).sqrt()
                 global_logits = torch.exp(self.concept_scales[concept_idx]) * (neg_dist - pos_dist).unsqueeze(-1)
                 if self.selection_mode == 'max_concept_confidence':
-                    dyn_logits = dyn_logits / self._get_dynamic_temps(concept_idx)
-                    global_logits = global_logits / self._get_global_temps(concept_idx)
+                    dyn_logits = self._dynamic_platt_scaling(dyn_logits, concept_idx)
+                    global_logits = self._global_platt_scaling(global_logits, concept_idx)
 
                 c_logits_dynamic.append(dyn_logits)
                 c_logits_global.append(global_logits)
@@ -790,6 +811,18 @@ class CertificateConceptEmbeddingModel(IntAwareConceptEmbeddingModel):
                         torch.ones_like(global_selected),
                         global_selected,
                     )
+                elif training and self.random_selection_prob:
+                    change_mask = torch.bernoulli(
+                        torch.ones(global_selected.shape[0], 1, 1) * self.random_selection_prob,
+                    ).to(global_selected.device)
+                    new_values = torch.bernoulli(
+                        torch.ones(global_selected.shape[0], 1, 1) * 0.5,
+                    ).to(global_selected.device)
+                    global_selected = torch.where(
+                        change_mask == 1,
+                        new_values,
+                        global_selected,
+                    )
                 elif training:
                     forced_on = self.ood_dropout(torch.ones_like(global_selected))
                     global_selected = torch.ones_like(global_selected) * forced_on + (1 - forced_on) * global_selected
@@ -825,13 +858,15 @@ class CertificateConceptEmbeddingModel(IntAwareConceptEmbeddingModel):
                     dim=-1,
                 )[:, 1:].unsqueeze(-1)
 
-                if training and self.entire_global_prob:
+                if self.hard_selection_value is not None:
+                    # This is mostly use for exploration/debugging/analysis
+                    global_selected = torch.ones_like(global_selected) * self.hard_selection_value
+                elif training and self.entire_global_prob:
                     global_selected = torch.where(
                         entire_global_selection_mask == 1,
                         torch.ones_like(global_selected),
                         global_selected,
                     )
-                    print("entire_global_selection_mask =", entire_global_selection_mask)
                 elif training and self.global_ood_prob:
                     mask = torch.bernoulli(
                         torch.ones(global_selected.shape[0], 1, 1) * self.global_ood_prob,
@@ -841,10 +876,34 @@ class CertificateConceptEmbeddingModel(IntAwareConceptEmbeddingModel):
                         torch.ones_like(global_selected),
                         global_selected,
                     )
+                elif training and self.random_selection_prob:
+                    change_mask = torch.bernoulli(
+                        torch.ones(global_selected.shape[0], 1, 1) * self.random_selection_prob,
+                    ).to(global_selected.device)
+                    new_values = torch.bernoulli(
+                        torch.ones(global_selected.shape[0], 1, 1) * 0.5,
+                    ).to(global_selected.device)
+                    global_selected = torch.where(
+                        change_mask == 1,
+                        new_values,
+                        global_selected,
+                    )
                 elif training:
                     forced_on = self.ood_dropout(torch.ones_like(global_selected))
                     global_selected = torch.ones_like(global_selected) * forced_on + (1 - forced_on) * global_selected
 
+                if (self.hard_eval_selection is not None) and (not training):
+                    global_selected = torch.where(
+                        global_selected >= self.hard_eval_selection if self.hard_eval_selection >= 0 else global_selected < self.hard_eval_selection,
+                        torch.ones_like(global_selected),
+                        torch.zeros_like(global_selected),
+                    )
+                elif self.hard_train_selection is not None:
+                    global_selected = torch.where(
+                        global_selected >= self.hard_train_selection if self.hard_train_selection >= 0 else global_selected < self.hard_train_selection,
+                        torch.ones_like(global_selected),
+                        torch.zeros_like(global_selected),
+                    )
                 pos_global_selected = global_selected
                 neg_global_selected = global_selected
                 if self.pooling_mode in ['individual_scores', 'individual_scores_shared']:
@@ -1082,7 +1141,7 @@ class CertificateConceptEmbeddingModel(IntAwareConceptEmbeddingModel):
             )
             self._c_logits_global = None
 
-        if self.training and self.learnable_temps and self.selection_mode == 'max_class_confidence' and (
+        if self.training and self.learnable_temps and self.selection_mode in ['max_class_confidence'] and (
             self.global_temp_reg
         ):
             loss += self.global_temp_reg * torch.mean(
@@ -1091,7 +1150,7 @@ class CertificateConceptEmbeddingModel(IntAwareConceptEmbeddingModel):
             loss -= self.global_temp_reg * torch.mean(
                 torch.exp(self.dynamic_logit_temperatures)
             )
-        if self.training and (self.selection_mode == 'max_class_confidence') and (self._global_logits is not None) and self.global_prediction_reg:
+        if self.training and (self.selection_mode in ['max_class_confidence', 'max_concept_confidence']) and (self._global_logits is not None) and self.global_prediction_reg:
             loss += self.global_prediction_reg * self.loss_task(
                 self._global_logits if self._global_logits.shape[-1] > 1 else self._global_logits.reshape(-1),
                 y,
@@ -1107,6 +1166,36 @@ class CertificateConceptEmbeddingModel(IntAwareConceptEmbeddingModel):
             param.requires_grad = False
         for param in self.pre_concept_model.parameters():
             param.requires_grad = False
+
+    def unfreeze_calibration_components(
+        self,
+        unfreeze_dynamic=True,
+        unfreeze_global=True,
+    ):
+        if self.selection_mode == 'max_class_confidence':
+            self.global_logit_temperatures.requires_grad = unfreeze_global
+            self.dynamic_logit_temperatures.requires_grad = unfreeze_dynamic
+        elif self.selection_mode == 'max_concept_confidence':
+            self.dynamic_platt_scales.requires_grad = unfreeze_dynamic
+            self.dynamic_platt_biases.requires_grad = unfreeze_dynamic
+            self.global_platt_scales.requires_grad = unfreeze_global
+            self.global_platt_biases.requires_grad = unfreeze_global
+
+
+    def freeze_calibration_components(
+        self,
+        freeze_dynamic=True,
+        freeze_global=True,
+    ):
+        if self.selection_mode == 'max_class_confidence':
+            self.global_logit_temperatures.requires_grad = (not freeze_global)
+            self.dynamic_logit_temperatures.requires_grad = (not freeze_dynamic)
+        elif self.selection_mode == 'max_concept_confidence':
+            self.dynamic_platt_scales.requires_grad = (not freeze_dynamic)
+            self.dynamic_platt_biases.requires_grad = (not freeze_dynamic)
+            self.global_platt_scales.requires_grad = (not freeze_global)
+            self.global_platt_biases.requires_grad = (not freeze_global)
+
 
     def unfreeze_global_components(self):
         self.concept_embeddings.requires_grad = True

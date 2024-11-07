@@ -348,8 +348,7 @@ def train_certificate_cem(
                 if config.get('separate_calibration', False):
                     if config.get('calibrate_dynamic_logits', True):
                         # First calibrate the dynamic logits
-                        model.dynamic_logit_temperatures.requires_grad = True
-                        model.global_logit_temperatures.requires_grad = False
+                        model.unfreeze_calibration_components(unfreeze_dynamic=True, unfreeze_global=False)
                         model.hard_selection_value = 0  # Force the selection to always use the dynamic embeddings
                         calibration_callbacks, calibration_ckpt_call = _make_callbacks(
                             config,
@@ -396,8 +395,7 @@ def train_certificate_cem(
                     if config.get('calibrate_global_logits', True):
                         # Then calibrate the global logits
                         model.hard_selection_value = 1  # Force the selection to always use the global embeddings
-                        model.dynamic_logit_temperatures.requires_grad = False
-                        model.global_logit_temperatures.requires_grad = True
+                        model.unfreeze_calibration_components(unfreeze_dynamic=False, unfreeze_global=True)
                         calibration_callbacks, calibration_ckpt_call = _make_callbacks(
                             config,
                             result_dir,
@@ -440,8 +438,10 @@ def train_certificate_cem(
                             trainer=calibration_trainer,
                         )
                 else:
-                    model.dynamic_logit_temperatures.requires_grad = config.get('calibrate_dynamic_logits', True)
-                    model.global_logit_temperatures.requires_grad = config.get('calibrate_global_logits', True)
+                    model.unfreeze_calibration_components(
+                        unfreeze_dynamic=config.get('calibrate_dynamic_logits', True),
+                        unfreeze_global=config.get('calibrate_global_logits', True),
+                    )
                     calibration_callbacks, calibration_ckpt_call = _make_callbacks(
                         config,
                         result_dir,

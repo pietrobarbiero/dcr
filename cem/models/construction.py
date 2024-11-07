@@ -766,6 +766,7 @@ def construct_model(
             "global_prediction_reg": config.get('global_prediction_reg', 0),
             "hard_train_selection": config.get('hard_train_selection', None),
             "train_prob_thresh": config.get('train_prob_thresh', None),
+            "random_selection_prob": config.get('random_selection_prob', 0),
         }
 
     elif config['architecture'] in [

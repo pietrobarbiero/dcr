@@ -554,6 +554,7 @@ class ConceptBottleneckModel(pl.LightningModule):
         return tuple([c_sem, c_pred, y_pred] + tail_results)
 
     def _extra_tail_results(
+        self,
         x,
         y,
         c,

@@ -111,8 +111,21 @@ class CertificateConceptEmbeddingModel(IntAwareConceptEmbeddingModel):
         global_prediction_reg=0,
         train_prob_thresh=None,  # Threshold to be used at training time to determine whether we should use the global embedding or not
         random_selection_prob=0, # Probability that we will simply change a concept global selection to either 1 or 0 with 50/50 chance
+        update_with_interventions=False,  # Whether or not we update mixing coefficients after an intervention was made!
+        relative_max=False, # Whether when we take the maximum confidence, it is done relative to both global and contextual confidences
+
+        # Noise separator stuff
+        ood_separator_loss_weight=0, # The weight for the loss on the separator
+        noise_level=0.5, # The level of Gaussian noise to be used when training the OOD separator
+        shared_noise_separator=True, # Whether or not we have a OOD separator per concept or one shared for all of them
+
+        # Monte carlo stuff
+        montecarlo_tries=20,
+        global_dropout_only=False,
+        output_uncertainty=False,
     ):
         self._construct_c2y_model = False
+        self.learnable_temps = learnable_temps
         bottleneck_size = 2 * emb_size * n_concepts if pooling_mode == 'combined' else emb_size * n_concepts
         self.positive_calibration = positive_calibration
         self.entire_global_prob = entire_global_prob
@@ -122,6 +135,11 @@ class CertificateConceptEmbeddingModel(IntAwareConceptEmbeddingModel):
         self.global_prediction_reg = global_prediction_reg
         self.train_prob_thresh = train_prob_thresh
         self.random_selection_prob = random_selection_prob
+        self.ood_separator_loss_weight = ood_separator_loss_weight
+        self.update_with_interventions = update_with_interventions
+        self.relative_max = relative_max
+        self.montecarlo_tries = montecarlo_tries
+        self.global_dropout_only = global_dropout_only
         if (train_prob_thresh is not None) and (hard_eval_selection is None):
             hard_eval_selection = train_prob_thresh
         super(CertificateConceptEmbeddingModel, self).__init__(
@@ -165,6 +183,7 @@ class CertificateConceptEmbeddingModel(IntAwareConceptEmbeddingModel):
             intervention_task_loss_weight=intervention_task_loss_weight,
             bottleneck_size=bottleneck_size,
         )
+        self.selection_mode = selection_mode
         if pooling_mode == 'iss':
             pooling_mode = 'individual_scores_shared'
         if pooling_mode == 'is':
@@ -280,10 +299,8 @@ class CertificateConceptEmbeddingModel(IntAwareConceptEmbeddingModel):
         self.hard_eval_selection = hard_eval_selection
         self.hard_train_selection = hard_train_selection
         self.hard_selection_value = hard_selection_value
-        self.selection_mode = selection_mode
         self.certificate_loss_weight = certificate_loss_weight
         self.class_wise_temperature = class_wise_temperature
-
         if self.selection_mode == 'global':
             self.certificate_model = torch.nn.Linear(
                 2*self.emb_size,
@@ -301,6 +318,49 @@ class CertificateConceptEmbeddingModel(IntAwareConceptEmbeddingModel):
             self._neg_dynamic_selections = None
         elif self.selection_mode.startswith('fixed_'):
             pass
+        elif self.selection_mode == 'monte_carlo':
+            assert self.pooling_mode in ['individual_scores', 'individual_scores_shared']
+            self.ood_dropout_prob = ood_dropout_prob
+            self.global_concept_context_generators = torch.nn.Linear(
+                list(
+                    self.pre_concept_model.modules()
+                )[-1].out_features,
+                self.emb_size,
+            )
+            self.concept_scales = torch.nn.Parameter(
+                torch.rand(n_concepts),
+                requires_grad=True,
+            )
+            self._global_contexts = None
+            self._dynamic_contexts = None
+            self.output_uncertainty = output_uncertainty
+            self.learnable_temps = learnable_temps
+            self._mixed_stds = []
+            if self.global_dropout_only:
+                self.ood_uncertainty_thresh = torch.nn.Parameter(
+                    torch.ones(n_concepts, n_tasks),
+                    requires_grad=True,
+                )
+            if class_wise_temperature:
+                self.dynamic_logit_temperatures = torch.nn.Parameter(
+                    init_dyn_temps * (torch.zeros(n_concepts, n_tasks) if learnable_temps else torch.ones(n_concepts, n_tasks)),
+                    requires_grad=learnable_temps,
+                )
+
+                self.global_logit_temperatures = torch.nn.Parameter(
+                    init_global_temps * (torch.zeros(n_concepts, n_tasks) if learnable_temps else torch.ones(n_concepts, n_tasks)),
+                    requires_grad=learnable_temps,
+                )
+            else:
+                self.dynamic_logit_temperatures = torch.nn.Parameter(
+                    init_dyn_temps * (torch.zeros(n_concepts) if learnable_temps else torch.ones(n_concepts)),
+                    requires_grad=learnable_temps,
+                )
+
+                self.global_logit_temperatures = torch.nn.Parameter(
+                    init_global_temps * (torch.zeros(n_concepts) if learnable_temps else torch.ones(n_concepts)),
+                    requires_grad=learnable_temps,
+                )
         elif self.selection_mode in ['max_class_confidence']:
             self.learnable_temps = learnable_temps
             self.concept_scales = torch.nn.Parameter(
@@ -333,8 +393,8 @@ class CertificateConceptEmbeddingModel(IntAwareConceptEmbeddingModel):
                 )[-1].out_features,
                 self.emb_size,
             )
-            self._global_logits = None
-
+            self._global_contexts = None
+            self._dynamic_contexts = None
 
         elif self.selection_mode == 'max_concept_confidence':
             self.learnable_temps = learnable_temps
@@ -371,6 +431,46 @@ class CertificateConceptEmbeddingModel(IntAwareConceptEmbeddingModel):
                 self.emb_size,
             )
 
+        elif self.selection_mode in ['noise_separator']:
+            self.concept_scales = torch.nn.Parameter(
+                torch.rand(n_concepts),
+                requires_grad=True,
+            )
+            self.global_concept_context_generators = torch.nn.Linear(
+                list(
+                    self.pre_concept_model.modules()
+                )[-1].out_features,
+                self.emb_size,
+            )
+            self._ood_identifiers = torch.nn.ModuleList()
+            self.ood_identifiers = []
+            self.noise_level = noise_level
+            self.shared_noise_separator = shared_noise_separator
+            self.noise_separator_loss = torch.nn.BCEWithLogitsLoss()
+            if shared_noise_separator:
+                # Then we will do the OOD selection together for all concepts
+                # using the pre embedding latent code
+                self._ood_identifiers.append(torch.nn.Linear(
+                    emb_size,
+                    1,
+                ))
+                sep_fn = lambda emb_latent_code, dynamic_context: \
+                    self._ood_identifiers[0](emb_latent_code)
+                for _ in range(self.n_concepts):
+                    self.ood_identifiers.append(sep_fn)
+            else:
+                # Else, we do this at a concept-embedding basis
+                for idx in range(self.n_concepts):
+                    self._ood_identifiers.append(torch.nn.Linear(
+                        2 * emb_size,
+                        1,
+                    ))
+                    sep_fn = lambda emb_latent_code, dynamic_context: \
+                        self._ood_identifiers[idx](dynamic_context)
+                    self.ood_identifiers.append(sep_fn)
+
+
+
         else:
             raise ValueError(
                 f'Unsupported selection mode "{self.selection_mode}"'
@@ -384,6 +484,7 @@ class CertificateConceptEmbeddingModel(IntAwareConceptEmbeddingModel):
         self.global_temp_reg = global_temp_reg
         self.max_temperature = max_temperature
         self.inference_dyn_prob = inference_dyn_prob
+        self._global_logits = None
 
     def _predict_labels(self, bottleneck, **task_loss_kwargs):
         out = self.c2y_model(bottleneck)
@@ -403,6 +504,28 @@ class CertificateConceptEmbeddingModel(IntAwareConceptEmbeddingModel):
         probs,
         **task_loss_kwargs,
     ):
+        if self.update_with_interventions and (
+            self.selection_mode == 'max_class_confidence'
+        ) and (
+            self._intervention_idxs is not None
+        ):
+            # Then let's update our selection coefficients in case an
+            # intervention occured
+            new_coeffs = []
+            for concept_idx in range(self.n_concepts):
+                new_coeffs.append(self._max_class_confidence_selection(
+                    concept_idx=concept_idx,
+                    dynamic_contexts=self._dynamic_contexts,
+                    global_contexts=self._global_contexts,
+                    used_c_cem=probs,
+                ))
+            new_coeffs = torch.concat(new_coeffs, dim=1)
+            # Then let's update this too!!
+            self._combined_global_selected = new_coeffs
+            # (
+            #     self._intervention_idxs.unsqueeze(-1) * new_coeffs +
+            #     (1 - self._intervention_idxs.unsqueeze(-1)) * self._combined_global_selected
+            # )
         bottleneck = (
             pos_embeddings * torch.unsqueeze(probs, dim=-1) + (
                 neg_embeddings * (
@@ -442,35 +565,66 @@ class CertificateConceptEmbeddingModel(IntAwareConceptEmbeddingModel):
         )
 
     def _individual_score_mix(self, bottleneck, only_global=False):
-        # global_selected will have shape (B, n_concepts)
-        global_selected = self._combined_global_selected.squeeze(-1)
-        if only_global:
-            global_selected = torch.ones_like(global_selected)
+        if self.selection_mode == 'monte_carlo' and self.global_dropout_only:
+            # global_selected will have shape (B, n_concepts, n_tasks)
+            global_selected = self._combined_global_selected
+            if only_global:
+                global_selected = torch.ones_like(global_selected)
+            output_logits = None
+            for concept_idx in range(self.n_concepts):
+                global_embs = bottleneck[:, concept_idx, :self.emb_size]
+                if self.selection_mode in ['max_class_confidence', 'monte_carlo']:
+                    global_logits = self.global_score_models[concept_idx](global_embs) / self._get_global_temps(concept_idx).unsqueeze(0)
+                else:
+                    global_logits = self.global_score_models[concept_idx](global_embs)
 
-        output_logits = None
-        for concept_idx in range(self.n_concepts):
-            global_embs = bottleneck[:, concept_idx, :self.emb_size]
-            if self.selection_mode in ['max_class_confidence']:
-                global_logits = self.global_score_models[concept_idx](global_embs) / self._get_global_temps(concept_idx).unsqueeze(0)
-            else:
-                global_logits = self.global_score_models[concept_idx](global_embs)
+                dynamic_embs = bottleneck[:, concept_idx, self.emb_size:]
+                if self.selection_mode in ['max_class_confidence', 'monte_carlo']:
+                    dynamic_logits = self.dynamic_score_models[concept_idx](dynamic_embs) / self._get_dynamic_temps(concept_idx).unsqueeze(0)
+                else:
+                    dynamic_logits = self.dynamic_score_models[concept_idx](dynamic_embs)
 
-            dynamic_embs = bottleneck[:, concept_idx, self.emb_size:]
-            if self.selection_mode in ['max_class_confidence']:
-                dynamic_logits = self.dynamic_score_models[concept_idx](dynamic_embs) / self._get_dynamic_temps(concept_idx).unsqueeze(0)
-            else:
-                dynamic_logits = self.dynamic_score_models[concept_idx](dynamic_embs)
+                combined_scores = (
+                    global_selected[:, concept_idx, :] * global_logits +
+                    (1 - global_selected[:, concept_idx, :]) * dynamic_logits
+                )
+                self._global_logits = global_logits
 
-            combined_scores = (
-                global_selected[:, concept_idx:concept_idx+1] * global_logits +
-                (1 - global_selected[:, concept_idx:concept_idx+1]) * dynamic_logits
-            )
-            self._global_logits = global_logits
+                if output_logits is None:
+                    output_logits = combined_scores
+                else:
+                    output_logits = output_logits + combined_scores
 
-            if output_logits is None:
-                output_logits = combined_scores
-            else:
-                output_logits = output_logits + combined_scores
+        else:
+            # global_selected will have shape (B, n_concepts)
+            global_selected = self._combined_global_selected.squeeze(-1)
+            if only_global:
+                global_selected = torch.ones_like(global_selected)
+
+            output_logits = None
+            for concept_idx in range(self.n_concepts):
+                global_embs = bottleneck[:, concept_idx, :self.emb_size]
+                if self.selection_mode in ['max_class_confidence', 'monte_carlo']:
+                    global_logits = self.global_score_models[concept_idx](global_embs) / self._get_global_temps(concept_idx).unsqueeze(0)
+                else:
+                    global_logits = self.global_score_models[concept_idx](global_embs)
+
+                dynamic_embs = bottleneck[:, concept_idx, self.emb_size:]
+                if self.selection_mode in ['max_class_confidence', 'monte_carlo']:
+                    dynamic_logits = self.dynamic_score_models[concept_idx](dynamic_embs) / self._get_dynamic_temps(concept_idx).unsqueeze(0)
+                else:
+                    dynamic_logits = self.dynamic_score_models[concept_idx](dynamic_embs)
+
+                combined_scores = (
+                    global_selected[:, concept_idx:concept_idx+1] * global_logits +
+                    (1 - global_selected[:, concept_idx:concept_idx+1]) * dynamic_logits
+                )
+                self._global_logits = global_logits
+
+                if output_logits is None:
+                    output_logits = combined_scores
+                else:
+                    output_logits = output_logits + combined_scores
 
         return output_logits
 
@@ -487,13 +641,133 @@ class CertificateConceptEmbeddingModel(IntAwareConceptEmbeddingModel):
             dim=-1,
         )
 
+    def _new_tail_results(
+        self,
+        x=None,
+        c=None,
+        y=None,
+        c_sem=None,
+        bottleneck=None,
+        y_pred=None,
+    ):
+        tail_results = []
+        if (
+            (self.selection_mode == 'monte_carlo') and
+            self.global_dropout_only and
+            (len(self._mixed_stds) > 0) and
+            (self.output_uncertainty)
+        ):
+            tail_results.append(torch.concat(self._mixed_stds, dim=1))
+            self._mixed_stds = []
+        return tail_results
+
     def _generate_dynamic_concept(self, pre_c, concept_idx):
         context = self.concept_context_generators[concept_idx](pre_c)
         return context
 
-    def _max(self, x):
-        # return torch.max(x, dim=-1, keepdim=True)[0]
-        return torch.log(torch.sum(self.max_temperature * torch.exp(x), dim=-1, keepdim=True))
+    def montecarlo_sampling(self, global_contexts, dynamic_contexts, c_sem, concept_idx=None, global_selected=None):
+        if concept_idx is None:
+            means = []
+            stds = []
+            for idx in range(self.n_concepts):
+                m, s = self.montecarlo_sampling(
+                    global_contexts=global_contexts,
+                    dynamic_contexts=dynamic_contexts,
+                    concept_idx=idx,
+                    global_selected=global_selected,
+                    c_sem=c_sem,
+                )
+                means.append(m)
+                stds.append(s)
+            return torch.concat(means, dim=1), torch.concat(stds, dim=1)
+
+        if self.global_dropout_only:
+            mixed_outputs = []
+            for _ in range(self.montecarlo_tries):
+                new_global_contexts = global_contexts[:, concept_idx, :]
+                new_dynamic_contexts = dynamic_contexts[:, concept_idx, :]
+                dyn_out = self.dynamic_score_models[concept_idx](
+                    c_sem[:, concept_idx:concept_idx+1] * new_dynamic_contexts[:, :self.emb_size] +
+                    (1 - c_sem[:, concept_idx:concept_idx+1]) * new_dynamic_contexts[:, self.emb_size:]
+                ) / self._get_dynamic_temps(concept_idx).unsqueeze(0)
+                glob_out = self.global_score_models[concept_idx](
+                    c_sem[:, concept_idx:concept_idx+1] * new_global_contexts[:, :self.emb_size] +
+                    (1 - c_sem[:, concept_idx:concept_idx+1]) * new_global_contexts[:, self.emb_size:]
+                ) / self._get_global_temps(concept_idx).unsqueeze(0)
+                mixed_coeffs = torch.bernoulli(
+                    torch.ones_like(glob_out) * self.global_ood_prob,
+                ).to(global_contexts.device)
+                mixed_out = (
+                    glob_out * mixed_coeffs +
+                    (1 - mixed_coeffs) * dyn_out
+                )
+                mixed_outputs.append(
+                    mixed_out.unsqueeze(-1)
+                )
+
+            # Shape: [B, 1, n_tasks]
+            mixed_stds = torch.std(
+                torch.concat(mixed_outputs, dim=-1),
+                dim=-1,
+            ).unsqueeze(1)
+
+            mixed_means = torch.mean(
+                torch.concat(mixed_outputs, dim=-1),
+                dim=-1,
+            ).unsqueeze(1)
+            return mixed_means, mixed_stds
+
+        assert False
+
+
+    def _max_confidence(self, x):
+        if self.max_temperature == 'entropy':
+            probs = torch.softmax(x, dim=-1)
+            return -torch.sum(probs * torch.log(probs + 1e-10), dim=-1).unsqueeze(-1)
+
+        if self.max_temperature is None:
+            return torch.max(torch.abs(x), dim=-1, keepdim=True)[0]
+        return torch.log(torch.sum(self.max_temperature * torch.exp(torch.abs(x)), dim=-1, keepdim=True))
+
+    def _max_class_confidence_selection(
+        self,
+        concept_idx,
+        dynamic_contexts,
+        global_contexts,
+        used_c_cem,
+    ):
+        dynamic_logits = self.dynamic_score_models[concept_idx](
+            used_c_cem[:, concept_idx:concept_idx+1] * dynamic_contexts[:, concept_idx, :self.emb_size] +
+            (1 - used_c_cem[:, concept_idx:concept_idx+1]) * dynamic_contexts[:, concept_idx, self.emb_size:]
+        )
+        global_logits = self.global_score_models[concept_idx](
+            used_c_cem[:, concept_idx:concept_idx+1] * global_contexts[:, concept_idx, :self.emb_size] +
+            (1 - used_c_cem[:, concept_idx:concept_idx+1]) * global_contexts[:, concept_idx, self.emb_size:]
+        )
+        if self.relative_max:
+            global_selected = self._max_confidence(torch.softmax(
+                self.temperature * torch.concat(
+                    [
+                        dynamic_logits/self._get_dynamic_temps(concept_idx),
+                        global_logits/self._get_global_temps(concept_idx),
+                    ],
+                    dim=-1,
+                ),
+                dim=-1,
+            )[:, dynamic_logits.shape[-1]:]).unsqueeze(-1)
+        else:
+            global_selected = torch.softmax(
+                self.temperature * torch.concat(
+                    [
+                        self._max_confidence(dynamic_logits/self._get_dynamic_temps(concept_idx)),
+                        self._max_confidence(global_logits/self._get_global_temps(concept_idx)),
+                    ],
+                    dim=-1,
+                ),
+                dim=-1,
+            )[:, 1:].unsqueeze(-1)
+        global_selected = self._threshold_selection_prob(global_selected)
+        return global_selected
 
     def _generate_concept_embeddings(
         self,
@@ -502,12 +776,13 @@ class CertificateConceptEmbeddingModel(IntAwareConceptEmbeddingModel):
         training=False,
     ):
         extra_outputs = {}
+        self._mixed_stds = []
         if latent is None:
             pre_c = self.pre_concept_model(x)
             dynamic_contexts = []
             global_contexts = []
             global_shifts = []
-            if self.selection_mode in ['max_class_confidence', 'max_concept_confidence']:
+            if self.selection_mode in ['max_class_confidence', 'max_concept_confidence', 'noise_separator', 'monte_carlo']:
                 global_emb_center = self.global_concept_context_generators(pre_c)
 
             # First predict all the concept probabilities
@@ -526,7 +801,7 @@ class CertificateConceptEmbeddingModel(IntAwareConceptEmbeddingModel):
                     # global_context_neg = linear_separators[neg_idx:neg_idx+1, :].expand(pre_c.shape[0], -1)
                     global_context_pos = self.concept_embeddings[concept_idx:concept_idx+1, 0, :].expand(pre_c.shape[0], -1)
                     global_context_neg = self.concept_embeddings[concept_idx:concept_idx+1, 1, :].expand(pre_c.shape[0], -1)
-                elif self.selection_mode in ['max_class_confidence', 'max_concept_confidence']:
+                elif self.selection_mode in ['max_class_confidence', 'max_concept_confidence', 'noise_separator', 'monte_carlo']:
                     dynamic_context = dynamic_context + torch.concat(
                         [
                             self.concept_embeddings[concept_idx:concept_idx+1, 0, :].expand(pre_c.shape[0], -1),
@@ -557,7 +832,6 @@ class CertificateConceptEmbeddingModel(IntAwareConceptEmbeddingModel):
             latent = dynamic_contexts, global_contexts
         else:
             dynamic_contexts, global_contexts = latent
-
 
         # Now we can compute all the probabilites!
         c_sem = []
@@ -622,6 +896,13 @@ class CertificateConceptEmbeddingModel(IntAwareConceptEmbeddingModel):
             entire_global_selection_mask = torch.bernoulli(
                 torch.ones(dynamic_contexts.shape[0], 1, 1) * self.entire_global_prob,
             ).to(dynamic_contexts.device)
+
+        if (self.selection_mode == 'monte_carlo') and training:
+            # Then we do some dropping out here!
+            dynamic_contexts = torch.nn.functional.dropout(dynamic_contexts, p=self.ood_dropout_prob)
+            global_contexts = torch.nn.functional.dropout(global_contexts, p=self.ood_dropout_prob)
+
+
         for concept_idx in range(self.n_concepts):
             pos_idx = concept_idx
             neg_idx = concept_idx
@@ -763,7 +1044,6 @@ class CertificateConceptEmbeddingModel(IntAwareConceptEmbeddingModel):
 
                 if self.pooling_mode in ['individual_scores', 'individual_scores_shared']:
                     combined_global_selected.append(global_selected)
-
             elif self.selection_mode == 'max_class_confidence':
                 assert self.pooling_mode in ['individual_scores', 'individual_scores_shared'], self.pooling_mode
                 used_c_cem = c_sem
@@ -773,25 +1053,13 @@ class CertificateConceptEmbeddingModel(IntAwareConceptEmbeddingModel):
                         torch.ones_like(c_sem),
                         torch.zeros_like(c_sem),
                     )
-                dynamic_logits = self.dynamic_score_models[concept_idx](
-                    used_c_cem[:, concept_idx:concept_idx+1] * dynamic_contexts[:, concept_idx, :self.emb_size] +
-                    (1 - used_c_cem[:, concept_idx:concept_idx+1]) * dynamic_contexts[:, concept_idx, self.emb_size:]
+
+                global_selected = self. _max_class_confidence_selection(
+                    concept_idx=concept_idx,
+                    dynamic_contexts=dynamic_contexts,
+                    global_contexts=global_contexts,
+                    used_c_cem=used_c_cem,
                 )
-                global_logits = self.global_score_models[concept_idx](
-                    used_c_cem[:, concept_idx:concept_idx+1] * global_contexts[:, concept_idx, :self.emb_size] +
-                    (1 - used_c_cem[:, concept_idx:concept_idx+1]) * global_contexts[:, concept_idx, self.emb_size:]
-                )
-                global_selected = torch.softmax(
-                    self.temperature * torch.concat(
-                        [
-                            self._max(torch.abs(dynamic_logits/self._get_dynamic_temps(concept_idx))),
-                            self._max(torch.abs(global_logits/self._get_global_temps(concept_idx))),
-                        ],
-                        dim=-1,
-                    ),
-                    dim=-1,
-                )[:, 1:].unsqueeze(-1)
-                global_selected = self._threshold_selection_prob(global_selected)
 
                 if self.hard_selection_value is not None:
                     # This is mostly use for exploration/debugging/analysis
@@ -843,7 +1111,6 @@ class CertificateConceptEmbeddingModel(IntAwareConceptEmbeddingModel):
                 neg_global_selected = global_selected
                 if self.pooling_mode in ['individual_scores', 'individual_scores_shared']:
                     combined_global_selected.append(global_selected)
-
             elif self.selection_mode == 'max_concept_confidence':
                 dynamic_logits = c_logits_dynamic[concept_idx]
                 global_logits = c_logits_global[concept_idx]
@@ -908,6 +1175,166 @@ class CertificateConceptEmbeddingModel(IntAwareConceptEmbeddingModel):
                 neg_global_selected = global_selected
                 if self.pooling_mode in ['individual_scores', 'individual_scores_shared']:
                     combined_global_selected.append(global_selected)
+
+            elif self.selection_mode == 'monte_carlo':
+                # Apply dropout to the forward embeddings
+
+                if training:
+                    # Then we generate a simple random mask
+                    global_selected = torch.bernoulli(
+                        torch.ones(global_contexts.shape[0], 1, 1) * self.global_ood_prob,
+                    ).to(global_contexts.device)
+                elif self.global_dropout_only:
+                    mixed_outputs = []
+                    for _ in range(self.montecarlo_tries):
+                        new_global_contexts = global_contexts[:, concept_idx, :]
+                        new_dynamic_contexts = dynamic_contexts[:, concept_idx, :]
+                        dyn_out = self.dynamic_score_models[concept_idx](
+                            c_sem[:, concept_idx:concept_idx+1] * new_dynamic_contexts[:, :self.emb_size] +
+                            (1 - c_sem[:, concept_idx:concept_idx+1]) * new_dynamic_contexts[:, self.emb_size:]
+                        )/ self._get_dynamic_temps(concept_idx).unsqueeze(0)
+                        glob_out = self.global_score_models[concept_idx](
+                            c_sem[:, concept_idx:concept_idx+1] * new_global_contexts[:, :self.emb_size] +
+                            (1 - c_sem[:, concept_idx:concept_idx+1]) * new_global_contexts[:, self.emb_size:]
+                        ) / self._get_global_temps(concept_idx).unsqueeze(0)
+                        mixed_coeffs = torch.bernoulli(
+                            torch.ones_like(glob_out) * self.global_ood_prob,
+                        ).to(global_contexts.device)
+                        mixed_out = (
+                            glob_out * mixed_coeffs +
+                            (1 - mixed_coeffs) * dyn_out
+                        )
+                        mixed_outputs.append(
+                            mixed_out.unsqueeze(-1)
+                        )
+                    # Shape: [B, 1, n_tasks]
+                    _, mixed_stds = self.montecarlo_sampling(
+                        global_contexts=global_contexts,
+                        dynamic_contexts=dynamic_contexts,
+                        concept_idx=concept_idx,
+                        c_sem=c_sem,
+                    )
+                    if self.output_uncertainty:
+                        self._mixed_stds.append(mixed_stds)
+                    global_selected = torch.where(
+                        mixed_stds <= self.ood_uncertainty_thresh[concept_idx:concept_idx+1, :].unsqueeze(0),
+                        torch.zeros(global_contexts.shape[0], 1, 1).to(global_contexts.device),
+                        torch.ones(global_contexts.shape[0], 1, 1).to(global_contexts.device),
+                    )
+                else:
+                    # Else we select the masks based on the uncertainty levels of
+                    # the concept embeddings
+                    global_outputs = []
+                    dynamic_outputs = []
+                    for _ in range(self.montecarlo_tries):
+                        new_global_contexts = global_contexts[:, concept_idx, :] * torch.bernoulli(
+                            torch.ones_like(global_contexts[:, concept_idx, :]) * self.ood_dropout_prob,
+                        ).to(global_contexts.device)
+                        new_dynamic_contexts = dynamic_contexts[:, concept_idx, :] * torch.bernoulli(
+                            torch.ones_like(dynamic_contexts[:, concept_idx, :]) * self.ood_dropout_prob,
+                        ).to(dynamic_contexts.device)
+                        dynamic_outputs.append(torch.softmax(
+                            self.dynamic_score_models[concept_idx](
+                                c_sem[:, concept_idx:concept_idx+1] * new_dynamic_contexts[:, :self.emb_size] +
+                                (1 - c_sem[:, concept_idx:concept_idx+1]) * new_dynamic_contexts[:, self.emb_size:]
+                            ) / self._get_dynamic_temps(concept_idx).unsqueeze(0),
+                            dim=-1,
+                        ))
+                        global_outputs.append(torch.softmax(
+                            self.global_score_models[concept_idx](
+                                c_sem[:, concept_idx:concept_idx+1] * new_global_contexts[:, :self.emb_size] +
+                                (1 - c_sem[:, concept_idx:concept_idx+1]) * new_global_contexts[:, self.emb_size:]
+                            ) / self._get_global_temps(concept_idx).unsqueeze(0),
+                            dim=-1,
+                        ))
+                    dynamic_stds = torch.std(
+                        torch.concat(dynamic_outputs, dim=-1),
+                        dim=-1,
+                    ).unsqueeze(-1).unsqueeze(-1)
+                    global_stds = torch.std(
+                        torch.concat(global_outputs, dim=-1),
+                        dim=-1,
+                    ).unsqueeze(-1).unsqueeze(-1)
+                    global_selected = torch.where(
+                        global_stds < dynamic_stds,
+                        torch.ones(global_contexts.shape[0], 1, 1).to(global_contexts.device),
+                        torch.zeros(global_contexts.shape[0], 1, 1).to(global_contexts.device),
+                    )
+                pos_global_selected = global_selected
+                neg_global_selected = global_selected
+                if self.pooling_mode in ['individual_scores', 'individual_scores_shared']:
+                    combined_global_selected.append(global_selected)
+            elif self.selection_mode == 'noise_separator':
+                assert self.pooling_mode in ['individual_scores', 'individual_scores_shared'], self.pooling_mode
+                used_c_cem = c_sem
+                if self.threshold_probs is not None:
+                    used_c_cem = torch.where(
+                        c_sem > self.threshold_probs,
+                        torch.ones_like(c_sem),
+                        torch.zeros_like(c_sem),
+                    )
+                global_selected = torch.sigmoid(self.ood_identifiers[concept_idx](
+                    emb_latent_code=global_emb_center,
+                    dynamic_context=dynamic_contexts[:, concept_idx, :],
+                )).unsqueeze(-1)
+                if training:
+                    # Then save the inputs as we may want to make sure the OOD
+                    # detector is jointly trained
+                    self._emb_latent_code = global_emb_center
+                    self._dynamic_contexts = dynamic_contexts
+                global_selected = self._threshold_selection_prob(global_selected)
+
+                if self.hard_selection_value is not None:
+                    # This is mostly use for exploration/debugging/analysis
+                    global_selected = torch.ones_like(global_selected) * self.hard_selection_value
+                elif training and self.entire_global_prob:
+                    global_selected = torch.where(
+                        entire_global_selection_mask == 1,
+                        torch.ones_like(global_selected),
+                        global_selected,
+                    )
+                elif training and self.global_ood_prob:
+                    mask = torch.bernoulli(
+                        torch.ones(global_selected.shape[0], 1, 1) * self.global_ood_prob,
+                    ).to(global_selected.device)
+                    global_selected = torch.where(
+                        mask == 1,
+                        torch.ones_like(global_selected),
+                        global_selected,
+                    )
+                elif training and self.random_selection_prob:
+                    change_mask = torch.bernoulli(
+                        torch.ones(global_selected.shape[0], 1, 1) * self.random_selection_prob,
+                    ).to(global_selected.device)
+                    new_values = torch.bernoulli(
+                        torch.ones(global_selected.shape[0], 1, 1) * 0.5,
+                    ).to(global_selected.device)
+                    global_selected = torch.where(
+                        change_mask == 1,
+                        new_values,
+                        global_selected,
+                    )
+                elif training:
+                    forced_on = self.ood_dropout(torch.ones_like(global_selected))
+                    global_selected = torch.ones_like(global_selected) * forced_on + (1 - forced_on) * global_selected
+
+                if (self.hard_eval_selection is not None) and (not training):
+                    global_selected = torch.where(
+                        global_selected >= self.hard_eval_selection if self.hard_eval_selection >= 0 else global_selected < self.hard_eval_selection,
+                        torch.ones_like(global_selected),
+                        torch.zeros_like(global_selected),
+                    )
+                elif self.hard_train_selection is not None:
+                    global_selected = torch.where(
+                        global_selected >= self.hard_train_selection if self.hard_train_selection >= 0 else global_selected < self.hard_train_selection,
+                        torch.ones_like(global_selected),
+                        torch.zeros_like(global_selected),
+                    )
+                pos_global_selected = global_selected
+                neg_global_selected = global_selected
+                if self.pooling_mode in ['individual_scores', 'individual_scores_shared']:
+                    combined_global_selected.append(global_selected)
+
 
             elif self.selection_mode.startswith('fixed_'):
                 val = float(self.selection_mode[len("fixed_"):])
@@ -1097,7 +1524,8 @@ class CertificateConceptEmbeddingModel(IntAwareConceptEmbeddingModel):
             self.pooling_mode in ['individual_scores', 'individual_scores_shared']
         ):
             self._combined_global_selected = torch.concat(combined_global_selected, dim=1)
-
+            self._global_contexts = global_contexts
+            self._dynamic_contexts = dynamic_contexts
 
         return c_sem, pos_embeddings, neg_embeddings, extra_outputs
 
@@ -1156,6 +1584,43 @@ class CertificateConceptEmbeddingModel(IntAwareConceptEmbeddingModel):
                 y,
             )
             self._global_logits = None
+
+        if self.training and self.ood_separator_loss_weight and (
+            self.selection_mode == 'noise_separator'
+        ):
+            if self.shared_noise_separator:
+                noised_samples = x + torch.normal(
+                    mean=0.0,
+                    std=self.noise_level,
+                    size=x.size(),
+                ).to(x.device)
+                noised_latent_code = self.global_concept_context_generators(
+                    self.pre_concept_model(noised_samples)
+                )
+                log_scores = self._ood_identifiers[0](
+                    torch.concat(
+                        [
+                            self._emb_latent_code,
+                            noised_latent_code,
+                        ],
+                        dim=0,
+                    )
+                ).squeeze(-1)
+                loss += self.ood_separator_loss_weight * self.noise_separator_loss(
+                    log_scores,
+                    torch.concat(
+                        [
+                            torch.zeros(x.shape[0], dtype=torch.float).to(x.device),
+                            torch.ones(x.shape[0], dtype=torch.float).to(x.device),
+                        ],
+                        dim=0,
+                    ),
+                )
+
+            else:
+                raise UnsupportedError('shared_noise_separator = False not supported yet')
+            self._emb_latent_code = None
+            self._dynamic_contexts = None
         return loss
 
 
@@ -1166,6 +1631,18 @@ class CertificateConceptEmbeddingModel(IntAwareConceptEmbeddingModel):
             param.requires_grad = False
         for param in self.pre_concept_model.parameters():
             param.requires_grad = False
+
+    def freeze_ood_separator(self):
+        if self.selection_mode == 'noise_separator':
+            for submodel in self._ood_identifiers:
+                for param in submodel.parameters():
+                    param.requires_grad = False
+
+    def unfreeze_ood_separator(self):
+        if self.selection_mode == 'noise_separator':
+            for submodel in self._ood_identifiers:
+                for param in submodel.parameters():
+                    param.requires_grad = True
 
     def unfreeze_calibration_components(
         self,
@@ -1180,6 +1657,8 @@ class CertificateConceptEmbeddingModel(IntAwareConceptEmbeddingModel):
             self.dynamic_platt_biases.requires_grad = unfreeze_dynamic
             self.global_platt_scales.requires_grad = unfreeze_global
             self.global_platt_biases.requires_grad = unfreeze_global
+        elif self.selection_mode == 'noise_separator':
+            self.unfreeze_ood_separator()
 
 
     def freeze_calibration_components(
@@ -1195,6 +1674,8 @@ class CertificateConceptEmbeddingModel(IntAwareConceptEmbeddingModel):
             self.dynamic_platt_biases.requires_grad = (not freeze_dynamic)
             self.global_platt_scales.requires_grad = (not freeze_global)
             self.global_platt_biases.requires_grad = (not freeze_global)
+        elif self.selection_mode == 'noise_separator':
+            self.freeze_ood_separator()
 
 
     def unfreeze_global_components(self):

@@ -24,6 +24,7 @@ import cem.models.global_approx_cem as models_global_approx
 import cem.models.separator_cem as separator_cem
 import cem.models.prob_cem as prob_cem
 import cem.models.certificate_cem as certificate_cem
+import cem.models.mc_intcem as mc_intcem
 import cem.train.utils as utils
 
 
@@ -767,7 +768,84 @@ def construct_model(
             "hard_train_selection": config.get('hard_train_selection', None),
             "train_prob_thresh": config.get('train_prob_thresh', None),
             "random_selection_prob": config.get('random_selection_prob', 0),
+            "update_with_interventions": config.get('update_with_interventions', False),
+            "relative_max": config.get('relative_max', False),
+            "montecarlo_tries": config.get('montecarlo_tries', 20),
+            "global_dropout_only": config.get('global_dropout_only', False),
+            "output_uncertainty": config.get('output_uncertainty', False),
+
+            "ood_separator_loss_weight": config.get('ood_separator_loss_weight', 0),
+            "noise_level": config.get('noise_level', 0.5),
+            "shared_noise_separator": config.get('shared_noise_separator', True),
         }
+
+
+
+    elif config['architecture'] in [
+        'MonteCarloIntCEM',
+        'MCIntCEM',
+    ]:
+        task_loss_weight = config.get('task_loss_weight', 1)
+        model_cls = mc_intcem.MonteCarloIntCEM
+        extra_params = {
+            "emb_size": config["emb_size"],
+            "intervention_policy": intervention_policy,
+            "training_intervention_prob": config.get(
+                'training_intervention_prob',
+                0.25,
+            ),
+            "embedding_activation": config.get(
+                "embedding_activation",
+                "leakyrelu",
+            ),
+            "c2y_model": c2y_model,
+            "c2y_layers": config.get("c2y_layers", []),
+
+            "intervention_weight": config.get("intervention_weight", 5),
+            "horizon_rate": config.get("horizon_rate", 1.005),
+            "concept_map": config.get("concept_map", None),
+            "max_horizon": config.get("max_horizon", 6),
+            "include_only_last_trajectory_loss": config.get(
+                "include_only_last_trajectory_loss",
+                True,
+            ),
+            "intervention_task_loss_weight": config.get(
+                "intervention_task_loss_weight",
+                1,
+            ),
+            "initial_horizon": config.get("initial_horizon", 2),
+            "use_concept_groups": config.get("use_concept_groups", False),
+            "intervention_task_discount": config.get(
+                "intervention_task_discount",
+                config.get("intervention_task_discount", 1.1),
+            ),
+            "rollout_init_steps": config.get('rollout_init_steps', 0),
+            "int_model_layers": config.get("int_model_layers", None),
+            "int_model_use_bn": config.get("int_model_use_bn", False),
+            "num_rollouts": config.get("num_rollouts", 1),
+
+            # New parameters
+            "initial_concept_embeddings": config.get('initial_concept_embeddings', None),
+            "fixed_embeddings": config.get('fixed_embeddings', False),
+            "ood_dropout_prob": config.get('ood_dropout_prob', 0),
+            "pooling_mode": config.get('pooling_mode', 'concat'),
+            "learnable_temps": config.get('learnable_temps', False),
+            "mixed_probs_coeff": config.get('mixed_probs_coeff', 0.5),
+            "anneal_rate": config.get('anneal_rate', 1),
+            "min_rate": config.get('min_rate', 0),
+            "all_intervened_loss_weight": config.get('all_intervened_loss_weight', 0),
+            "dynamic_confidence_scaling": config.get('dynamic_confidence_scaling', False),
+            "use_only_mean_probs": config.get('use_only_mean_probs', True),
+            "calibrate_concept_probs": config.get('calibrate_concept_probs', False),
+
+            # Monte carlo stuff
+            "deterministic": config.get('deterministic', False),
+            "montecarlo_train_tries": config.get('montecarlo_train_tries', 20),
+            "montecarlo_test_tries": config.get('montecarlo_test_tries', 20),
+            "output_uncertainty": config.get('output_uncertainty', False),
+            "inference_threshold": config.get('inference_threshold', True),
+        }
+
 
     elif config['architecture'] in [
         'GlobalApproxConceptEmbeddingModel',

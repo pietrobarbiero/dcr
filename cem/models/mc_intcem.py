@@ -77,7 +77,6 @@ class MonteCarloIntCEM(IntAwareConceptEmbeddingModel):
         fixed_embeddings=False,
         ood_dropout_prob=0,
         pooling_mode='concat',
-        class_wise_temperature=True,
         learnable_temps=False,
         mixed_probs_coeff=0.5,
         anneal_rate=1,
@@ -86,6 +85,9 @@ class MonteCarloIntCEM(IntAwareConceptEmbeddingModel):
         dynamic_confidence_scaling=False,
         use_only_mean_probs=True,
         calibrate_concept_probs=False,
+        dyn_prob_with_global=True,
+        temperature=1,
+        scale_fn='original',
 
         # Monte carlo stuff
         deterministic=False,
@@ -95,7 +97,10 @@ class MonteCarloIntCEM(IntAwareConceptEmbeddingModel):
         hard_selection_value=None,
         inference_threshold=True,
     ):
+        self.scale_fn = scale_fn
         self.dynamic_confidence_scaling = dynamic_confidence_scaling
+        self.dyn_prob_with_global = dyn_prob_with_global
+        self.temperature = temperature
         if self.dynamic_confidence_scaling:
             self._context_scale_factors = None
         self.calibrate_concept_probs = calibrate_concept_probs
@@ -251,10 +256,28 @@ class MonteCarloIntCEM(IntAwareConceptEmbeddingModel):
         if self.dynamic_confidence_scaling:
             # Then we only select to add a context when the uncertainty is far
             # from the extremes
-            return 1 - 4 * (
-                torch.sigmoid(temperature * (concept_probs - 0.5)) *
-                torch.sigmoid(-temperature * (0.5 - concept_probs))
-            )
+            if self.scale_fn == 'original':
+                # The happy typo/mistake function that almost acts as a linear
+                # function in [0, 1] when the temperature is 1
+                return 1 - 4 * (
+                    torch.sigmoid(temperature * (concept_probs - 0.5)) *
+                    torch.sigmoid(-temperature * (0.5 - concept_probs))
+                )
+            elif self.scale_fn == 'sigmoidal_mix':
+                # The originally intended thresholding function
+                return torch.relu(1 - 4 * (
+                    torch.sigmoid(temperature * (concept_probs - 0.5)) *
+                    torch.sigmoid(-temperature * (concept_probs - 0.5))
+                ))
+            elif self.scale_fn == 'tanh':
+                # A sharper version of the signed mixing
+                return torch.tanh(self.temperature * (concept_probs - 0.5))
+            elif self.scale_fn == 'linear':
+                return self.temperature * (concept_probs - 0.5)
+            else:
+                raise ValueError(
+                    f'Unsupported scale function "{self.scale_fn}"!'
+                )
         else:
             # Else we otherwise always select the dynamic context
             return torch.ones_like(concept_probs)
@@ -462,10 +485,15 @@ class MonteCarloIntCEM(IntAwareConceptEmbeddingModel):
                 prob_gen = self.concept_prob_generators[0]
             else:
                 prob_gen = self.concept_prob_generators[concept_idx]
-            dyn_logits = prob_gen(
-                global_contexts[:, concept_idx, :] +
-                dynamic_contexts[:, concept_idx, :]
-            )
+            if self.dyn_prob_with_global:
+                dyn_logits = prob_gen(
+                    global_contexts[:, concept_idx, :] +
+                    dynamic_contexts[:, concept_idx, :]
+                )
+            else:
+                dyn_logits = prob_gen(
+                    dynamic_contexts[:, concept_idx, :]
+                )
             c_logits.append(dyn_logits)
             pos_anchor = self.concept_embeddings[concept_idx:concept_idx+1, 0, :].expand(global_emb_center.shape[0], -1)
             neg_anchor = self.concept_embeddings[concept_idx:concept_idx+1, 1, :].expand(global_emb_center.shape[0], -1)
@@ -508,7 +536,16 @@ class MonteCarloIntCEM(IntAwareConceptEmbeddingModel):
         c_sem = torch.cat(c_sem, axis=-1)
         self._context_scale_factors = self._uncertainty_based_context_addition(
             concept_probs=c_sem,
+            temperature=self.temperature,
         )
+        # if self.current_steps.detach() % 10:
+        #     x = self._context_scale_factors.detach().cpu().numpy()
+        #     print("For step", self.current_steps.detach(), "average mixing factor is", np.mean(x))
+        #     print("\tMax mixing factor is", np.max(x))
+        #     print("\tMin mixing factor is", np.min(x))
+        #     print("\tMean prob is", np.mean(c_sem.detach().cpu().numpy()))
+        #     print("\tMax prob is", np.max(c_sem.detach().cpu().numpy()))
+        #     print("\tMin prob is", np.min(c_sem.detach().cpu().numpy()))
 
 
         pos_embeddings = torch.concat(

@@ -837,6 +837,9 @@ def construct_model(
             "dynamic_confidence_scaling": config.get('dynamic_confidence_scaling', False),
             "use_only_mean_probs": config.get('use_only_mean_probs', True),
             "calibrate_concept_probs": config.get('calibrate_concept_probs', False),
+            "dyn_prob_with_global": config.get('dyn_prob_with_global', True),
+            "temperature": config.get('temperature', 1),
+            "scale_fn": config.get('scale_fn', 'original'),
 
             # Monte carlo stuff
             "deterministic": config.get('deterministic', False),

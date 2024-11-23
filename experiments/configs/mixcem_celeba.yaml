@@ -335,15 +335,15 @@ runs:
 
   - architecture: 'MCIntCEM'
     run_name: "CMCMixIntCEM_freeze_all_r_{all_intervened_loss_weight}_{pooling_mode}_{uncerainty_threshold_percentile}_{global_epochs}_mpc_{mixed_probs_coeff}_tmc_{montecarlo_train_tries}_emc_{montecarlo_test_tries}_cwc_{class_wise_temperature}_ce_{calibration_epochs}_g_ood_{ood_dropout_prob}_emb_{emb_size}_{finetune_with_val}_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_cwl_{concept_loss_weight}"
-    load_path_name: "CMCMixIntCEM_freeze_all_r_{all_intervened_loss_weight}_{pooling_mode}_None_{global_epochs}_mpc_{mixed_probs_coeff}_tmc_{montecarlo_train_tries}_emc_{montecarlo_test_tries}_cwc_{class_wise_temperature}_ce_0_g_ood_{ood_dropout_prob}_emb_{emb_size}_True_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_cwl_{concept_loss_weight}"
-    global_model_path: "g_CMCMixIntCEM_freeze_all_r_{all_intervened_loss_weight}_{pooling_mode}_{uncerainty_threshold_percentile}_{global_epochs}_mpc_{mixed_probs_coeff}_tmc_{montecarlo_train_tries}_emc_{montecarlo_test_tries}_cwc_{class_wise_temperature}_ce_{calibration_epochs}_g_ood_{ood_dropout_prob}_emb_{emb_size}_{finetune_with_val}_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_cwl_{concept_loss_weight}"
+    load_path_name: "CMCMixIntCEM_freeze_all_r_{all_intervened_loss_weight}_{pooling_mode}_None_{global_epochs}_mpc_{mixed_probs_coeff}_tmc_{montecarlo_train_tries}_emc_50_cwc_{class_wise_temperature}_ce_0_g_ood_{ood_dropout_prob}_emb_{emb_size}_True_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_cwl_{concept_loss_weight}"
+    global_model_path: "g_CMCMixIntCEM_freeze_all_r_{all_intervened_loss_weight}_{pooling_mode}_{uncerainty_threshold_percentile}_{global_epochs}_mpc_{mixed_probs_coeff}_tmc_{montecarlo_train_tries}_emc_50_cwc_{class_wise_temperature}_ce_{calibration_epochs}_g_ood_{ood_dropout_prob}_emb_{emb_size}_{finetune_with_val}_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_cwl_{concept_loss_weight}"
 
     concept_loss_weight: [1, 10]
     emb_size: [16, 32]
     shared_emb_generator: True
     montecarlo_train_tries: [1]
-    montecarlo_test_tries: [50]
-    ood_dropout_prob: [0.1]
+    montecarlo_test_tries: [50, 1]
+    ood_dropout_prob: [0.1, 0.5, 0.9]
     pooling_mode: ['concat']
     calibration_epochs: [0, 30]
     finetune_with_val: [True]
@@ -356,7 +356,7 @@ runs:
     uncerainty_threshold_percentile: [null]
     inference_threshold: False
     mixed_probs_coeff: [1]
-    all_intervened_loss_weight: [0.01, 0.1]
+    all_intervened_loss_weight: [0.01, 0.1, 1]
     calibrate_concept_probs: True
     dynamic_confidence_scaling: True
 
@@ -395,14 +395,14 @@ runs:
   # Same as above but we turn off all the IntCEM bits
   - architecture: 'MCIntCEM'
     run_name: "CMCMixCEM_freeze_all_r_{all_intervened_loss_weight}_{pooling_mode}_{uncerainty_threshold_percentile}_{global_epochs}_mpc_{mixed_probs_coeff}_tmc_{montecarlo_train_tries}_emc_{montecarlo_test_tries}_cwc_{class_wise_temperature}_ce_{calibration_epochs}_g_ood_{ood_dropout_prob}_emb_{emb_size}_{finetune_with_val}_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_cwl_{concept_loss_weight}"
-    load_path_name: "CMCMixCEM_freeze_all_r_{all_intervened_loss_weight}_{pooling_mode}_None_{global_epochs}_mpc_{mixed_probs_coeff}_tmc_{montecarlo_train_tries}_emc_{montecarlo_test_tries}_cwc_{class_wise_temperature}_ce_0_g_ood_{ood_dropout_prob}_emb_{emb_size}_True_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_cwl_{concept_loss_weight}"
-    global_model_path: "g_CMCMixCEM_freeze_all_r_{all_intervened_loss_weight}_{pooling_mode}_{uncerainty_threshold_percentile}_{global_epochs}_mpc_{mixed_probs_coeff}_tmc_{montecarlo_train_tries}_emc_{montecarlo_test_tries}_cwc_{class_wise_temperature}_ce_{calibration_epochs}_g_ood_{ood_dropout_prob}_emb_{emb_size}_{finetune_with_val}_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_cwl_{concept_loss_weight}"
+    load_path_name: "CMCMixCEM_freeze_all_r_{all_intervened_loss_weight}_{pooling_mode}_None_{global_epochs}_mpc_{mixed_probs_coeff}_tmc_{montecarlo_train_tries}_emc_50_cwc_{class_wise_temperature}_ce_0_g_ood_{ood_dropout_prob}_emb_{emb_size}_True_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_cwl_{concept_loss_weight}"
+    global_model_path: "g_CMCMixCEM_freeze_all_r_{all_intervened_loss_weight}_{pooling_mode}_{uncerainty_threshold_percentile}_{global_epochs}_mpc_{mixed_probs_coeff}_tmc_{montecarlo_train_tries}_emc_50_cwc_{class_wise_temperature}_ce_{calibration_epochs}_g_ood_{ood_dropout_prob}_emb_{emb_size}_{finetune_with_val}_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_cwl_{concept_loss_weight}"
 
     concept_loss_weight: [1, 10]
     emb_size: [16, 32]
     shared_emb_generator: True
     montecarlo_train_tries: [1]
-    montecarlo_test_tries: [50]
+    montecarlo_test_tries: [50, 1]
     ood_dropout_prob: [0.1]
     pooling_mode: ['concat']
     calibration_epochs: [0, 30]
@@ -451,6 +451,131 @@ runs:
       - uncerainty_threshold_percentile
     grid_search_mode: exhaustive
 
+
+
+  - architecture: 'MCIntCEM'
+    run_name: "Linear_CMCMixIntCEM_t_{temperature}_r_{all_intervened_loss_weight}_{pooling_mode}_{uncerainty_threshold_percentile}_{global_epochs}_mpc_{mixed_probs_coeff}_tmc_{montecarlo_train_tries}_emc_{montecarlo_test_tries}_cwc_{class_wise_temperature}_ce_{calibration_epochs}_g_ood_{ood_dropout_prob}_emb_{emb_size}_{finetune_with_val}_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_cwl_{concept_loss_weight}"
+    load_path_name: "Linear_CMCMixIntCEM_t_{temperature}_r_{all_intervened_loss_weight}_{pooling_mode}_None_{global_epochs}_mpc_{mixed_probs_coeff}_tmc_{montecarlo_train_tries}_emc_50_cwc_{class_wise_temperature}_ce_0_g_ood_{ood_dropout_prob}_emb_{emb_size}_True_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_cwl_{concept_loss_weight}"
+    global_model_path: "g_Linear_CMCMixIntCEM_t_{temperature}_r_{all_intervened_loss_weight}_{pooling_mode}_{uncerainty_threshold_percentile}_{global_epochs}_mpc_{mixed_probs_coeff}_tmc_{montecarlo_train_tries}_emc_50_cwc_{class_wise_temperature}_ce_{calibration_epochs}_g_ood_{ood_dropout_prob}_emb_{emb_size}_{finetune_with_val}_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_cwl_{concept_loss_weight}"
+
+    concept_loss_weight: [1, 10]
+    emb_size: [16, 32]
+    shared_emb_generator: True
+    montecarlo_train_tries: [1]
+    montecarlo_test_tries: [1]
+    ood_dropout_prob: [0.1, 0.5, 0.9]
+    pooling_mode: ['concat']
+    calibration_epochs: [0, 30]
+    finetune_with_val: [True]
+    learnable_temps: False
+    class_wise_temperature: False
+    global_epochs: [0]
+    global_mixed_probs_coeff: 0
+    freeze_global_embeddings: False
+    max_epochs: 150
+    uncerainty_threshold_percentile: [null]
+    inference_threshold: False
+    mixed_probs_coeff: [1]
+    all_intervened_loss_weight: [0.01, 0.1, 1]
+    calibrate_concept_probs: True
+    dynamic_confidence_scaling: True
+    temperature: [1, 2, 0]  # Difference!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    scale_fn: linear  # Difference!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+    ###############################################################################################
+
+    # IntCEM stuff
+    gradient_clip_val: 100
+    embedding_activation: null
+    training_intervention_prob: [0.25]
+    intervention_task_discount: [1.1]
+    use_concept_groups: True
+    int_model_use_bn: True
+    int_model_layers: [128, 128, 64, 64]
+    max_horizon: 6
+    horizon_rate: 1.005
+    intervention_weight: [5]
+    grid_variables:
+      - training_intervention_prob
+      - intervention_task_discount
+      - ood_dropout_prob
+      - emb_size
+      - finetune_with_val
+      - concept_loss_weight
+      - pooling_mode
+      - intervention_weight
+      - global_epochs
+      - montecarlo_train_tries
+      - montecarlo_test_tries
+      - mixed_probs_coeff
+      - all_intervened_loss_weight
+      - temperature
+      - calibration_epochs
+      - uncerainty_threshold_percentile
+    grid_search_mode: exhaustive
+
+
+  # Same as above but we turn off all the IntCEM bits
+  - architecture: 'MCIntCEM'
+    run_name: "Liner_CMCMixCEM_t_{temperature}_{all_intervened_loss_weight}_{pooling_mode}_{uncerainty_threshold_percentile}_{global_epochs}_mpc_{mixed_probs_coeff}_tmc_{montecarlo_train_tries}_emc_{montecarlo_test_tries}_cwc_{class_wise_temperature}_ce_{calibration_epochs}_g_ood_{ood_dropout_prob}_emb_{emb_size}_{finetune_with_val}_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_cwl_{concept_loss_weight}"
+    load_path_name: "Liner_CMCMixCEM_t_{temperature}_{all_intervened_loss_weight}_{pooling_mode}_None_{global_epochs}_mpc_{mixed_probs_coeff}_tmc_{montecarlo_train_tries}_emc_50_cwc_{class_wise_temperature}_ce_0_g_ood_{ood_dropout_prob}_emb_{emb_size}_True_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_cwl_{concept_loss_weight}"
+    global_model_path: "g_Liner_CMCMixCEM_t_{temperature}_{all_intervened_loss_weight}_{pooling_mode}_{uncerainty_threshold_percentile}_{global_epochs}_mpc_{mixed_probs_coeff}_tmc_{montecarlo_train_tries}_emc_50_cwc_{class_wise_temperature}_ce_{calibration_epochs}_g_ood_{ood_dropout_prob}_emb_{emb_size}_{finetune_with_val}_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_cwl_{concept_loss_weight}"
+
+    concept_loss_weight: [1, 10]
+    emb_size: [16, 32]
+    shared_emb_generator: True
+    montecarlo_train_tries: [1]
+    montecarlo_test_tries: [1]
+    ood_dropout_prob: [0.1]
+    pooling_mode: ['concat']
+    calibration_epochs: [0, 30]
+    finetune_with_val: [True]
+    learnable_temps: False
+    class_wise_temperature: False
+    global_epochs: [0]
+    global_mixed_probs_coeff: 0
+    freeze_global_embeddings: False
+    max_epochs: 150
+    uncerainty_threshold_percentile: [null]
+    inference_threshold: False
+    mixed_probs_coeff: [1]
+    all_intervened_loss_weight: [0.01, 0.1]
+    calibrate_concept_probs: True
+    dynamic_confidence_scaling: True
+    temperature: [1, 2, 0]  # Difference!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    scale_fn: linear  # Difference!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+    ###############################################################################################
+
+    # IntCEM stuff
+    gradient_clip_val: null # CHANGE
+    embedding_activation: null
+    training_intervention_prob: [0.25]
+    intervention_task_discount: [1]  # CHANGE
+    use_concept_groups: True
+    int_model_use_bn: False  # CHANGE
+    int_model_layers: []  # CHANGE
+    max_horizon: 1  # CHANGE
+    horizon_rate: 1  # CHANGE
+    intervention_weight: [0]  # CHANGE
+    grid_variables:
+      - training_intervention_prob
+      - intervention_task_discount
+      - ood_dropout_prob
+      - emb_size
+      - finetune_with_val
+      - concept_loss_weight
+      - pooling_mode
+      - intervention_weight
+      - global_epochs
+      - montecarlo_train_tries
+      - montecarlo_test_tries
+      - mixed_probs_coeff
+      - all_intervened_loss_weight
+      - temperature
+      - calibration_epochs
+      - uncerainty_threshold_percentile
+    grid_search_mode: exhaustive
 
 
 

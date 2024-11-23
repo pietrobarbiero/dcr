@@ -131,10 +131,10 @@ class ConceptEmbeddingModel(ConceptBottleneckModel):
         self.n_concepts = n_concepts
         self.output_interventions = output_interventions
         self.intervention_policy = intervention_policy
-        self.pre_concept_model = c_extractor_arch(output_dim=None)
         self.training_intervention_prob = training_intervention_prob
         self.output_latent = output_latent
         context_gen_out_size = context_gen_out_size or (2 * emb_size)
+        self.pre_concept_model = c_extractor_arch(output_dim=None)
         if self.training_intervention_prob != 0:
             self.ones = torch.ones(n_concepts)
 
@@ -273,6 +273,8 @@ class ConceptEmbeddingModel(ConceptBottleneckModel):
         return output, intervention_idxs, bottleneck
 
     def _predict_labels(self, bottleneck, **task_loss_kwargs):
+        if len(bottleneck.shape) > 2:
+            bottleneck = torch.flatten(bottleneck, start_dim=1)
         return self.c2y_model(bottleneck)
 
     def _construct_c2y_input(

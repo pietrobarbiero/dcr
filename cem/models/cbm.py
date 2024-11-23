@@ -174,7 +174,6 @@ class ConceptBottleneckModel(pl.LightningModule):
                 if i != len(units) - 1:
                     layers.append(torch.nn.LeakyReLU())
             self.c2y_model = torch.nn.Sequential(*layers)
-
         # Intervention-specific fields/handlers:
         if active_intervention_values is not None:
             self.active_intervention_values = torch.FloatTensor(

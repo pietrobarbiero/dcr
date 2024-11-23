@@ -131,10 +131,10 @@ class ConceptEmbeddingModel(ConceptBottleneckModel):
         self.n_concepts = n_concepts
         self.output_interventions = output_interventions
         self.intervention_policy = intervention_policy
-        self.pre_concept_model = c_extractor_arch(output_dim=None)
         self.training_intervention_prob = training_intervention_prob
         self.output_latent = output_latent
         context_gen_out_size = context_gen_out_size or (2 * emb_size)
+        self.pre_concept_model = c_extractor_arch(output_dim=None)
         self._intervention_idxs = None
         if self.training_intervention_prob != 0:
             self.ones = torch.ones(n_concepts)

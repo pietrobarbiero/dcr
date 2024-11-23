@@ -88,15 +88,16 @@ import cem.data.celeba_loader as celeba_data_module
 import cem.data.color_mnist_add as color_mnist_data_module
 import cem.data.CUB200.cub_loader as cub_data_module
 import cem.data.mnist_add as mnist_data_module
+import cem.data.traffic_loader as traffic_data_module
 import cem.data.waterbirds_loader as waterbirds_data_module
+import cem.train.train_adversarial_cbm as train_adversarial_cbm
 import cem.train.train_blackbox as train_blackbox
+import cem.train.train_certificate_cem as train_certificate_cem
+import cem.train.train_defer_cem as train_defer_cem
+import cem.train.train_global_approx as train_global_approx
+import cem.train.train_global_bank as train_global_bank
 import cem.train.train_mixcem as train_mixcem
 import cem.train.train_pcbm as train_pcbm
-import cem.train.train_adversarial_cbm as train_adversarial_cbm
-import cem.train.train_defer_cem as train_defer_cem
-import cem.train.train_global_bank as train_global_bank
-import cem.train.train_global_approx as train_global_approx
-import cem.train.train_certificate_cem as train_certificate_cem
 import cem.train.training as training
 import cem.train.utils as utils
 
@@ -353,10 +354,49 @@ def _generate_dataset_and_update_config(
         data_module = get_synthetic_data_loader(dataset_config["dataset"])
     elif dataset_config["dataset"] == "mnist_add":
         data_module = mnist_data_module
+    elif dataset_config["dataset"] == "traffic":
+        data_module = traffic_data_module
     elif dataset_config["dataset"] == "color_mnist_add":
         data_module = color_mnist_data_module
     else:
         raise ValueError(f"Unsupported dataset {dataset_config['dataset']}!")
+
+
+    train_dl, val_dl, test_dl, imbalance, (n_concepts, n_tasks, concept_map) = \
+        data_module.generate_data(
+            config=dataset_config,
+            seed=42,
+            output_dataset_vars=True,
+            root_dir=dataset_config.get('root_dir', None),
+        )
+
+    # For now, we assume that all concepts have the same
+    # aquisition cost
+    acquisition_costs = None
+    if concept_map is not None:
+        intervened_groups = list(
+            range(
+                0,
+                len(concept_map) + 1,
+                intervention_config.get('intervention_freq', 1),
+            )
+        )
+    else:
+        intervened_groups = list(
+            range(
+                0,
+                n_concepts + 1,
+                intervention_config.get('intervention_freq', 1),
+            )
+        )
+
+    task_class_weights = _update_config_with_dataset(
+        config=experiment_config,
+        train_dl=train_dl,
+        n_concepts=n_concepts,
+        n_tasks=n_tasks,
+        concept_map=concept_map,
+    )
 
     if experiment_config['c_extractor_arch'] == "mnist_extractor":
         num_operands = dataset_config.get('num_operands', 32)
@@ -399,11 +439,12 @@ def _generate_dataset_and_update_config(
             ])
         experiment_config["c_extractor_arch"] = synth_c_extractor_arch
 
-    elif isinstance(experiment_config['c_extractor_arch'], str) and (experiment_config['c_extractor_arch'].lower() == 'mlp'):
+    elif isinstance(experiment_config['c_extractor_arch'], str) and (
+        experiment_config['c_extractor_arch'].lower() == 'mlp'
+    ):
         input_features = dataset_config["input_features"]
-        def synth_c_extractor_arch(
+        def c_extractor_arch(
             output_dim,
-            pretrained=False,
         ):
             if output_dim is None:
                 output_dim = 128
@@ -414,15 +455,94 @@ def _generate_dataset_and_update_config(
                 used_layers.append(torch.nn.Linear(layer_units[i - 1], num_units))
             return torch.nn.Sequential(*used_layers)
 
-        experiment_config["c_extractor_arch"] = synth_c_extractor_arch
+        experiment_config["c_extractor_arch"] = c_extractor_arch
 
-    train_dl, val_dl, test_dl, imbalance, (n_concepts, n_tasks, concept_map) = \
-        data_module.generate_data(
-            config=dataset_config,
-            seed=42,
-            output_dataset_vars=True,
-            root_dir=dataset_config.get('root_dir', None),
-        )
+    elif isinstance(experiment_config['c_extractor_arch'], str) and (
+        experiment_config['c_extractor_arch'].lower() == 'cnn'
+    ):
+        input_shape = experiment_config["input_shape"]
+        def c_extractor_arch(output_dim=n_tasks):
+            if output_dim is None:
+                output_dim = 128
+            layers = []
+            current_shape = input_shape[1:]
+            extractor_config = experiment_config.get(
+                'c_extractor_config',
+                {},
+            )
+            for layer in extractor_config.get("cnn_layers", []):
+                layers.append(torch.nn.Conv2d(
+                    in_channels=current_shape[0],
+                    out_channels=layer['out_channels'],
+                    kernel_size=layer['filter'],
+                    padding='same',
+                ))
+                current_shape = (layer['out_channels'], *current_shape[1:])
+                act_fn = layer.get(
+                    'activation_fn',
+                    extractor_config.get('activation_fn', 'relu'),
+                )
+                if act_fn.lower() == 'relu':
+                    layers.append(torch.nn.ReLU())
+                elif act_fn.lower() == 'leakyrelu':
+                    layers.append(torch.nn.LeakyReLU())
+                else:
+                    raise ValueError(
+                        f'Unsupported activation {act_fn}'
+                    )
+                if layer.get('batchnorm', False):
+                    layers.append(
+                        torch.nn.BatchNorm2d(num_features=layer['out_channels'])
+                    )
+                if layer.get('max_pool_kernel', False):
+                    kernel = layer['max_pool_kernel']
+                    layers.append(
+                        torch.nn.MaxPool2d(kernel)
+                    )
+                    current_shape = (
+                        current_shape[0],
+                        int(np.floor(1 + (current_shape[1] - (kernel[0] - 1) - 1) / kernel[0])),
+                        int(np.floor(1 + (current_shape[2] - (kernel[1] - 1) - 1) / kernel[1])),
+                    )
+                elif layer.get('avg_pool_kernel', False):
+                    kernel = layer['avg_pool_kernel']
+                    layers.append(
+                        torch.nn.AvgPool2d(kernel)
+                    )
+                    current_shape = (
+                        current_shape[0],
+                        int(np.floor(1 + (current_shape[1] - (kernel[0] - 1) - 1) / kernel[0])),
+                        int(np.floor(1 + (current_shape[2] - (kernel[1] - 1) - 1) / kernel[1])),
+                    )
+            layers.append(torch.nn.Flatten())
+            current_shape = np.prod(current_shape)
+            for num_acts in extractor_config.get('mlp_layers', []):
+                layers.append(torch.nn.Linear(
+                    current_shape,
+                    num_acts,
+                ))
+                current_shape = num_acts
+                act_fn = extractor_config.get(
+                    'activation_fn',
+                    'relu',
+                )
+                if act_fn.lower() == 'relu':
+                    layers.append(torch.nn.ReLU())
+                elif act_fn.lower() == 'leakyrelu':
+                    layers.append(torch.nn.LeakyReLU())
+                else:
+                    raise ValueError(
+                        f'Unsupported activation {extractor_config["activation_fn"]}'
+                    )
+            layers.append(torch.nn.Linear(
+                current_shape,
+                output_dim,
+            ))
+            out_model = torch.nn.Sequential(*layers)
+            return out_model
+
+        experiment_config["c_extractor_arch"] = c_extractor_arch
+
     transformation_config = dataset_config.get("transformation_config", None)
     train_dl = _apply_transformation(
         train_dl,
@@ -446,34 +566,6 @@ def _generate_dataset_and_update_config(
                 transformation_config,
             )
         )
-
-    # For now, we assume that all concepts have the same
-    # aquisition cost
-    acquisition_costs = None
-    if concept_map is not None:
-        intervened_groups = list(
-            range(
-                0,
-                len(concept_map) + 1,
-                intervention_config.get('intervention_freq', 1),
-            )
-        )
-    else:
-        intervened_groups = list(
-            range(
-                0,
-                n_concepts + 1,
-                intervention_config.get('intervention_freq', 1),
-            )
-        )
-
-    task_class_weights = _update_config_with_dataset(
-        config=experiment_config,
-        train_dl=train_dl,
-        n_concepts=n_concepts,
-        n_tasks=n_tasks,
-        concept_map=concept_map,
-    )
 
     if (data_module is not None) and (experiment_config.get(
         'initial_concept_embeddings',

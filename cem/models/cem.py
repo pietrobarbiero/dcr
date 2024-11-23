@@ -135,6 +135,7 @@ class ConceptEmbeddingModel(ConceptBottleneckModel):
         self.output_latent = output_latent
         context_gen_out_size = context_gen_out_size or (2 * emb_size)
         self.pre_concept_model = c_extractor_arch(output_dim=None)
+        self._intervention_idxs = None
         if self.training_intervention_prob != 0:
             self.ones = torch.ones(n_concepts)
 
@@ -273,9 +274,7 @@ class ConceptEmbeddingModel(ConceptBottleneckModel):
         return output, intervention_idxs, bottleneck
 
     def _predict_labels(self, bottleneck, **task_loss_kwargs):
-        if len(bottleneck.shape) > 2:
-            bottleneck = torch.flatten(bottleneck, start_dim=1)
-        return self.c2y_model(bottleneck)
+        return self.c2y_model(torch.flatten(bottleneck, start_dim=1, end_dim=-1))
 
     def _construct_c2y_input(
         self,
@@ -326,6 +325,17 @@ class ConceptEmbeddingModel(ConceptBottleneckModel):
         pos_embeddings = contexts[:, :, :self.emb_size]
         neg_embeddings = contexts[:, :, self.emb_size:]
         return c_sem, pos_embeddings, neg_embeddings, {}
+
+    def _new_tail_results(
+        self,
+        x=None,
+        c=None,
+        y=None,
+        c_sem=None,
+        bottleneck=None,
+        y_pred=None,
+    ):
+        return []
 
     def _forward(
         self,
@@ -403,6 +413,8 @@ class ConceptEmbeddingModel(ConceptBottleneckModel):
             competencies=competencies,
             **out_kwargs
         )
+        self._intervention_idxs = intervention_idxs
+
         y_pred = self._predict_labels(bottleneck=bottleneck)
         tail_results = []
         if output_interventions:
@@ -423,4 +435,13 @@ class ConceptEmbeddingModel(ConceptBottleneckModel):
         ):
             tail_results.append(pos_embs)
             tail_results.append(neg_embs)
+
+        tail_results += self._new_tail_results(
+            x=x,
+            c=c,
+            y=y,
+            c_sem=c_sem,
+            bottleneck=bottleneck,
+            y_pred=y_pred,
+        )
         return tuple([c_sem, bottleneck, y_pred] + tail_results)

@@ -739,6 +739,7 @@ def _multiprocess_run_trial(
     elif config['architecture'] in [
         'CertificateConceptEmbeddingModel',
         'CertificateCEM',
+        'MCIntCEM',
     ]:
         train_fn = train_certificate_cem.train_certificate_cem
 

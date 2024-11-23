@@ -163,6 +163,8 @@ def train_certificate_cem(
                     f"\tTraining up the global model for {global_epochs} epochs"
                 )
                 # Else it is time to train it
+
+
                 if (not rerun) and "global_model_path" in config and (
                     os.path.exists(os.path.join(
                         result_dir,
@@ -179,6 +181,11 @@ def train_certificate_cem(
                     model.load_state_dict(state_dict, strict=False)
                 else:
                     model.hard_selection_value = 1  # Force the selection to always use the global embeddings
+                    if config.get('global_cem_only_pass', False):
+                        model.cem_only_pass = True
+                    if 'global_mixed_probs_coeff' in config:
+                        prev_mixed_probs_coeff = model.mixed_probs_coeff
+                        model.mixed_probs_coeff = config['global_mixed_probs_coeff']
                     global_callbacks, global_ckpt_call = _make_callbacks(
                         config,
                         result_dir,
@@ -219,6 +226,10 @@ def train_certificate_cem(
                     )
                     # Restore state
                     model.hard_selection_value = None
+                    if config.get('global_cem_only_pass', False):
+                        model.cem_only_pass = False
+                    if 'global_mixed_probs_coeff' in config:
+                        model.mixed_probs_coeff = prev_mixed_probs_coeff
                     if "global_model_path" in config:
                         global_model_saved_path = os.path.join(
                             result_dir or ".",
@@ -228,8 +239,14 @@ def train_certificate_cem(
                             model.state_dict(),
                             global_model_saved_path,
                         )
+                    if 'global_mixed_probs_coeff' in config:
+                        model.mixed_probs_coeff = prev_mixed_probs_coeff
+
             if config.get('freeze_global_components', False):
                 model.freeze_global_components()
+            if config.get('freeze_global_embeddings', False):
+                model.concept_embeddings.requires_grad = False
+
 
             ####################################################################
             ## Step 2: Train the end-to-end-model
@@ -339,7 +356,6 @@ def train_certificate_cem(
                 print(
                     f"\tCalibrating model for {calibration_epochs} epochs"
                 )
-                model.freeze()
                 trainable_params = set()
                 for name, param in model.named_parameters():
                     if param.requires_grad:
@@ -438,6 +454,8 @@ def train_certificate_cem(
                             trainer=calibration_trainer,
                         )
                 else:
+                    prev_inference_threshold = model.inference_threshold
+                    model.inference_threshold = False
                     model.unfreeze_calibration_components(
                         unfreeze_dynamic=config.get('calibrate_dynamic_logits', True),
                         unfreeze_global=config.get('calibrate_global_logits', True),
@@ -483,11 +501,175 @@ def train_certificate_cem(
                         ckpt_call=calibration_ckpt_call,
                         trainer=calibration_trainer,
                     )
+                    model.inference_threshold = prev_inference_threshold
 
                 # And restore the state
                 model.hard_selection_value = None
                 for name, param in model.named_parameters():
                     param.requires_grad = name in trainable_params
+            elif calibration_epochs and (
+                config.get('selection_mode', 'max_class_confidence') in
+                ['noise_separator']
+            ):
+                print(
+                    f"\tCalibrating OOD model for {calibration_epochs} epochs"
+                )
+                trainable_params = set()
+                prev_task_loss_weight = model.task_loss_weight
+                model.task_loss_weight = 0
+                prev_intervention_task_loss_weight = model.intervention_task_loss_weight
+                model.intervention_task_loss_weight = 0
+                prev_concept_loss_weight = model.concept_loss_weight
+                model.concept_loss_weight = 0
+                prev_ood_separator_loss_weight = model.ood_separator_loss_weight
+                model.ood_separator_loss_weight = 1
+                for name, param in model.named_parameters():
+                    if param.requires_grad:
+                        trainable_params.add(name)
+                        param.requires_grad = False
+                model.unfreeze_calibration_components(
+                    unfreeze_dynamic=config.get('calibrate_dynamic_logits', True),
+                    unfreeze_global=config.get('calibrate_global_logits', True),
+                )
+                calibration_callbacks, calibration_ckpt_call = _make_callbacks(
+                    config,
+                    result_dir,
+                    full_run_name,
+                )
+                print(
+                    "[Number of parameters in model",
+                    sum(p.numel() for p in model.parameters() if p.requires_grad),
+                    "]"
+                )
+                print(
+                    "[Number of non-trainable parameters in model",
+                    sum(p.numel() for p in model.parameters() if not p.requires_grad),
+                    "]",
+                )
+                opt_configs = model.configure_optimizers()
+                calibration_trainer = pl.Trainer(
+                    accelerator=accelerator,
+                    devices=devices,
+                    max_epochs=calibration_epochs,
+                    check_val_every_n_epoch=config.get("check_val_every_n_epoch", 5),
+                    callbacks=calibration_callbacks,
+                    logger=logger or False,
+                    enable_checkpointing=enable_checkpointing,
+                    gradient_clip_val=gradient_clip_val,
+                )
+
+                # Train it on the validation set!
+                if config.get('finetune_with_val', True):
+                    calibration_trainer.fit(model, val_dl, val_dl)
+                else:
+                    calibration_trainer.fit(model, train_dl, val_dl)
+                _check_interruption(calibration_trainer)
+                training_time += time.time() - start_time
+                num_epochs += calibration_trainer.current_epoch
+                _restore_checkpoint(
+                    model=model,
+                    max_epochs=calibration_epochs,
+                    ckpt_call=calibration_ckpt_call,
+                    trainer=calibration_trainer,
+                )
+
+                # And restore the state
+                model.hard_selection_value = None
+                model.task_loss_weight = prev_task_loss_weight
+                model.intervention_task_loss_weight = prev_intervention_task_loss_weight
+                model.concept_loss_weight = prev_concept_loss_weight
+                model.ood_separator_loss_weight = prev_ood_separator_loss_weight
+                for name, param in model.named_parameters():
+                    param.requires_grad = name in trainable_params
+
+            ####################################################################
+            ## Step 4: Find uncertainty thresholds based on the validation set
+            ####################################################################
+
+            if config.get('inference_threshold', True):
+                print(
+                    f"\tFinding out the variance threshold using the validation set"
+                )
+                model.output_uncertainty = True
+                prev_inference_threshold = model.inference_threshold
+                model.inference_threshold = False
+                fast_val_loader = torch.utils.data.DataLoader(
+                    val_dl.dataset if config.get('finetune_with_val', True) else train_dl.dataset,
+                    batch_size=data_utils._largest_divisor(len(train_dl.dataset), max_val=512),
+                    num_workers=4,
+                    shuffle=False,
+                )
+                prediction_trainer = pl.Trainer(
+                    accelerator=accelerator,
+                    devices=devices,
+                    logger=False,
+                )
+                val_batch_out = prediction_trainer.predict(
+                    model,
+                    fast_val_loader,
+                )
+                model.output_uncertainty = False
+                y_preds = torch.concat(
+                    [x[2] for x in val_batch_out],
+                    dim=0,
+                ).detach().cpu().numpy()
+                val_uncertainties = torch.concat(
+                    [x[-1] for x in val_batch_out],
+                    dim=0,
+                ).detach().cpu().numpy()
+                selected = np.argmax(y_preds, axis=-1)
+                thresh = np.percentile(
+                    [val_uncertainties[x, selected[x]] for x in range(selected.shape[-1])],
+                    config.get('uncerainty_threshold_percentile', 90),
+                )
+                print("y_pred.shape =", y_preds.shape)
+                print("val_uncertainties.shape =", val_uncertainties.shape)
+                print("\tthreshdold is", thresh)
+                with torch.no_grad():
+                    model.ood_uncertainty_thresh[:] = torch.FloatTensor([thresh])
+                model.inference_threshold = prev_inference_threshold
+
+            elif (config.get('selection_mode', 'max_class_confidence') == 'monte_carlo') and (
+                config.get('global_dropout_only', False)
+            ):
+                print(
+                    f"\tFinding out the variance threshold using the validation set"
+                )
+                model.output_uncertainty = True
+                fast_val_loader = torch.utils.data.DataLoader(
+                    val_dl.dataset if config.get('finetune_with_val', True) else train_dl.dataset,
+                    batch_size=data_utils._largest_divisor(len(train_dl.dataset), max_val=512),
+                    num_workers=4,
+                    shuffle=False,
+                )
+                prediction_trainer = pl.Trainer(
+                    accelerator=accelerator,
+                    devices=devices,
+                    logger=False,
+                )
+                val_batch_out = prediction_trainer.predict(
+                    model,
+                    fast_val_loader,
+                )
+                model.output_uncertainty = False
+                val_uncertainties = torch.concat(
+                    [x[-1] for x in val_batch_out],
+                    dim=0,
+                ).detach().cpu().numpy()
+                thresholds = np.zeros((n_concepts, n_tasks))
+                for concept_idx in range(n_concepts):
+                    for task_idx in range(n_tasks):
+                        uncertainty = val_uncertainties[:, concept_idx, task_idx]
+                        print("For task", task_idx, "mean uncertainty", np.mean(uncertainty), ", max uncertainty:", np.max(uncertainty), "and min uncertainty", np.min(uncertainty))
+                        thresh = np.percentile(
+                            uncertainty,
+                            config.get('uncerainty_threshold_percentile', 90),
+                        )
+                        print("\tthreshdold is", thresh)
+                        thresholds[concept_idx, task_idx] = thresh
+                with torch.no_grad():
+                    model.ood_uncertainty_thresh[:] = torch.FloatTensor(thresholds)
+
 
         if save_model and (result_dir is not None) and (
             not os.path.exists(model_saved_path)

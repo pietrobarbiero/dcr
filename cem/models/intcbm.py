@@ -64,6 +64,7 @@ class IntAwareConceptBottleneckModel(ConceptBottleneckModel):
         initial_horizon=2,
         horizon_rate=1.005,
     ):
+        self._intervention_idxs = None
         self.task_loss_weight = task_loss_weight
         self.num_rollouts = num_rollouts
         if concept_map is None:
@@ -863,7 +864,8 @@ class IntAwareConceptBottleneckModel(ConceptBottleneckModel):
         train=False,
         intervention_idxs=None,
     ):
-        if (
+        self._intervention_idxs = intervention_idxs
+        if getattr(self, 'cem_only_pass', False) or (
             (self.intervention_task_loss_weight == 1) and
             (self.intervention_weight == 0) and
             (self.horizon_rate == 1) and
@@ -1079,6 +1081,7 @@ class IntAwareConceptEmbeddingModel(
 
         bottleneck_size=None,
     ):
+        self._intervention_idxs = None
         self.task_loss_weight = task_loss_weight
         self.num_rollouts = num_rollouts
         self.bottleneck_size = bottleneck_size or n_concepts * emb_size

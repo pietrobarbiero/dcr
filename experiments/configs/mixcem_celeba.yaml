@@ -21,6 +21,10 @@ model_selection_groups:
   - ["^(CMCMixIntCEM).*(_ce_30_).*$", "CMCMixIntCEM (Baseline)"]
   - ["^(CMCMixCEM).*(_ce_0_).*$", "CMCMixCEM No Calibration (Baseline)"]
   - ["^(CMCMixCEM).*(_ce_30_).*$", "CMCMixCEM (Baseline)"]
+  - ["^(Linear_CMCMixIntCEM).*(_ce_0_).*$", "Linear CMCMixIntCEM No Calibration (Baseline)"]
+  - ["^(Linear_CMCMixIntCEM).*(_ce_30_).*$", "Linear CMCMixIntCEM (Baseline)"]
+  - ["^(Liner_CMCMixCEM).*(_ce_0_).*$", "Linear CMCMixCEM No Calibration (Baseline)"]
+  - ["^(Liner_CMCMixCEM).*(_ce_30_).*$", "Linear CMCMixCEM (Baseline)"]
 
 model_selection_metrics:
   - val_acc_y_random_group_level_True_use_prior_False_int_auc
@@ -453,6 +457,7 @@ runs:
 
 
 
+  # Linear version of MixIntCEM
   - architecture: 'MCIntCEM'
     run_name: "Linear_CMCMixIntCEM_t_{temperature}_r_{all_intervened_loss_weight}_{pooling_mode}_{uncerainty_threshold_percentile}_{global_epochs}_mpc_{mixed_probs_coeff}_tmc_{montecarlo_train_tries}_emc_{montecarlo_test_tries}_cwc_{class_wise_temperature}_ce_{calibration_epochs}_g_ood_{ood_dropout_prob}_emb_{emb_size}_{finetune_with_val}_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_cwl_{concept_loss_weight}"
     load_path_name: "Linear_CMCMixIntCEM_t_{temperature}_r_{all_intervened_loss_weight}_{pooling_mode}_None_{global_epochs}_mpc_{mixed_probs_coeff}_tmc_{montecarlo_train_tries}_emc_50_cwc_{class_wise_temperature}_ce_0_g_ood_{ood_dropout_prob}_emb_{emb_size}_True_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_cwl_{concept_loss_weight}"
@@ -515,7 +520,7 @@ runs:
     grid_search_mode: exhaustive
 
 
-  # Same as above but we turn off all the IntCEM bits
+  # Linear version of MixCEM
   - architecture: 'MCIntCEM'
     run_name: "Liner_CMCMixCEM_t_{temperature}_{all_intervened_loss_weight}_{pooling_mode}_{uncerainty_threshold_percentile}_{global_epochs}_mpc_{mixed_probs_coeff}_tmc_{montecarlo_train_tries}_emc_{montecarlo_test_tries}_cwc_{class_wise_temperature}_ce_{calibration_epochs}_g_ood_{ood_dropout_prob}_emb_{emb_size}_{finetune_with_val}_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_cwl_{concept_loss_weight}"
     load_path_name: "Liner_CMCMixCEM_t_{temperature}_{all_intervened_loss_weight}_{pooling_mode}_None_{global_epochs}_mpc_{mixed_probs_coeff}_tmc_{montecarlo_train_tries}_emc_50_cwc_{class_wise_temperature}_ce_0_g_ood_{ood_dropout_prob}_emb_{emb_size}_True_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_cwl_{concept_loss_weight}"

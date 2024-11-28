@@ -460,6 +460,19 @@ def train_certificate_cem(
                         unfreeze_dynamic=config.get('calibrate_dynamic_logits', True),
                         unfreeze_global=config.get('calibrate_global_logits', True),
                     )
+
+                    if config.get('ignore_task_acc_in_calibration', False):
+                        prev_task_loss_weight = model.task_loss_weight
+                        model.task_loss_weight = 0
+                        prev_intervention_task_loss_weight = model.intervention_task_loss_weight
+                        model.intervention_task_loss_weight = 0
+                        prev_all_intervened_loss_weight = model.all_intervened_loss_weight
+                        model.all_intervened_loss_weight = 0
+                        prev_intervention_weight = model.intervention_weight
+                        model.intervention_weight = 0
+                        prev_intervention_task_discount = model.intervention_task_discount
+                        model.intervention_task_discount = 1
+
                     calibration_callbacks, calibration_ckpt_call = _make_callbacks(
                         config,
                         result_dir,
@@ -501,7 +514,13 @@ def train_certificate_cem(
                         ckpt_call=calibration_ckpt_call,
                         trainer=calibration_trainer,
                     )
-                    model.inference_threshold = prev_inference_threshold
+                    if config.get('ignore_task_acc_in_calibration', False):
+                        model.inference_threshold = prev_inference_threshold
+                        model.task_loss_weight = prev_task_loss_weight
+                        model.intervention_task_loss_weight = prev_intervention_task_loss_weight
+                        model.all_intervened_loss_weight = prev_all_intervened_loss_weight
+                        model.intervention_weight = prev_intervention_weight
+                        model.intervention_task_discount = prev_intervention_task_discount
 
                 # And restore the state
                 model.hard_selection_value = None

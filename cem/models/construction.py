@@ -841,6 +841,10 @@ def construct_model(
             "temperature": config.get('temperature', 1),
             "scale_fn": config.get('scale_fn', 'original'),
 
+            # Debugging
+            "print_eval_only": config.get('print_eval_only', True),
+            "counter_limit": config.get('counter_limit', 0),
+
             # Monte carlo stuff
             "deterministic": config.get('deterministic', False),
             "montecarlo_train_tries": config.get('montecarlo_train_tries', 20),

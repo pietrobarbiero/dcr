@@ -96,7 +96,14 @@ class MonteCarloIntCEM(IntAwareConceptEmbeddingModel):
         output_uncertainty=False,
         hard_selection_value=None,
         inference_threshold=True,
+
+        # For debugging purposes only
+        counter_limit=0,
+        print_eval_only=True,
     ):
+        self.print_eval_only = print_eval_only
+        self.counter_limit = counter_limit
+        self.print_counter = 0
         self.scale_fn = scale_fn
         self.dynamic_confidence_scaling = dynamic_confidence_scaling
         self.dyn_prob_with_global = dyn_prob_with_global
@@ -274,6 +281,31 @@ class MonteCarloIntCEM(IntAwareConceptEmbeddingModel):
                 return torch.tanh(self.temperature * (concept_probs - 0.5))
             elif self.scale_fn == 'linear':
                 return self.temperature * (concept_probs - 0.5)
+            elif self.scale_fn in ['entropy', 'entr']:
+                entr = (
+                    -concept_probs * torch.log2(concept_probs + 1e-6) -
+                    (1 - concept_probs) * torch.log2(1 - concept_probs + 1e-6)
+                )
+                return self.temperature * (1 - entr)
+            elif self.scale_fn in ['exponential_entropy', 'exp_entr']:
+                eps = 1e-4
+                numerator = torch.pow(concept_probs, self.temperature)
+                denominator = numerator + torch.pow(
+                    (1 - concept_probs),
+                    self.temperature,
+                )
+                adj_prob = numerator / (denominator + eps)
+                return 1 - (
+                    -adj_prob * torch.log2(adj_prob + eps) -
+                    (1 - adj_prob) * torch.log2(1 - adj_prob + eps)
+                )
+            elif self.scale_fn in ['exponential', 'exp']:
+                return torch.pow(
+                    2.0 * (concept_probs - 0.5),
+                    2 * self.temperature,
+                )
+            elif self.scale_fn in ['abs', 'absolute']:
+                return self.temperature * torch.abs(concept_probs - 0.5)
             else:
                 raise ValueError(
                     f'Unsupported scale function "{self.scale_fn}"!'
@@ -538,14 +570,20 @@ class MonteCarloIntCEM(IntAwareConceptEmbeddingModel):
             concept_probs=c_sem,
             temperature=self.temperature,
         )
-        # if self.current_steps.detach() % 10:
-        #     x = self._context_scale_factors.detach().cpu().numpy()
-        #     print("For step", self.current_steps.detach(), "average mixing factor is", np.mean(x))
-        #     print("\tMax mixing factor is", np.max(x))
-        #     print("\tMin mixing factor is", np.min(x))
-        #     print("\tMean prob is", np.mean(c_sem.detach().cpu().numpy()))
-        #     print("\tMax prob is", np.max(c_sem.detach().cpu().numpy()))
-        #     print("\tMin prob is", np.min(c_sem.detach().cpu().numpy()))
+        if self.hard_selection_value is not None:
+            self._context_scale_factors = 1 - self.hard_selection_value * torch.ones_like(
+                self._context_scale_factors
+            )
+        if self.counter_limit and (self.print_counter % self.counter_limit == 0) and ((not training) or (not self.print_eval_only)):
+            x = self._context_scale_factors.detach().cpu().numpy()
+            print("For step", self.current_steps.detach(), "average mixing factor is", np.mean(x))
+            print("\tMax mixing factor is", np.max(x))
+            print("\tMin mixing factor is", np.min(x))
+            print("\tMean mixing factor is", np.mean(x))
+            print("\tMean prob is", np.mean(c_sem.detach().cpu().numpy()))
+            print("\tMax prob is", np.max(c_sem.detach().cpu().numpy()))
+            print("\tMin prob is", np.min(c_sem.detach().cpu().numpy()))
+        self.print_counter += 1
 
 
         pos_embeddings = torch.concat(

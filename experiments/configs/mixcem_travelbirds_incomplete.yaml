@@ -9,10 +9,14 @@ model_selection_groups:
   - ["^(CEM).*$", "CEM (Baseline)"]
   - ["^(DNN_).*$", "DNN (Baseline)"]
   - ["^(IntCEM_).*(_Baseline).*$", "IntCEM (Baseline)"]
-  - ["^(MixCEM_).*(_Baseline).*$", "MixCEM (Baseline)"]
-  - ["^(Try_MixCEM_).*(_Baseline).*$", "Try_MixCEM (Baseline)"]
   - ["^(ProbCBM_).*$", "ProbCBM (Baseline)"]
   - ["^(DNN_).*$", "DNN (Baseline)"]
+  - ["^(PCBM_).*$", "Posthoc CBM (Baseline)"]
+  - ["^(HybridPCBM_).*$", "Hybrid Posthoc CBM (Baseline)"]
+  - ["^(Linear_CMCMixIntCEM).*(_ce_0_).*$", "Linear CMCMixIntCEM No Calibration (Baseline)"]
+  - ["^(Linear_CMCMixIntCEM).*(_ce_30_).*$", "Linear CMCMixIntCEM (Baseline)"]
+  - ["^(Linear_CMCMixCEM).*(_ce_0_).*$", "Linear CMCMixCEM No Calibration (Baseline)"]
+  - ["^(Linear_CMCMixCEM).*(_ce_30_).*$", "Linear CMCMixCEM (Baseline)"]
 
 
 model_selection_metrics:
@@ -24,7 +28,7 @@ shared_params:
   dataset_config:
     dataset: "cub"
     num_workers: 8
-    batch_size: 256 #64
+    batch_size: 256
     traveling_birds: True
     traveling_birds_root_dir: /anfs/bigdisc/me466/TravelingBirds/
 
@@ -39,7 +43,7 @@ shared_params:
   intervention_config:
     competence_levels: [1]
     intervention_freq: 1
-    intervention_batch_size: 256 # 128
+    intervention_batch_size: 256
     val_intervention_policies:
       - policy: "random"
         group_level: True
@@ -58,9 +62,9 @@ shared_params:
   top_k_accuracy: null
   save_model: True
 
-  patience: 2 #15
-  check_val_every_n_epoch: 4 #5
-  lr_scheduler_patience: 5 # 10
+  patience: 2
+  check_val_every_n_epoch: 4
+  lr_scheduler_patience: 5
 
   emb_size: 16
   extra_dims: 0
@@ -76,7 +80,7 @@ shared_params:
   momentum: 0.9
   sigmoidal_prob: False
   training_intervention_prob: 0
-  concept_loss_weight: [5] #[1, 5, 10]
+  concept_loss_weight: [1, 5]
   grid_variables:
     - concept_loss_weight
   grid_search_mode: exhaustive
@@ -93,13 +97,24 @@ shared_params:
             noise_level: 0.5
 
 runs:
+  - architecture: 'ConceptEmbeddingModel'
+    run_name: "CEM_emb_size_{emb_size}_Baseline_cwl_{concept_loss_weight}"
+    sigmoidal_prob: True
+    training_intervention_prob: 0.25
+    embedding_activation: "leakyrelu"
+    emb_size: [128, 64, 16]
+    grid_variables:
+        - concept_loss_weight
+        - emb_size
+    grid_search_mode: exhaustive
+
   - architecture: 'ConceptBottleneckModel'
     run_name: "DNN_extra_dims_{extra_dims}"
     training_intervention_prob: 0
     concept_loss_weight: 0
     embedding_activation: "leakyrelu"
     bool: False
-    extra_dims: [0] #, 50, 100, 200]
+    extra_dims: [0, 50, 100, 200]
     sigmoidal_extra_capacity: False
     sigmoidal_prob: False
     grid_variables:
@@ -127,18 +142,6 @@ runs:
     grid_variables: []
     grid_search_mode: exhaustive
 
-  - architecture: 'ConceptEmbeddingModel'
-    run_name: "CEM_emb_size_{emb_size}_Baseline_cwl_{concept_loss_weight}"
-    sigmoidal_prob: True
-    training_intervention_prob: 0.25
-    embedding_activation: "leakyrelu"
-    emb_size: [128, 64, 16]
-    grid_variables:
-        - concept_loss_weight
-        - emb_size
-    grid_search_mode: exhaustive
-
-
   - architecture: 'ConceptBottleneckModel'
     run_name: "Hybrid-CBM_Sigmoid_extra_dims_{extra_dims}_Baseline_cwl_{concept_loss_weight}"
     extra_dims: [50, 100, 200]
@@ -159,8 +162,8 @@ runs:
     init_negative_scale: 5
     init_shift: 5
     pretrained: True
-    hidden_dim: [4, 8, 16] #, 16] # [16], 32]
-    class_hidden_dim: [16, 32] #, 64] # [32, 64] 128
+    hidden_dim: [4, 8, 16]
+    class_hidden_dim: [16, 32]
     intervention_prob: 0.5
     # gradient_clip_val: 2.0
     max_concept_epochs: 50
@@ -183,7 +186,7 @@ runs:
   - architecture: "IntAwareConceptEmbeddingModel"
     run_name: "IntCEM_intervention_weight_{intervention_weight}_intervention_task_discount_{intervention_task_discount}_Baseline_cwl_{concept_loss_weight}"
     training_intervention_prob: 0.25
-    intervention_weight: [0.1, 1, 5]
+    intervention_weight: [0.1, 1] #, 5]
     intervention_task_discount: [1.1, 1.5]
     use_concept_groups: True
     int_model_use_bn: True
@@ -199,191 +202,6 @@ runs:
     grid_search_mode: exhaustive
 
 
-  - architecture: 'MixingConceptEmbeddingModel'
-    run_name: "MixCEM_n_extra_{n_discovered_concepts}_entr_{discovered_probs_entropy}_dis_{intervention_task_discount}_ip_{training_intervention_prob}_dip_{dyn_training_intervention_prob}_cl_{contrastive_loss_weight}_mix_{mix_ground_truth_embs}_shared_{shared_emb_generator}_emb_size_{emb_size}_ml_{intermediate_task_concept_loss}_Baseline_cwl_{concept_loss_weight}"
-    training_intervention_prob: [[0.25, 0.5, 0.75, 1]]
-    emb_size: [32, 64, 128] #[64, 512, 128, 32] #1024, 512, 256, 128] #, 32]  # UNCOMMENT ME!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    embedding_activation: null
-    n_discovered_concepts: [0, 5, 25] #50, 25] # UNCOMMENT ME!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    concept_loss_weight: [10, 1] #, 50, 0.1] #, 1, 0.1] # UNCOMMENT ME!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    contrastive_loss_weight: [0]
-    mix_ground_truth_embs: True
-    shared_emb_generator: [True]
-    normalize_embs: False
-    sample_probs: False
-    cond_discovery: False
-    intermediate_task_concept_loss: [0]
-    task_concept_loss: 1
-    intervention_task_discount: [1.05] #[1.01, 1.05] #, 1.5]
-    discovered_probs_entropy: 0
-    dyn_training_intervention_prob: [0.1] #[0.1, 0.25] # UNCOMMENT ME!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    grid_variables:
-      - concept_loss_weight
-      - n_discovered_concepts
-      - contrastive_loss_weight
-      - shared_emb_generator
-      - emb_size
-      - intermediate_task_concept_loss
-      - intervention_task_discount
-      - training_intervention_prob
-      - dyn_training_intervention_prob
-    grid_search_mode: exhaustive
-
-  # - architecture: 'NewMixingConceptEmbeddingModel'
-  #   run_name: "Try_MixCEM_strict_{blackbox_warmup_epochs}_{concept_epochs}_{no_residual_epochs}_{e2e_epochs}_ip_{training_intervention_prob}_emb_size_{emb_size}_dis_{intervention_task_discount}_rnl_{residual_norm_loss}_pcr_{per_concept_residual}_shared_{shared_per_concept_residual}_itl_{intermediate_task_concept_loss}_bp_{bottleneck_pooling}_cwl_{concept_loss_weight}"
-  #   training_intervention_prob: [[0.25, 0.5, 0.75, 1]]
-  #   emb_size: [1024] #[512, 1024]
-  #   embedding_activation: null
-  #   concept_loss_weight: [1] #, 0.1]
-  #   normalize_embs: False
-  #   task_concept_loss: 1
-  #   intervention_task_discount: [1.05] #1.1, 1.5]
-  #   use_cosine_similarity: False
-  #   early_stopping_best_model: False
-  #   conditional_residual: [True] #False, True]
-  #   # c2y_layers: [32, 16, 8]
-  #   residual_layers: [32, 16, 8]
-  #   bottleneck_pooling: 'concat'
-  #   per_concept_residual: [True]
-  #   sigmoidal_residual: [False]
-  #   residual_deviation: [0] #, 2]
-  #   shared_per_concept_residual: [True]
-  #   residual_norm_loss: [0.1, 0]
-  #   intermediate_task_concept_loss: 0
-  #   gradient_clip_val: 100
-
-  #   residual_scale: 1
-  #   blackbox_warmup_epochs: 0
-
-  #   concept_epochs: 100
-  #   fix_backbone_for_concept: False
-
-  #   no_residual_epochs: 100
-  #   fix_backbone_for_no_res: True
-  #   fix_concept_embeddings_for_no_res: True
-
-  #   e2e_epochs: 100
-  #   fix_backbone_for_res: True
-  #   fix_concept_embeddings_for_res: True
-  #   fix_label_predictor_for_res: False
-  #   use_ground_truth_mixing_for_res: False
-
-  #   grid_variables:
-  #     - concept_loss_weight
-  #     - emb_size
-  #     - training_intervention_prob
-  #     - intervention_task_discount
-  #     - conditional_residual
-  #     - per_concept_residual
-  #     - sigmoidal_residual
-  #     - residual_deviation
-  #     - shared_per_concept_residual
-  #     - residual_norm_loss
-  #   grid_search_mode: exhaustive
-
-
-  # - architecture: 'NewMixingConceptEmbeddingModel'
-  #   run_name: "Try_MixCEM_staged_{concept_epochs}_{no_residual_epochs}_{e2e_epochs}_ip_{training_intervention_prob}_emb_size_{emb_size}_dis_{intervention_task_discount}_rnl_{residual_norm_loss}_pcr_{per_concept_residual}_shared_{shared_per_concept_residual}_itl_{intermediate_task_concept_loss}_bp_{bottleneck_pooling}_cwl_{concept_loss_weight}"
-  #   training_intervention_prob: [[0.25, 0.5, 0.75, 1]]
-  #   emb_size: [128, 64] #[512, 1024]
-  #   embedding_activation: null
-  #   concept_loss_weight: [10] #, 0.1]
-  #   normalize_embs: False
-  #   task_concept_loss: 1
-  #   intervention_task_discount: [1.05] #1.1, 1.5]
-  #   use_cosine_similarity: False
-  #   early_stopping_best_model: False
-  #   conditional_residual: [True] #False, True]
-  #   # c2y_layers: [32, 16, 8]
-  #   residual_layers: [32, 16, 8]
-  #   bottleneck_pooling: 'concat'
-  #   per_concept_residual: [True]
-  #   sigmoidal_residual: [False]
-  #   residual_deviation: [0] #, 2]
-  #   shared_per_concept_residual: [True]
-  #   residual_norm_loss: [0.1, 0]
-  #   intermediate_task_concept_loss: 0
-  #   gradient_clip_val: 100
-
-  #   residual_scale: 1
-  #   blackbox_warmup_epochs: 0
-
-  #   concept_epochs: 50
-  #   fix_backbone_for_concept: False
-
-  #   no_residual_epochs: 50
-  #   fix_backbone_for_no_res: False
-  #   fix_concept_embeddings_for_no_res: False
-
-  #   e2e_epochs: 50
-  #   fix_backbone_for_res: False
-  #   fix_concept_embeddings_for_res: False
-  #   fix_label_predictor_for_res: False
-  #   use_ground_truth_mixing_for_res: False
-
-  #   grid_variables:
-  #     - concept_loss_weight
-  #     - emb_size
-  #     - training_intervention_prob
-  #     - intervention_task_discount
-  #     - conditional_residual
-  #     - per_concept_residual
-  #     - sigmoidal_residual
-  #     - residual_deviation
-  #     - shared_per_concept_residual
-  #     - residual_norm_loss
-  #   grid_search_mode: exhaustive
-
-  # - architecture: 'NewMixingConceptEmbeddingModel'
-  #   run_name: "Try_MixCEM_fixed_embs_{concept_epochs}_{no_residual_epochs}_{e2e_epochs}_ip_{training_intervention_prob}_emb_size_{emb_size}_dis_{intervention_task_discount}_rnl_{residual_norm_loss}_pcr_{per_concept_residual}_shared_{shared_per_concept_residual}_itl_{intermediate_task_concept_loss}_bp_{bottleneck_pooling}_cwl_{concept_loss_weight}"
-  #   training_intervention_prob: [[0.25, 0.5, 0.75, 1]]
-  #   emb_size: [32, 512] #[512, 1024]
-  #   embedding_activation: null
-  #   concept_loss_weight: [5] #, 0.1]
-  #   normalize_embs: False
-  #   task_concept_loss: 1
-  #   intervention_task_discount: [1.01, 1.05]
-  #   use_cosine_similarity: False
-  #   early_stopping_best_model: False
-  #   conditional_residual: [True] #False, True]
-  #   residual_layers: [32, 16, 8]
-  #   bottleneck_pooling: 'concat'
-  #   per_concept_residual: [True]
-  #   sigmoidal_residual: [False]
-  #   residual_deviation: [0] #, 2]
-  #   shared_per_concept_residual: [True]
-  #   residual_norm_loss: [0.1] #, 0]
-  #   intermediate_task_concept_loss: 0
-  #   gradient_clip_val: 100
-
-  #   residual_scale: 1
-  #   blackbox_warmup_epochs: 0
-
-  #   concept_epochs: 50
-  #   fix_backbone_for_concept: False
-
-  #   no_residual_epochs: 150
-  #   fix_backbone_for_no_res: False
-  #   fix_concept_embeddings_for_no_res: True
-
-  #   e2e_epochs: 100
-  #   fix_backbone_for_res: False
-  #   fix_concept_embeddings_for_res: True
-  #   fix_label_predictor_for_res: False
-  #   use_ground_truth_mixing_for_res: False
-
-  #   grid_variables:
-  #     - concept_loss_weight
-  #     - emb_size
-  #     - training_intervention_prob
-  #     - intervention_task_discount
-  #     - conditional_residual
-  #     - per_concept_residual
-  #     - sigmoidal_residual
-  #     - residual_deviation
-  #     - shared_per_concept_residual
-  #     - residual_norm_loss
-  #   grid_search_mode: exhaustive
 
   - architecture: 'ConceptBottleneckModel'
     run_name: "DNN_extra_dims_{extra_dims}"
@@ -399,205 +217,125 @@ runs:
     grid_search_mode: exhaustive
 
 
-  # - architecture: 'NewMixingConceptEmbeddingModel'
-  #   run_name: "Try_MixCEM_newest_{residual_scale_reg}_{blackbox_warmup_epochs}_{concept_epochs}_{no_residual_epochs}_{e2e_epochs}_ip_{training_intervention_prob}_emb_size_{emb_size}_dis_{intervention_task_discount}_rnl_{residual_norm_loss}_pcr_{per_concept_residual}_shared_{shared_per_concept_residual}_itl_{intermediate_task_concept_loss}_bp_{bottleneck_pooling}_cwl_{concept_loss_weight}"
-  #   training_intervention_prob: [[0.25, 0.5, 0.75, 1]]
-  #   emb_size: [512] #[512, 1024]
-  #   embedding_activation: null
-  #   concept_loss_weight: [10] #, 1] #, 0.1]
-  #   normalize_embs: False
-  #   task_concept_loss: 1
-  #   intervention_task_discount: [1.05] #, 1.01] #, 1.05]
-  #   use_cosine_similarity: False
-  #   early_stopping_best_model: False
-  #   conditional_residual: [False] # BIG CHANGE: [True] #False, True]
-  #   # CHANGE: c2y_layers: [32, 16, 8]
-  #   c2y_layers: [] #[512, 256]
-  #   residual_layers: [] #[512, 256] #[32, 16, 8]
-  #   bottleneck_pooling: ['per_class_mixing_shared'] #, 'concat']
-  #   per_concept_residual: [False] # BIG CHANGE: [True]
-  #   sigmoidal_residual: [False]
-  #   residual_deviation: [0] #, 2]
-  #   shared_per_concept_residual: [False] # Change: [True]
-  #   residual_norm_loss: [0.1] # CHANGE: [0]
-  #   intermediate_task_concept_loss: 0
-  #   # CHANGE: gradient_clip_val: 100
-  #   learnable_residual_scale: False
-  #   sigmoidal_residual_scale: False
-  #   residual_scale_reg: [0] #CHANGE: 0.1
-  #   learn_residual_embeddings: True # CHANGE
 
-  #   patience: 15
-  #   check_val_every_n_epoch: 5
-  #   lr_scheduler_patience: 10
+  - architecture: 'MCIntCEM'
+    run_name: "Linear_CMCMixIntCEM_t_{temperature}_r_{all_intervened_loss_weight}_{pooling_mode}_{uncerainty_threshold_percentile}_{global_epochs}_mpc_{mixed_probs_coeff}_tmc_{montecarlo_train_tries}_emc_{montecarlo_test_tries}_cwc_{class_wise_temperature}_ce_{calibration_epochs}_g_ood_{ood_dropout_prob}_emb_{emb_size}_{finetune_with_val}_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_cwl_{concept_loss_weight}"
+    load_path_name: "Linear_CMCMixIntCEM_t_{temperature}_r_{all_intervened_loss_weight}_{pooling_mode}_None_{global_epochs}_mpc_{mixed_probs_coeff}_tmc_{montecarlo_train_tries}_emc_50_cwc_{class_wise_temperature}_ce_0_g_ood_{ood_dropout_prob}_emb_{emb_size}_True_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_cwl_{concept_loss_weight}"
+    global_model_path: "g_LineaCMCMixIntCEM_r_t_{temperature}_r_{all_intervened_loss_weight}_{pooling_mode}_{uncerainty_threshold_percentile}_{global_epochs}_mpc_{mixed_probs_coeff}_tmc_{montecarlo_train_tries}_emc_50_cwc_{class_wise_temperature}_ce_{calibration_epochs}_g_ood_{ood_dropout_prob}_emb_{emb_size}_{finetune_with_val}_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_cwl_{concept_loss_weight}"
 
-  #   residual_scale: null #1 # CHANGE
-  #   blackbox_warmup_epochs: 0 # CHANGE: 100
+    concept_loss_weight: [1]
+    emb_size: [16]
+    shared_emb_generator: True
+    montecarlo_train_tries: [1]
+    montecarlo_test_tries: [50]
+    ood_dropout_prob: [0.1]
+    pooling_mode: ['concat']
+    calibration_epochs: [0, 30]
+    finetune_with_val: [True]
+    learnable_temps: False
+    class_wise_temperature: False
+    global_epochs: [0]
+    global_mixed_probs_coeff: 0
+    freeze_global_embeddings: False
+    max_epochs: 150
+    uncerainty_threshold_percentile: [null]
+    inference_threshold: False
+    mixed_probs_coeff: [1]
+    all_intervened_loss_weight: [0.1, 1]
+    calibrate_concept_probs: True
+    dynamic_confidence_scaling: True
+    temperature: [1, 0] #2, 0]
+    scale_fn: linear
 
-  #   concept_epochs: 100 # CHANGE: 100
-  #   fix_backbone_for_concept: False #CHANGE: True
+    ###############################################################################################
 
-  #   no_residual_epochs: 100 # CHANGE: 100
-  #   fix_backbone_for_no_res: False # CHANGE: True
-  #   fix_concept_embeddings_for_no_res: True
-
-  #   e2e_epochs: 300 # CHANGE: 100
-  #   fix_backbone_for_res: False
-  #   fix_concept_embeddings_for_res: True
-  #   fix_label_predictor_for_res: False
-  #   use_ground_truth_mixing_for_res: False
-
-  #   grid_variables:
-  #     - bottleneck_pooling
-  #     - concept_loss_weight
-  #     - training_intervention_prob
-  #     - intervention_task_discount
-  #     - conditional_residual
-  #     - per_concept_residual
-  #     - sigmoidal_residual
-  #     - residual_deviation
-  #     - shared_per_concept_residual
-  #     - residual_norm_loss
-  #     - emb_size
-  #     - residual_scale_reg
-  #   grid_search_mode: exhaustive
-
-  #   dataset_config:
-  #     dataset: "cub"
-  #     num_workers: 8
-  #     batch_size: 512 #64
-  #     traveling_birds: True
-  #     traveling_birds_root_dir: /anfs/bigdisc/me466/TravelingBirds/
-
-  #     # DATASET VARIABLES
-  #     root_dir: /homes/me466/data/CUB200/
-  #     sampling_percent: 0.25
-  #     sampling_groups: True
-  #     test_subsampling: 1
-  #     weight_loss: True
+    # IntCEM stuff
+    embedding_activation: null
+    training_intervention_prob: [0.25]
+    intervention_task_discount: [1.1]
+    use_concept_groups: True
+    int_model_use_bn: True
+    int_model_layers: [128, 128, 64, 64]
+    max_horizon: 6
+    horizon_rate: 1.005
+    intervention_weight: [0.1]
+    grid_variables:
+      - training_intervention_prob
+      - intervention_task_discount
+      - ood_dropout_prob
+      - emb_size
+      - finetune_with_val
+      - concept_loss_weight
+      - pooling_mode
+      - intervention_weight
+      - global_epochs
+      - montecarlo_train_tries
+      - montecarlo_test_tries
+      - mixed_probs_coeff
+      - all_intervened_loss_weight
+      - temperature
+      - calibration_epochs
+      - uncerainty_threshold_percentile
+    grid_search_mode: exhaustive
 
 
-  # - architecture: 'NewMixingConceptEmbeddingModel'
-  #   run_name: "Try_MixCEM_new_{residual_scale_reg}_{blackbox_warmup_epochs}_{concept_epochs}_{no_residual_epochs}_{e2e_epochs}_ip_{training_intervention_prob}_emb_size_{emb_size}_dis_{intervention_task_discount}_rnl_{residual_norm_loss}_pcr_{per_concept_residual}_shared_{shared_per_concept_residual}_itl_{intermediate_task_concept_loss}_bp_{bottleneck_pooling}_cwl_{concept_loss_weight}"
-  #   training_intervention_prob: [[0.25, 0.5, 0.75, 1]]
-  #   emb_size: [128] #[512, 1024]
-  #   embedding_activation: null
-  #   concept_loss_weight: [10] #, 1] #, 0.1]
-  #   normalize_embs: False
-  #   task_concept_loss: 1
-  #   intervention_task_discount: [1.05] #, 1.01] #, 1.05]
-  #   use_cosine_similarity: False
-  #   early_stopping_best_model: False
-  #   conditional_residual: [True] #False, True]
-  #   # CHANGE: c2y_layers: [32, 16, 8]
-  #   c2y_layers: [512, 256]
-  #   residual_layers: [512, 256] #[32, 16, 8]
-  #   bottleneck_pooling: ['per_class_mixing_shared'] #, 'concat']
-  #   per_concept_residual: [True]
-  #   sigmoidal_residual: [False]
-  #   residual_deviation: [0] #, 2]
-  #   shared_per_concept_residual: [False] # Change: [True]
-  #   residual_norm_loss: [0] # CHANGE: [0.1]
-  #   intermediate_task_concept_loss: 0
-  #   # CHANGE: gradient_clip_val: 100
-  #   learnable_residual_scale: True  # CHANGE: False
-  #   sigmoidal_residual_scale: False
-  #   residual_scale_reg: [1] #CHANGE: 0
+  # Same as above but just with the normal CEM architecture
+  - architecture: 'MCIntCEM'
+    run_name: "Linear_CMCMixCEM_t_{temperature}_r_{all_intervened_loss_weight}_{pooling_mode}_{uncerainty_threshold_percentile}_{global_epochs}_mpc_{mixed_probs_coeff}_tmc_{montecarlo_train_tries}_emc_{montecarlo_test_tries}_cwc_{class_wise_temperature}_ce_{calibration_epochs}_g_ood_{ood_dropout_prob}_emb_{emb_size}_{finetune_with_val}_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_cwl_{concept_loss_weight}"
+    load_path_name: "Linear_CMCMixCEM_t_{temperature}_r_{all_intervened_loss_weight}_{pooling_mode}_None_{global_epochs}_mpc_{mixed_probs_coeff}_tmc_{montecarlo_train_tries}_emc_50_cwc_{class_wise_temperature}_ce_0_g_ood_{ood_dropout_prob}_emb_{emb_size}_True_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_cwl_{concept_loss_weight}"
+    global_model_path: "g_LineaCMCMixCEM_r_t_{temperature}_r_{all_intervened_loss_weight}_{pooling_mode}_{uncerainty_threshold_percentile}_{global_epochs}_mpc_{mixed_probs_coeff}_tmc_{montecarlo_train_tries}_emc_50_cwc_{class_wise_temperature}_ce_{calibration_epochs}_g_ood_{ood_dropout_prob}_emb_{emb_size}_{finetune_with_val}_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_cwl_{concept_loss_weight}"
 
-  #   patience: 15
-  #   check_val_every_n_epoch: 5
-  #   lr_scheduler_patience: 10
+    concept_loss_weight: [1]
+    emb_size: [16]
+    shared_emb_generator: True
+    montecarlo_train_tries: [1]
+    montecarlo_test_tries: [50]
+    ood_dropout_prob: [0.1]
+    pooling_mode: ['concat']
+    calibration_epochs: [0, 30]
+    finetune_with_val: [True]
+    learnable_temps: False
+    class_wise_temperature: False
+    global_epochs: [0]
+    global_mixed_probs_coeff: 0
+    freeze_global_embeddings: False
+    max_epochs: 150
+    uncerainty_threshold_percentile: [null]
+    inference_threshold: False
+    mixed_probs_coeff: [1]
+    all_intervened_loss_weight: [0.1, 1]
+    calibrate_concept_probs: True
+    dynamic_confidence_scaling: True
+    temperature: [1, 0] #2, 0]
+    scale_fn: linear
 
-  #   residual_scale: null #1 # CHANGE
-  #   blackbox_warmup_epochs: 0 # CHANGE: 100
+    ###############################################################################################
 
-  #   concept_epochs: 100 # CHANGE: 100
-  #   fix_backbone_for_concept: False #CHANGE: True
-
-  #   no_residual_epochs: 0 # CHANGE: 100
-  #   fix_backbone_for_no_res: False # CHANGE: True
-  #   fix_concept_embeddings_for_no_res: False
-
-  #   e2e_epochs: 300 # CHANGE: 100
-  #   fix_backbone_for_res: True # CHANGE: True
-  #   fix_concept_embeddings_for_res: True
-  #   fix_label_predictor_for_res: False
-  #   use_ground_truth_mixing_for_res: False
-
-  #   grid_variables:
-  #     - bottleneck_pooling
-  #     - concept_loss_weight
-  #     - training_intervention_prob
-  #     - intervention_task_discount
-  #     - conditional_residual
-  #     - per_concept_residual
-  #     - sigmoidal_residual
-  #     - residual_deviation
-  #     - shared_per_concept_residual
-  #     - residual_norm_loss
-  #     - emb_size
-  #     - residual_scale_reg
-  #   grid_search_mode: exhaustive
-
-
-  # - architecture: 'NewMixingConceptEmbeddingModel'
-  #   run_name: "Try_MixCEM_{residual_scale_reg}_{blackbox_warmup_epochs}_{concept_epochs}_{no_residual_epochs}_{e2e_epochs}_ip_{training_intervention_prob}_emb_size_{emb_size}_dis_{intervention_task_discount}_rnl_{residual_norm_loss}_pcr_{per_concept_residual}_shared_{shared_per_concept_residual}_itl_{intermediate_task_concept_loss}_bp_{bottleneck_pooling}_cwl_{concept_loss_weight}"
-  #   training_intervention_prob: [[0.25, 0.5, 0.75, 1]]
-  #   emb_size: [512, 128] #[512, 1024]
-  #   embedding_activation: null
-  #   concept_loss_weight: [10, 1] #, 0.1]
-  #   normalize_embs: False
-  #   task_concept_loss: 1
-  #   intervention_task_discount: [1.05, 1.01] #, 1.05]
-  #   use_cosine_similarity: False
-  #   early_stopping_best_model: False
-  #   conditional_residual: [True] #False, True]
-  #   # CHANGE: c2y_layers: [32, 16, 8]
-  #   residual_layers: [512] #[32, 16, 8]
-  #   bottleneck_pooling: ['per_class_mixing_shared', 'concat']
-  #   per_concept_residual: [True]
-  #   sigmoidal_residual: [False]
-  #   residual_deviation: [0] #, 2]
-  #   shared_per_concept_residual: [False] # Change: [True]
-  #   residual_norm_loss: [0] # CHANGE: [0.1]
-  #   intermediate_task_concept_loss: 0
-  #   # CHANGE: gradient_clip_val: 100
-  #   learnable_residual_scale: True  # CHANGE: False
-  #   sigmoidal_residual_scale: False
-  #   residual_scale_reg: [0.1, 1] #CHANGE: 0
-
-  #   patience: 15
-  #   check_val_every_n_epoch: 5
-  #   lr_scheduler_patience: 10
-
-  #   residual_scale: null #1 # CHANGE
-  #   blackbox_warmup_epochs: 0 # CHANGE: 100
-
-  #   concept_epochs: 100 # CHANGE: 100
-  #   fix_backbone_for_concept: False #CHANGE: True
-
-  #   no_residual_epochs: 0 # CHANGE: 100
-  #   fix_backbone_for_no_res: False # CHANGE: True
-  #   fix_concept_embeddings_for_no_res: False
-
-  #   e2e_epochs: 300 # CHANGE: 100
-  #   fix_backbone_for_res: False # CHANGE: True
-  #   fix_concept_embeddings_for_res: False
-  #   fix_label_predictor_for_res: False
-  #   use_ground_truth_mixing_for_res: False
-
-  #   grid_variables:
-  #     - bottleneck_pooling
-  #     - concept_loss_weight
-  #     - training_intervention_prob
-  #     - intervention_task_discount
-  #     - conditional_residual
-  #     - per_concept_residual
-  #     - sigmoidal_residual
-  #     - residual_deviation
-  #     - shared_per_concept_residual
-  #     - residual_norm_loss
-  #     - emb_size
-  #     - residual_scale_reg
-  #   grid_search_mode: exhaustive
-
+    # IntCEM stuff
+    embedding_activation: null
+    training_intervention_prob: [0.25]
+    intervention_task_discount: [1]
+    use_concept_groups: True
+    int_model_use_bn: False
+    int_model_layers: []
+    max_horizon: 1
+    horizon_rate: 1
+    intervention_weight: [0]
+    grid_variables:
+      - training_intervention_prob
+      - intervention_task_discount
+      - ood_dropout_prob
+      - emb_size
+      - finetune_with_val
+      - concept_loss_weight
+      - pooling_mode
+      - intervention_weight
+      - global_epochs
+      - montecarlo_train_tries
+      - montecarlo_test_tries
+      - mixed_probs_coeff
+      - all_intervened_loss_weight
+      - temperature
+      - calibration_epochs
+      - uncerainty_threshold_percentile
+    grid_search_mode: exhaustive

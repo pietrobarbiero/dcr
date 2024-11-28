@@ -566,7 +566,7 @@ def generate_data(
     count_labels = config.get('count_labels', False)
     threshold_labels = config.get("threshold_labels", None)
     range_labels = config.get("range_labels", None)
-
+    use_concept_groups = config.get('use_concept_groups', True)
     if even_concepts:
         num_concepts = num_operands
         concept_group_map = {
@@ -711,6 +711,10 @@ def generate_data(
         imbalance = samples_seen / attribute_count - 1
     else:
         imbalance = None
+
+    if not use_concept_groups:
+        concept_group_map = None
+
     if not output_dataset_vars:
         return train_dl, val_dl, test_dl, imbalance
     return (

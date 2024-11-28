@@ -23,7 +23,7 @@ import cem.train.evaluate as evaluate
 def _make_callbacks(config, result_dir, full_run_name):
     callbacks = []
     ckpt_callback = None
-    if 'early_stopping_monitor' in config:
+    if config.get('early_stopping_monitor', None) is not None:
         callbacks.append(
             EarlyStopping(
                 monitor=config["early_stopping_monitor"],

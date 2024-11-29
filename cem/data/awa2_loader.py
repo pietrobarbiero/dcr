@@ -5,6 +5,9 @@ Heavily adapted from https://github.com/xmed-lab/ECBM/blob/main/data/awa2.py
 Credit goes to Xinyue Xu, Yi Qin, Lu Mi, Hao Wang, and Xiaomeng Li
 and the code accompanying their paper "Energy-Based Concept Bottleneck Models:
 Unifying Prediction, Concept Intervention, and Probabilistic Interpretations"
+
+The data can be downloaded from: https://cvml.ista.ac.at/AwA2/
+
 """
 import numpy as np
 import os
@@ -174,6 +177,40 @@ CONCEPT_SEMANTICS = [
     'domestic',
 ]
 
+CONCEPT_GROUPS = {
+    'color': ['black', 'white', 'blue', 'brown', 'gray', 'orange', 'red', 'yellow'],
+    'fur_pattern': ['patches', 'spots', 'stripes', 'furry', 'hairless', 'toughskin'],
+    'size': ['big', 'small', 'bulbous', 'lean'],
+    'limb_shape': ['flippers', 'hands', 'hooves', 'pads', 'paws', 'longleg', 'longneck'],
+    'tail': ['tail'],
+    'teeth_type': ['chewteeth','meatteeth','buckteeth','strainteeth'],
+    'horns': ['horns'],
+    'claws': ['claws'],
+    'tusks': ['tusks'],
+    'smelly': ['smelly'],
+    'transport_mechanism': ['flys', 'hops', 'swims', 'tunnels', 'walks'],
+    'speed': ['fast', 'slow'],
+    'strenght': ['strong', 'weak'],
+    'muscle': ['muscle'],
+    'movement_move': ['bipedal', 'quadrapedal'],
+    'active': ['active', 'inactive'],
+    'nocturnal': ['nocturnal'],
+    'hibernate': ['hibernate'],
+    'agility': ['agility'],
+    'diet': ['fish', 'meat', 'plankton', 'vegetation', 'insects'],
+    'feeding_type': ['forager', 'grazer', 'hunter', 'scavenger', 'skimmer', 'stalker'],
+    'general_location': ['newworld', 'oldworld', 'arctic'],
+    'biome': ['coastal', 'desert', 'bush', 'plains', 'forest', 'fields', 'jungle', 'mountains', 'ocean', 'ground', 'water', 'tree', 'cave'],
+    'fierceness': ['fierce', 'timid'],
+    'smart': ['smart'],
+    'social_mode': ['group', 'solitary'],
+    'nestspot': ['nestspot'],
+    'domestic': ['domestic'],
+}
+CONCEPT_GROUPS = {
+    key: [CONCEPT_SEMANTICS.index(name) for name in concept_names]
+    for key, concept_names in CONCEPT_GROUPS.items()
+}
 
 
 
@@ -488,19 +525,17 @@ def generate_data(
         else dataset_transform
     )
 
-    sampling_groups = config.get("sampling_groups", False)
-
     val_subsample = config.get('val_subsample', None)
     sampling_percent = config.get("sampling_percent", 1)
-    sampling_groups = config.get("sampling_groups", False)
     image_size = config.get('image_size', 224)
     num_workers = config.get('num_workers', 8)
     dataset_size = config.get('dataset_size', None)
     augment_data = config.get('augment_data', False)
     batch_size = config.get('batch_size', 32)
+    sampling_groups = config.get("sampling_groups", False)
 
     n_concepts = len(CONCEPT_SEMANTICS)
-    concept_group_map = {}
+    concept_group_map = CONCEPT_GROUPS
 
     if sampling_percent != 1:
         # Do the subsampling

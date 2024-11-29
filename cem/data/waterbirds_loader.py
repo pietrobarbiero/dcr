@@ -368,8 +368,6 @@ def generate_data(
         else dataset_transform
     )
 
-    sampling_groups = config.get("sampling_groups", False)
-
     val_subsample = config.get('val_subsample', None)
     sampling_percent = config.get("sampling_percent", 1)
     sampling_groups = config.get("sampling_groups", False)

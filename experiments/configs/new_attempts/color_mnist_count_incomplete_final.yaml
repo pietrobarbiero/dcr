@@ -80,7 +80,7 @@ shared_params:
   verbose: True
   extra_dims: 0
   concept_loss_weight: [10, 1] #[10, 5, 1]
-  learning_rate: 0.001
+  learning_rate: 0.01
   c_extractor_arch: color_mnist_extractor
   # c_extractor_arch: cnn #color_mnist_extractor
   # c_extractor_config:
@@ -103,7 +103,7 @@ shared_params:
   #       avg_pool_kernel: [3, 3]
   #   mlp_layers: [64, 32, 16]
   optimizer: adam
-  max_epochs: 500
+  max_epochs: 150
   bool: False
   early_stopping_monitor: val_loss
   early_stopping_mode: min
@@ -136,7 +136,7 @@ runs:
       root_dir: data/
       num_workers: 8
       # batch_size: 256 #2048
-      batch_size: 2048
+      batch_size: 64 # 2048
       # num_operands: [10] #[20]
       learning_rate: 0.01
       num_operands: [2] #[20]
@@ -149,7 +149,7 @@ runs:
       test_noise_level: 0
       train_dataset_size: 5000 #5000
       test_dataset_size: 5000
-      sampling_percent: 0.5
+      sampling_percent: 0.8
       sampling_groups: False
       test_subsampling: 1
       weight_loss: False
@@ -211,7 +211,7 @@ runs:
   #     test_noise_level: 0.25
   #     train_dataset_size: 2500 #5000
   #     test_dataset_size: 2500 #5000
-  #     sampling_percent: 0.5
+  #     sampling_percent: 0.8
   #     sampling_groups: False
   #     test_subsampling: 1
   #     weight_loss: False
@@ -252,16 +252,12 @@ runs:
     run_name: "CMCMixIntCEM_t_{temperature}_s_{scale_fn}_r_{all_intervened_loss_weight}_{uncerainty_threshold_percentile}_mpc_{mixed_probs_coeff}_tmc_{montecarlo_train_tries}_emc_{montecarlo_test_tries}_ce_{calibration_epochs}_g_ood_{ood_dropout_prob}_emb_{emb_size}_{finetune_with_val}_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_cwl_{concept_loss_weight}_Baseline_{dataset_config[num_operands]}"
     load_path_name: "CMCMixIntCEM_t_{temperature}_s_{scale_fn}_r_{all_intervened_loss_weight}_None_mpc_{mixed_probs_coeff}_tmc_{montecarlo_train_tries}_emc_{montecarlo_test_tries}_ce_0_g_ood_{ood_dropout_prob}_emb_{emb_size}_True_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_cwl_{concept_loss_weight}_Baseline_{dataset_config[num_operands]}"
 
-    concept_loss_weight: [1, 10, 1] #[10, 5, 1]
-    learning_rate: 0.01 # 0.001 # CHANGE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    # patience: 30 #15
-    # max_epochs: 150 # CHANGE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    # early_stopping_monitor: null # CHANGE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    concept_loss_weight: [1, 10]
     emb_size: [16]
     shared_emb_generator: True
     montecarlo_train_tries: [1]
     montecarlo_test_tries: [50]
-    ood_dropout_prob: [0.1, 0.5]
+    ood_dropout_prob: [0.1]
     pooling_mode: ['concat']
     calibration_epochs: [0, 30]
     finetune_with_val: [True]
@@ -273,28 +269,28 @@ runs:
     freeze_global_embeddings: False
     uncerainty_threshold_percentile: [null]
     inference_threshold: False
-    mixed_probs_coeff: [0] #[1]  # CHANGE!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    all_intervened_loss_weight: [0] #[10, 1, 0.1] # CHANGE!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    mixed_probs_coeff: [1]
+    all_intervened_loss_weight: [1, 0.1, 10]
     calibrate_concept_probs: True
     dynamic_confidence_scaling: True
     dyn_prob_with_global: True
-    temperature: [0] #, 2]
+    temperature: [1, 2, 0]
     scale_fn: "linear"
-    ignore_task_acc_in_calibration: True # CHANGE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ignore_task_acc_in_calibration: False
 
     ###############################################################################################
 
     # IntCEM stuff
-    gradient_clip_val: 75 # null
+    # gradient_clip_val: 75 # null
     training_intervention_prob: [0.25]
-    intervention_weight: [0] #[0.1]
-    intervention_task_discount: [1] #[1.1]
+    intervention_weight: [0.1]
+    intervention_task_discount: [1.1]
     use_concept_groups: True
     int_model_use_bn: True
     int_model_layers: [128, 128, 64, 64]
     embedding_activation: null
-    max_horizon: 1 #6
-    horizon_rate: 1 #1.005
+    max_horizon: 6
+    horizon_rate: 1.005
     grid_variables:
       - dataset_config.num_operands
       - training_intervention_prob
@@ -321,20 +317,20 @@ runs:
       root_dir: data/
       num_workers: 8
       # batch_size: 256 #2048
-      batch_size: 64 #2048
+      batch_size: 64 # 2048
       # num_operands: [10] #[20]
       learning_rate: 0.01
       num_operands: [2] #[20]
       selected_digits: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] #[3, 8]
-      use_concept_groups: True
+      use_concept_groups: False # True
       count_labels: False #True
       low_noise_level: 0
       noise_level: 0
       test_low_noise_level: 0
       test_noise_level: 0
-      train_dataset_size: 5000
+      train_dataset_size: 5000 #5000
       test_dataset_size: 5000
-      sampling_percent: 0.5
+      sampling_percent: 0.8
       sampling_groups: False
       test_subsampling: 1
       weight_loss: False
@@ -380,7 +376,7 @@ runs:
       root_dir: data/
       num_workers: 8
       # batch_size: 256 #2048
-      batch_size: 2048
+      batch_size: 64 # 2048
       # num_operands: [10] #[20]
       learning_rate: 0.01
       num_operands: [2] #[20]
@@ -393,7 +389,7 @@ runs:
       test_noise_level: 0
       train_dataset_size: 5000 #5000
       test_dataset_size: 5000
-      sampling_percent: 0.5
+      sampling_percent: 0.8
       sampling_groups: False
       test_subsampling: 1
       weight_loss: False
@@ -442,7 +438,7 @@ runs:
       root_dir: data/
       num_workers: 8
       # batch_size: 256 #2048
-      batch_size: 2048
+      batch_size: 64 # 2048
       # num_operands: [10] #[20]
       learning_rate: 0.01
       num_operands: [2] #[20]
@@ -455,7 +451,7 @@ runs:
       test_noise_level: 0
       train_dataset_size: 5000 #5000
       test_dataset_size: 5000
-      sampling_percent: 0.5
+      sampling_percent: 0.8
       sampling_groups: False
       test_subsampling: 1
       weight_loss: False
@@ -507,7 +503,7 @@ runs:
       root_dir: data/
       num_workers: 8
       # batch_size: 256 #2048
-      batch_size: 2048
+      batch_size: 64 # 2048
       # num_operands: [10] #[20]
       learning_rate: 0.01
       num_operands: [2] #[20]
@@ -520,7 +516,7 @@ runs:
       test_noise_level: 0
       train_dataset_size: 5000 #5000
       test_dataset_size: 5000
-      sampling_percent: 0.5
+      sampling_percent: 0.8
       sampling_groups: False
       test_subsampling: 1
       weight_loss: False
@@ -568,7 +564,7 @@ runs:
       root_dir: data/
       num_workers: 8
       # batch_size: 256 #2048
-      batch_size: 2048
+      batch_size: 64 # 2048
       # num_operands: [10] #[20]
       learning_rate: 0.01
       num_operands: [2] #[20]
@@ -581,7 +577,7 @@ runs:
       test_noise_level: 0
       train_dataset_size: 5000 #5000
       test_dataset_size: 5000
-      sampling_percent: 0.5
+      sampling_percent: 0.8
       sampling_groups: False
       test_subsampling: 1
       weight_loss: False
@@ -630,7 +626,7 @@ runs:
       root_dir: data/
       num_workers: 8
       # batch_size: 256 #2048
-      batch_size: 2048
+      batch_size: 64 # 2048
       # num_operands: [10] #[20]
       learning_rate: 0.01
       num_operands: [2] #[20]
@@ -643,7 +639,7 @@ runs:
       test_noise_level: 0
       train_dataset_size: 5000 #5000
       test_dataset_size: 5000
-      sampling_percent: 0.5
+      sampling_percent: 0.8
       sampling_groups: False
       test_subsampling: 1
       weight_loss: False
@@ -700,7 +696,7 @@ runs:
       root_dir: data/
       num_workers: 8
       # batch_size: 256 #2048
-      batch_size: 2048
+      batch_size: 64 # 2048
       # num_operands: [10] #[20]
       learning_rate: 0.01
       num_operands: [2] #[20]
@@ -713,7 +709,7 @@ runs:
       test_noise_level: 0
       train_dataset_size: 5000 #5000
       test_dataset_size: 5000
-      sampling_percent: 0.5
+      sampling_percent: 0.8
       sampling_groups: False
       test_subsampling: 1
       weight_loss: False
@@ -765,7 +761,7 @@ runs:
       root_dir: data/
       num_workers: 8
       # batch_size: 256 #2048
-      batch_size: 2048
+      batch_size: 64 # 2048
       # num_operands: [10] #[20]
       learning_rate: 0.01
       num_operands: [2] #[20]
@@ -778,7 +774,7 @@ runs:
       test_noise_level: 0
       train_dataset_size: 5000 #5000
       test_dataset_size: 5000
-      sampling_percent: 0.5
+      sampling_percent: 0.8
       sampling_groups: False
       test_subsampling: 1
       weight_loss: False
@@ -832,7 +828,7 @@ runs:
       root_dir: data/
       num_workers: 8
       # batch_size: 256 #2048
-      batch_size: 2048
+      batch_size: 64 # 2048
       # num_operands: [10] #[20]
       learning_rate: 0.01
       num_operands: [2] #[20]
@@ -845,7 +841,7 @@ runs:
       test_noise_level: 0
       train_dataset_size: 5000 #5000
       test_dataset_size: 5000
-      sampling_percent: 0.5
+      sampling_percent: 0.8
       sampling_groups: False
       test_subsampling: 1
       weight_loss: False
@@ -902,7 +898,7 @@ runs:
       root_dir: data/
       num_workers: 8
       # batch_size: 256 #2048
-      batch_size: 2048
+      batch_size: 64 # 2048
       # num_operands: [10] #[20]
       learning_rate: 0.01
       num_operands: [2] #[20]
@@ -915,7 +911,7 @@ runs:
       test_noise_level: 0
       train_dataset_size: 5000 #5000
       test_dataset_size: 5000
-      sampling_percent: 0.5
+      sampling_percent: 0.8
       sampling_groups: False
       test_subsampling: 1
       weight_loss: False
@@ -967,7 +963,7 @@ runs:
       root_dir: data/
       num_workers: 8
       # batch_size: 256 #2048
-      batch_size: 2048
+      batch_size: 64 # 2048
       # num_operands: [10] #[20]
       learning_rate: 0.01
       num_operands: [2] #[20]
@@ -980,7 +976,7 @@ runs:
       test_noise_level: 0
       train_dataset_size: 5000 #5000
       test_dataset_size: 5000
-      sampling_percent: 0.5
+      sampling_percent: 0.8
       sampling_groups: False
       test_subsampling: 1
       weight_loss: False
@@ -1032,7 +1028,7 @@ runs:
       root_dir: data/
       num_workers: 8
       # batch_size: 256 #2048
-      batch_size: 2048
+      batch_size: 64 # 2048
       # num_operands: [10] #[20]
       learning_rate: 0.01
       num_operands: [2] #[20]
@@ -1045,7 +1041,7 @@ runs:
       test_noise_level: 0
       train_dataset_size: 5000 #5000
       test_dataset_size: 5000
-      sampling_percent: 0.5
+      sampling_percent: 0.8
       sampling_groups: False
       test_subsampling: 1
       weight_loss: False
@@ -1099,7 +1095,7 @@ runs:
       root_dir: data/
       num_workers: 8
       # batch_size: 256 #2048
-      batch_size: 2048
+      batch_size: 64 # 2048
       # num_operands: [10] #[20]
       learning_rate: 0.01
       num_operands: [2] #[20]
@@ -1112,7 +1108,7 @@ runs:
       test_noise_level: 0
       train_dataset_size: 5000 #5000
       test_dataset_size: 5000
-      sampling_percent: 0.5
+      sampling_percent: 0.8
       sampling_groups: False
       test_subsampling: 1
       weight_loss: False
@@ -1163,7 +1159,7 @@ runs:
       root_dir: data/
       num_workers: 8
       # batch_size: 256 #2048
-      batch_size: 2048
+      batch_size: 64 # 2048
       # num_operands: [10] #[20]
       learning_rate: 0.01
       num_operands: [2] #[20]
@@ -1176,7 +1172,7 @@ runs:
       test_noise_level: 0
       train_dataset_size: 5000 #5000
       test_dataset_size: 5000
-      sampling_percent: 0.5
+      sampling_percent: 0.8
       sampling_groups: False
       test_subsampling: 1
       weight_loss: False
@@ -1245,7 +1241,7 @@ runs:
       root_dir: data/
       num_workers: 8
       # batch_size: 256 #2048
-      batch_size: 2048
+      batch_size: 64 # 2048
       # num_operands: [10] #[20]
       learning_rate: 0.01
       num_operands: [2] #[20]
@@ -1258,7 +1254,7 @@ runs:
       test_noise_level: 0
       train_dataset_size: 5000 #5000
       test_dataset_size: 5000
-      sampling_percent: 0.5
+      sampling_percent: 0.8
       sampling_groups: False
       test_subsampling: 1
       weight_loss: False
@@ -1317,7 +1313,7 @@ runs:
       root_dir: data/
       num_workers: 8
       # batch_size: 256 #2048
-      batch_size: 2048
+      batch_size: 64 # 2048
       # num_operands: [10] #[20]
       learning_rate: 0.01
       num_operands: [2] #[20]
@@ -1330,7 +1326,7 @@ runs:
       test_noise_level: 0
       train_dataset_size: 5000 #5000
       test_dataset_size: 5000
-      sampling_percent: 0.5
+      sampling_percent: 0.8
       sampling_groups: False
       test_subsampling: 1
       weight_loss: False
@@ -1390,7 +1386,7 @@ runs:
       root_dir: data/
       num_workers: 8
       # batch_size: 256 #2048
-      batch_size: 2048
+      batch_size: 64 # 2048
       # num_operands: [10] #[20]
       learning_rate: 0.01
       num_operands: [2] #[20]
@@ -1403,7 +1399,7 @@ runs:
       test_noise_level: 0
       train_dataset_size: 5000 #5000
       test_dataset_size: 5000
-      sampling_percent: 0.5
+      sampling_percent: 0.8
       sampling_groups: False
       test_subsampling: 1
       weight_loss: False
@@ -1453,7 +1449,7 @@ runs:
     max_task_epochs: 250
     vib_beta: 0.00005
     concept_loss_weight: [1]
-    learning_rate: 0.001
+    learning_rate: 0.01
     lr_ratio: 10
     weight_decay: 0
     weight_loss: False
@@ -1474,7 +1470,7 @@ runs:
       test_noise_level: 0
       train_dataset_size: 5000 #5000
       test_dataset_size: 5000
-      sampling_percent: 0.5
+      sampling_percent: 0.8
       sampling_groups: False
       test_subsampling: 1
       weight_loss: False
@@ -1530,7 +1526,7 @@ runs:
     max_task_epochs: 250
     vib_beta: 0.00005
     concept_loss_weight: [1]
-    learning_rate: 0.001
+    learning_rate: 0.01
     lr_ratio: 10
     weight_decay: 0
     weight_loss: False
@@ -1542,7 +1538,7 @@ runs:
       root_dir: data/
       num_workers: 8
       # batch_size: 256 #2048
-      batch_size: 2048
+      batch_size: 64 # 2048
       # num_operands: [10] #[20]
       learning_rate: 0.01
       num_operands: [2] #[20]
@@ -1555,7 +1551,7 @@ runs:
       test_noise_level: 0
       train_dataset_size: 5000 #5000
       test_dataset_size: 5000
-      sampling_percent: 0.5
+      sampling_percent: 0.8
       sampling_groups: False
       test_subsampling: 1
       weight_loss: False
@@ -1611,7 +1607,7 @@ runs:
     max_task_epochs: 250
     vib_beta: 0.00005
     concept_loss_weight: [1]
-    learning_rate: 0.001
+    learning_rate: 0.01
     lr_ratio: 10
     weight_decay: 0
     weight_loss: False
@@ -1623,7 +1619,7 @@ runs:
       root_dir: data/
       num_workers: 8
       # batch_size: 256 #2048
-      batch_size: 2048
+      batch_size: 64 # 2048
       # num_operands: [10] #[20]
       learning_rate: 0.01
       num_operands: [2] #[20]
@@ -1636,7 +1632,7 @@ runs:
       test_noise_level: 0
       train_dataset_size: 5000 #5000
       test_dataset_size: 5000
-      sampling_percent: 0.5
+      sampling_percent: 0.8
       sampling_groups: False
       test_subsampling: 1
       weight_loss: False
@@ -1722,7 +1718,7 @@ runs:
       root_dir: data/
       num_workers: 8
       # batch_size: 256 #2048
-      batch_size: 2048
+      batch_size: 64 # 2048
       # num_operands: [10] #[20]
       learning_rate: 0.01
       num_operands: [2] #[20]
@@ -1735,7 +1731,7 @@ runs:
       test_noise_level: 0
       train_dataset_size: 5000 #5000
       test_dataset_size: 5000
-      sampling_percent: 0.5
+      sampling_percent: 0.8
       sampling_groups: False
       test_subsampling: 1
       weight_loss: False
@@ -1801,7 +1797,7 @@ runs:
       root_dir: data/
       num_workers: 8
       # batch_size: 256 #2048
-      batch_size: 2048
+      batch_size: 64 # 2048
       # num_operands: [10] #[20]
       learning_rate: 0.01
       num_operands: [2] #[20]
@@ -1814,7 +1810,7 @@ runs:
       test_noise_level: 0
       train_dataset_size: 5000 #5000
       test_dataset_size: 5000
-      sampling_percent: 0.5
+      sampling_percent: 0.8
       sampling_groups: False
       test_subsampling: 1
       weight_loss: False
@@ -1881,7 +1877,7 @@ runs:
       root_dir: data/
       num_workers: 8
       # batch_size: 256 #2048
-      batch_size: 2048
+      batch_size: 64 # 2048
       # num_operands: [10] #[20]
       learning_rate: 0.01
       num_operands: [2] #[20]
@@ -1894,7 +1890,7 @@ runs:
       test_noise_level: 0
       train_dataset_size: 5000 #5000
       test_dataset_size: 5000
-      sampling_percent: 0.5
+      sampling_percent: 0.8
       sampling_groups: False
       test_subsampling: 1
       weight_loss: False
@@ -1966,7 +1962,7 @@ runs:
       root_dir: data/
       num_workers: 8
       # batch_size: 256 #2048
-      batch_size: 2048
+      batch_size: 64 # 2048
       # num_operands: [10] #[20]
       learning_rate: 0.01
       num_operands: [2] #[20]
@@ -1979,7 +1975,7 @@ runs:
       test_noise_level: 0
       train_dataset_size: 5000 #5000
       test_dataset_size: 5000
-      sampling_percent: 0.5
+      sampling_percent: 0.8
       sampling_groups: False
       test_subsampling: 1
       weight_loss: False
@@ -2045,7 +2041,7 @@ runs:
       root_dir: data/
       num_workers: 8
       # batch_size: 256 #2048
-      batch_size: 2048
+      batch_size: 64 # 2048
       # num_operands: [10] #[20]
       learning_rate: 0.01
       num_operands: [2] #[20]
@@ -2058,7 +2054,7 @@ runs:
       test_noise_level: 0
       train_dataset_size: 5000 #5000
       test_dataset_size: 5000
-      sampling_percent: 0.5
+      sampling_percent: 0.8
       sampling_groups: False
       test_subsampling: 1
       weight_loss: False
@@ -2125,7 +2121,7 @@ runs:
       root_dir: data/
       num_workers: 8
       # batch_size: 256 #2048
-      batch_size: 2048
+      batch_size: 64 # 2048
       # num_operands: [10] #[20]
       learning_rate: 0.01
       num_operands: [2] #[20]
@@ -2138,7 +2134,7 @@ runs:
       test_noise_level: 0
       train_dataset_size: 5000 #5000
       test_dataset_size: 5000
-      sampling_percent: 0.5
+      sampling_percent: 0.8
       sampling_groups: False
       test_subsampling: 1
       weight_loss: False
@@ -2186,7 +2182,7 @@ runs:
     load_path_name: "CMCMixIntCEM_t_{temperature}_r_{all_intervened_loss_weight}_None_mpc_{mixed_probs_coeff}_tmc_{montecarlo_train_tries}_emc_{montecarlo_test_tries}_ce_0_g_ood_{ood_dropout_prob}_emb_{emb_size}_True_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_cwl_{concept_loss_weight}_Downstream_Spurious_{dataset_config[num_operands]}"
 
 
-    concept_loss_weight: [10, 1] #[10, 5, 1]
+    concept_loss_weight: [1, 10]
     emb_size: [16]
     shared_emb_generator: True
     montecarlo_train_tries: [1]
@@ -2198,32 +2194,33 @@ runs:
     learnable_temps: False
     class_wise_temperature: False
     global_epochs: [0]
-    global_mixed_probs_coeff: 0
+    # global_mixed_probs_coeff: 0
     global_cem_only_pass: True
     freeze_global_embeddings: False
     uncerainty_threshold_percentile: [null]
     inference_threshold: False
     mixed_probs_coeff: [1]
-    all_intervened_loss_weight: [10, 1, 0.1]
+    all_intervened_loss_weight: [1, 0.1, 10]
     calibrate_concept_probs: True
     dynamic_confidence_scaling: True
     dyn_prob_with_global: True
-    temperature: [0, 1] #, 2]
+    temperature: [1, 2, 0]
     scale_fn: "linear"
+    ignore_task_acc_in_calibration: False
 
     ###############################################################################################
 
     # IntCEM stuff
-    gradient_clip_val: 100
-    embedding_activation: null
+    # gradient_clip_val: 75 # null
     training_intervention_prob: [0.25]
-    intervention_task_discount: [1.5]
+    intervention_weight: [0.1]
+    intervention_task_discount: [1.1]
     use_concept_groups: True
     int_model_use_bn: True
     int_model_layers: [128, 128, 64, 64]
+    embedding_activation: null
     max_horizon: 6
     horizon_rate: 1.005
-    intervention_weight: [0.1]
     grid_variables:
       - dataset_config.num_operands
       - training_intervention_prob
@@ -2250,7 +2247,7 @@ runs:
       root_dir: data/
       num_workers: 8
       # batch_size: 256 #2048
-      batch_size: 2048
+      batch_size: 64 # 2048
       # num_operands: [10] #[20]
       learning_rate: 0.01
       num_operands: [2] #[20]
@@ -2263,7 +2260,7 @@ runs:
       test_noise_level: 0
       train_dataset_size: 5000 #5000
       test_dataset_size: 5000
-      sampling_percent: 0.5
+      sampling_percent: 0.8
       sampling_groups: False
       test_subsampling: 1
       weight_loss: False
@@ -2300,7 +2297,7 @@ runs:
     run_name: "CMCMixIntCEM_t_{temperature}_r_{all_intervened_loss_weight}_{uncerainty_threshold_percentile}_mpc_{mixed_probs_coeff}_tmc_{montecarlo_train_tries}_emc_{montecarlo_test_tries}_ce_{calibration_epochs}_g_ood_{ood_dropout_prob}_emb_{emb_size}_{finetune_with_val}_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_cwl_{concept_loss_weight}_Concept_Spurious_{dataset_config[num_operands]}"
     load_path_name: "CMCMixIntCEM_t_{temperature}_r_{all_intervened_loss_weight}_None_mpc_{mixed_probs_coeff}_tmc_{montecarlo_train_tries}_emc_{montecarlo_test_tries}_ce_0_g_ood_{ood_dropout_prob}_emb_{emb_size}_True_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_cwl_{concept_loss_weight}_Concept_Spurious_{dataset_config[num_operands]}"
 
-    concept_loss_weight: [10, 1] #[10, 5, 1]
+    concept_loss_weight: [1, 10]
     emb_size: [16]
     shared_emb_generator: True
     montecarlo_train_tries: [1]
@@ -2312,32 +2309,33 @@ runs:
     learnable_temps: False
     class_wise_temperature: False
     global_epochs: [0]
-    global_mixed_probs_coeff: 0
+    # global_mixed_probs_coeff: 0
     global_cem_only_pass: True
     freeze_global_embeddings: False
     uncerainty_threshold_percentile: [null]
     inference_threshold: False
     mixed_probs_coeff: [1]
-    all_intervened_loss_weight: [10, 1, 0.1]
+    all_intervened_loss_weight: [1, 0.1, 10]
     calibrate_concept_probs: True
     dynamic_confidence_scaling: True
     dyn_prob_with_global: True
-    temperature: [0, 1] #, 2]
+    temperature: [1, 2, 0]
     scale_fn: "linear"
+    ignore_task_acc_in_calibration: False
 
     ###############################################################################################
 
     # IntCEM stuff
-    gradient_clip_val: 100
-    embedding_activation: null
+    # gradient_clip_val: 75 # null
     training_intervention_prob: [0.25]
-    intervention_task_discount: [1.5]
+    intervention_weight: [0.1]
+    intervention_task_discount: [1.1]
     use_concept_groups: True
     int_model_use_bn: True
     int_model_layers: [128, 128, 64, 64]
+    embedding_activation: null
     max_horizon: 6
     horizon_rate: 1.005
-    intervention_weight: [0.1]
     grid_variables:
       - dataset_config.num_operands
       - training_intervention_prob
@@ -2364,7 +2362,7 @@ runs:
       root_dir: data/
       num_workers: 8
       # batch_size: 256 #2048
-      batch_size: 2048
+      batch_size: 64 # 2048
       # num_operands: [10] #[20]
       learning_rate: 0.01
       num_operands: [2] #[20]
@@ -2377,7 +2375,7 @@ runs:
       test_noise_level: 0
       train_dataset_size: 5000 #5000
       test_dataset_size: 5000
-      sampling_percent: 0.5
+      sampling_percent: 0.8
       sampling_groups: False
       test_subsampling: 1
       weight_loss: False

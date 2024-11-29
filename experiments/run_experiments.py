@@ -84,6 +84,7 @@ from pytorch_lightning import seed_everything
 from cem.data.synthetic_loaders import (
     get_synthetic_data_loader, get_synthetic_num_features
 )
+import cem.data.awa2_loader as awa2_data_module
 import cem.data.celeba_loader as celeba_data_module
 import cem.data.color_mnist_add as color_mnist_data_module
 import cem.data.CUB200.cub_loader as cub_data_module
@@ -340,23 +341,26 @@ def _generate_dataset_and_update_config(
         )
 
     dataset_config = experiment_config['dataset_config']
+    ds_name = dataset_config["dataset"].strip().lower()
     logging.debug(
         f"The dataset's root directory is {dataset_config.get('root_dir')}"
     )
     intervention_config = experiment_config.get('intervention_config', {})
-    if dataset_config["dataset"] == "cub":
+    if ds_name == "cub":
         data_module = cub_data_module
-    elif dataset_config["dataset"] == "waterbirds":
+    elif ds_name == "awa2":
+        data_module = awa2_data_module
+    elif ds_name == "waterbirds":
         data_module = waterbirds_data_module
-    elif dataset_config["dataset"] == "celeba":
+    elif ds_name == "celeba":
         data_module = celeba_data_module
-    elif dataset_config["dataset"] in ["xor", "vector", "dot", "trig"]:
-        data_module = get_synthetic_data_loader(dataset_config["dataset"])
-    elif dataset_config["dataset"] == "mnist_add":
+    elif ds_name in ["xor", "vector", "dot", "trig"]:
+        data_module = get_synthetic_data_loader(ds_name)
+    elif ds_name == "mnist_add":
         data_module = mnist_data_module
-    elif dataset_config["dataset"] == "traffic":
+    elif ds_name == "traffic":
         data_module = traffic_data_module
-    elif dataset_config["dataset"] == "color_mnist_add":
+    elif ds_name == "color_mnist_add":
         data_module = color_mnist_data_module
     else:
         raise ValueError(f"Unsupported dataset {dataset_config['dataset']}!")
@@ -423,7 +427,7 @@ def _generate_dataset_and_update_config(
                 in_channels=3,
             )
     elif experiment_config['c_extractor_arch'] == 'synth_extractor':
-        input_features = get_synthetic_num_features(dataset_config["dataset"])
+        input_features = get_synthetic_num_features(ds_name)
         def synth_c_extractor_arch(
             output_dim,
             pretrained=False,

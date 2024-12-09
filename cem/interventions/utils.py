@@ -418,6 +418,7 @@ def intervene_in_cbm(
             test_dl,
             as_torch=True,
             output_groups=True,
+            num_workers=config.get('num_load_workers', config.get('num_workers', 1)),
         )
     np.random.seed(42)
     indices = np.random.permutation(x_test.shape[0])[
@@ -802,6 +803,7 @@ def generate_policy_training_data(
     x_train, y_train, c_train = data_utils.daloader_to_memory(
         train_dl,
         as_torch=True,
+        num_workers=config.get('num_load_workers', config.get('num_workers', 1)),
     )
     unshuffle_dl = torch.utils.data.DataLoader(
         dataset=torch.utils.data.TensorDataset(x_train, y_train, c_train),
@@ -843,7 +845,10 @@ def generate_policy_training_data(
             list(map(lambda x: x[0].detach().cpu().numpy(), val_batch_results)),
             axis=0,
         )
-        _, _, val_c_true = data_utils.daloader_to_memory(val_dl)
+        _, _, val_c_true = data_utils.daloader_to_memory(
+            val_dl,
+            num_workers=config.get('num_load_workers', config.get('num_workers', 1)),
+        )
         for concept_idx in range(n_concepts):
             if (
                 (len(np.unique(val_c_true[:, concept_idx] >= 0.5)) == 1) or
@@ -1293,6 +1298,7 @@ def test_interventions(
         test_dl,
         as_torch=True,
         output_groups=True,
+        num_workers=config.get('num_load_workers', config.get('num_workers', 1)),
     )
 
     for competence_level in competence_levels:

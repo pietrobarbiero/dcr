@@ -52,6 +52,7 @@ def evaluate_cbm(
             test_dl,
             as_torch=True,
             only_labels=True,
+            num_workers=config.get('num_load_workers', config.get('num_workers', 1)),
         )
         c_pred = torch.cat(
             list(map(lambda x: x[0].detach().cpu(), batch_results)),
@@ -213,6 +214,7 @@ def evaluate_representation_metrics(
     x_test, y_test, c_test = data_utils.daloader_to_memory(
         test_dl,
         as_torch=True,
+        num_workers=config.get('num_load_workers', config.get('num_workers', 1)),
     )
 
     # Now include the competence that we will assume
@@ -326,6 +328,7 @@ def evaluate_representation_metrics(
         x_train, y_train, c_train = data_utils.daloader_to_memory(
             train_dl,
             as_torch=True,
+            num_workers=config.get('num_load_workers', config.get('num_workers', 1)),
         )
 
         used_train_dl = torch.utils.data.DataLoader(

@@ -34,6 +34,7 @@ class TrafficDataset(Dataset):
         image_size=256,
         concept_transform=None,
         class_dtype=float,
+        additional_sample_transform=None,
     ):
         self.root_dir = root_dir
         self.augment_data = augment_data
@@ -60,12 +61,14 @@ class TrafficDataset(Dataset):
                 train=True,
                 augment_data=augment_data,
                 image_size=image_size,
+                additional_sample_transform=additional_sample_transform,
             )
         else:
             self.transform = get_transform_traffic(
                 train=False,
                 augment_data=augment_data,
                 image_size=image_size,
+                additional_sample_transform=additional_sample_transform,
             )
 
     def _from_meta_to_concepts(self, sample_meta):
@@ -150,8 +153,13 @@ class TrafficDataset(Dataset):
         return img, y, c
 
 
-def get_transform_traffic(train, augment_data, image_size=256):
-    """Helper function to get the appropiate transformation for the Waterbirds
+def get_transform_traffic(
+    train,
+    augment_data,
+    image_size=256,
+    additional_sample_transform=None,
+):
+    """Helper function to get the appropiate transformation for the
     data loader.
 
     Args:
@@ -166,28 +174,10 @@ def get_transform_traffic(train, augment_data, image_size=256):
         torchvision.Transform: a valid torchvision transform to be applied to
             each image of the Waterbirds dataset being loaded.
     """
-    scale = 256.0/224.0
-    if (not train) or (not augment_data):
-        # Resizes the image to a slightly larger square then crops the center.
-        transform = lambda x: x
-        # transforms.Compose([
-        #     transforms.Resize((
-        #         int(image_size*scale),
-        #         int(image_size*scale),
-        #     )),
-        #     # transforms.ToTensor(),
-        # ])
-    else:
-        transform = lambda x: x
-        # transform = transforms.Compose([
-        #     transforms.Resize((
-        #         int(image_size*scale),
-        #         int(image_size*scale),
-        #     )),
-        #     transforms.RandomHorizontalFlip(),
-        #     # transforms.ToTensor(),
-        # ])
-    return transform
+    return (
+        additional_sample_transform if additional_sample_transform is not None
+        else (lambda x: x)
+    )
 
 
 def load_data(
@@ -200,6 +190,7 @@ def load_data(
     dataset_size=None,
     augment_data=False,
     concept_transform=None,
+    additional_sample_transform=None,
 ):
     """
     TODO
@@ -210,6 +201,7 @@ def load_data(
         augment_data=augment_data,
         image_size=image_size,
         concept_transform=concept_transform,
+        additional_sample_transform=additional_sample_transform,
     )
     if dataset_size is not None:
         # Then we will subsample this training set so that after splitting
@@ -272,6 +264,10 @@ def generate_data(
     rerun=False,
     dataset_transform=lambda x: x,
     training_transform=None,
+
+    train_sample_transform=None,
+    test_sample_transform=None,
+    val_sample_transform=None,
 ):
     if root_dir is None:
         root_dir = DATASET_DIR
@@ -334,6 +330,7 @@ def generate_data(
         dataset_size=dataset_size,
         augment_data=augment_data,
         concept_transform=concept_transform,
+        additional_sample_transform=train_sample_transform,
     )
 
     if config.get('weight_loss', False):
@@ -357,6 +354,7 @@ def generate_data(
         dataset_size=dataset_size,
         augment_data=False,
         concept_transform=concept_transform,
+        additional_sample_transform=val_sample_transform,
     )
 
     test_dl = load_data(
@@ -369,6 +367,7 @@ def generate_data(
         dataset_size=dataset_size,
         augment_data=False,
         concept_transform=concept_transform,
+        additional_sample_transform=test_sample_transform,
     )
 
     if not output_dataset_vars:

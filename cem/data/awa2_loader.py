@@ -34,8 +34,6 @@ DATASET_DIR = os.environ.get("DATASET_DIR", 'data/AwA2/')
 ## CONCEPT INFORMATION REGARDING AwA2
 #########################################################
 
-SElECTED_CONCEPTS = list(range(1, 51))
-
 CLASS_NAMES = [
     'antelope',
     'grizzly+bear',
@@ -227,6 +225,7 @@ class AwA2Dataset(Dataset):
         split='train',
         image_size=224,
         concept_transform=None,
+        sample_transform=None,
         seed=42,
     ):
         self.root_dir = root_dir
@@ -246,12 +245,14 @@ class AwA2Dataset(Dataset):
                 train=True,
                 augment_data=augment_data,
                 image_size=image_size,
+                sample_transform=sample_transform,
             )
         else:
             self.transform = get_transform_awa2(
                 train=False,
                 augment_data=augment_data,
                 image_size=image_size,
+                sample_transform=sample_transform,
             )
 
 
@@ -351,6 +352,8 @@ class AwA2Dataset(Dataset):
             img = self.transform(img)
         label_idx = self.img_labels[index]
         concepts = self.predicate_binary_mat[label_idx,:]
+        if self.concept_transform is not None:
+            concepts = self.concept_transform(concepts)
         return img, label_idx, torch.FloatTensor(concepts)
 
 
@@ -358,7 +361,12 @@ class AwA2Dataset(Dataset):
         return len(self.img_paths)
 
 
-def get_transform_awa2(train, augment_data, image_size=224):
+def get_transform_awa2(
+    train,
+    augment_data,
+    image_size=224,
+    sample_transform=None,
+):
     """Helper function to get the appropiate transformation for the awa2
     data loader.
 
@@ -375,6 +383,10 @@ def get_transform_awa2(train, augment_data, image_size=224):
             each image of the awa2 dataset being loaded.
     """
     scale = 256.0/224.0
+    sample_transform = (
+        sample_transform if sample_transform is not None
+        else (lambda x: x)
+    )
     if (not train) or (not augment_data):
         # Resizes the image to a slightly larger square then crops the center.
         transform = transforms.Compose([
@@ -384,6 +396,7 @@ def get_transform_awa2(train, augment_data, image_size=224):
             )),
             transforms.CenterCrop(image_size),
             transforms.ToTensor(),
+            sample_transform,
             transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
         ])
     else:
@@ -395,6 +408,7 @@ def get_transform_awa2(train, augment_data, image_size=224):
                 interpolation=2),
             transforms.RandomHorizontalFlip(),
             transforms.ToTensor(),
+            sample_transform,
             transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])
         ])
     return transform
@@ -410,6 +424,7 @@ def load_data(
     dataset_size=None,
     augment_data=False,
     concept_transform=None,
+    additional_sample_transform=None,
 ):
     """Generates a Dataloader for the awa2 dataset.
 
@@ -441,12 +456,17 @@ def load_data(
         torch.Dataloader: the corresponding data loader for the requested
             awa2 split.
     """
+    additional_sample_transform = (
+        additional_sample_transform if additional_sample_transform is not None
+        else (lambda x: x)
+    )
     dataset = AwA2Dataset(
         split=split,
         root_dir=root_dir,
         augment_data=augment_data,
         image_size=image_size,
         concept_transform=concept_transform,
+        sample_transform=additional_sample_transform,
     )
     if dataset_size is not None:
         # Then we will subsample this training set so that after splitting
@@ -515,6 +535,9 @@ def generate_data(
     rerun=False,
     dataset_transform=lambda x: x,
     training_transform=None,
+    train_sample_transform=None,
+    test_sample_transform=None,
+    val_sample_transform=None,
 ):
     if root_dir is None:
         root_dir = DATASET_DIR
@@ -619,6 +642,7 @@ def generate_data(
         dataset_size=dataset_size,
         augment_data=augment_data,
         concept_transform=concept_transform,
+        additional_sample_transform=train_sample_transform,
     )
 
     if config.get('weight_loss', False):
@@ -643,6 +667,7 @@ def generate_data(
             dataset_size=dataset_size,
             augment_data=False,
             concept_transform=concept_transform,
+            additional_sample_transform=val_sample_transform,
         )
     else:
         ys = []
@@ -741,6 +766,7 @@ def generate_data(
         dataset_size=dataset_size,
         augment_data=False,
         concept_transform=concept_transform,
+        additional_sample_transform=test_sample_transform,
     )
 
     if not output_dataset_vars:

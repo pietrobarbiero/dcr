@@ -68,6 +68,7 @@ class WaterbirdsDataset(Dataset):
         concept_transform=None,
         n_classes=2,
         majority_vote_attrs=False,
+        additional_sample_transform=None,
     ):
         self.root_dir = root_dir
         self.augment_data = augment_data
@@ -157,12 +158,14 @@ class WaterbirdsDataset(Dataset):
                 train=True,
                 augment_data=augment_data,
                 image_size=image_size,
+                additional_sample_transform=additional_sample_transform,
             )
         else:
             self.transform = get_transform_waterbirds(
                 train=False,
                 augment_data=augment_data,
                 image_size=image_size,
+                additional_sample_transform=additional_sample_transform,
             )
 
     def __len__(self):
@@ -190,7 +193,12 @@ class WaterbirdsDataset(Dataset):
         return img, y, c
 
 
-def get_transform_waterbirds(train, augment_data, image_size=224):
+def get_transform_waterbirds(
+    train,
+    augment_data,
+    image_size=224,
+    additional_sample_transform=None,
+):
     """Helper function to get the appropiate transformation for the Waterbirds
     data loader.
 
@@ -206,10 +214,15 @@ def get_transform_waterbirds(train, augment_data, image_size=224):
         torchvision.Transform: a valid torchvision transform to be applied to
             each image of the Waterbirds dataset being loaded.
     """
+    additional_sample_transform = (
+        additional_sample_transform if additional_sample_transform is not None
+        else (lambda x: x)
+    )
     scale = 256.0/224.0
     if (not train) or (not augment_data):
         # Resizes the image to a slightly larger square then crops the center.
         transform = transforms.Compose([
+            additional_sample_transform,
             transforms.Resize((
                 int(image_size*scale),
                 int(image_size*scale),
@@ -220,6 +233,7 @@ def get_transform_waterbirds(train, augment_data, image_size=224):
         ])
     else:
         transform = transforms.Compose([
+            additional_sample_transform,
             transforms.RandomResizedCrop(
                 image_size,
                 scale=(0.7, 1.0),
@@ -247,6 +261,7 @@ def load_data(
     majority_vote_attrs=False,
     cub_root_dir=None,
     concept_transform=None,
+    additional_sample_transform=None,
 ):
     """Generates a Dataloader for the Waterbirds dataset.
 
@@ -289,6 +304,7 @@ def load_data(
         use_bird_species=use_bird_species,
         concept_transform=concept_transform,
         majority_vote_attrs=majority_vote_attrs,
+        additional_sample_transform=additional_sample_transform,
     )
     if dataset_size is not None:
         # Then we will subsample this training set so that after splitting
@@ -358,6 +374,10 @@ def generate_data(
     rerun=False,
     dataset_transform=lambda x: x,
     training_transform=None,
+
+    train_sample_transform=None,
+    test_sample_transform=None,
+    val_sample_transform=None,
 ):
     if root_dir is None:
         root_dir = DATASET_DIR
@@ -480,6 +500,7 @@ def generate_data(
         use_bird_species=use_bird_species,
         majority_vote_attrs=majority_vote_attrs,
         concept_transform=concept_transform,
+        additional_sample_transform=train_sample_transform,
     )
 
     if config.get('weight_loss', False):
@@ -517,6 +538,7 @@ def generate_data(
             use_bird_species=use_bird_species,
             majority_vote_attrs=majority_vote_attrs,
             concept_transform=concept_transform,
+            additional_sample_transform=val_sample_transform,
         )
     else:
         ys = []
@@ -620,6 +642,7 @@ def generate_data(
         use_bird_species=use_bird_species,
         majority_vote_attrs=majority_vote_attrs,
         concept_transform=concept_transform,
+        additional_sample_transform=test_sample_transform,
     )
 
     if not output_dataset_vars:

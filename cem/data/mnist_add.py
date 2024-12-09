@@ -9,6 +9,8 @@ import torchvision
 
 from pytorch_lightning import seed_everything
 
+from cem.data.utils import LambdaDataset
+
 
 def inject_uncertainty(
     *datasets,
@@ -253,6 +255,9 @@ def load_mnist_addition(
     concept_transform=None,
     noise_level=0.0,
     test_noise_level=None,
+    train_sample_transform=None,
+    test_sample_transform=None,
+    val_sample_transform=None,
 ):
     test_noise_level = (
         test_noise_level if (test_noise_level is not None) else noise_level
@@ -316,6 +321,10 @@ def load_mnist_addition(
         y_test = torch.LongTensor(y_test)
     c_test = torch.FloatTensor(c_test)
     test_data = torch.utils.data.TensorDataset(x_test, y_test, c_test)
+    test_data = LambdaDataset(
+        test_data,
+        trasnform=test_sample_transform,
+    )
     test_dl = torch.utils.data.DataLoader(
         test_data,
         batch_size=batch_size,
@@ -391,6 +400,10 @@ def load_mnist_addition(
             y_val = torch.LongTensor(y_val)
         c_val = torch.FloatTensor(c_val)
         val_data = torch.utils.data.TensorDataset(x_val, y_val, c_val)
+        val_data = LambdaDataset(
+            val_data,
+            trasnform=val_sample_transform,
+        )
         val_dl = torch.utils.data.DataLoader(
             val_data,
             batch_size=batch_size,
@@ -432,6 +445,10 @@ def load_mnist_addition(
         y_train = torch.LongTensor(y_train)
     c_train = torch.FloatTensor(c_train)
     train_data = torch.utils.data.TensorDataset(x_train, y_train, c_train)
+    train_data = LambdaDataset(
+        train_data,
+        trasnform=train_sample_transform,
+    )
     train_dl = torch.utils.data.DataLoader(
         train_data,
         batch_size=batch_size,
@@ -455,12 +472,16 @@ def load_mnist_addition(
 
 
 def generate_data(
-        config,
-        root_dir="mnist",
-        seed=42,
-        output_dataset_vars=False,
-        rerun=False,
-    ):
+    config,
+    root_dir="mnist",
+    seed=42,
+    output_dataset_vars=False,
+    rerun=False,
+
+    train_sample_transform=None,
+    test_sample_transform=None,
+    val_sample_transform=None,
+):
     selected_digits = config.get("selected_digits", list(range(2)))
     num_operands = config.get("num_operands", 32)
     if not isinstance(selected_digits[0], list):
@@ -591,6 +612,9 @@ def generate_data(
             "test_noise_level",
             config.get("noise_level", 0),
         ),
+        train_sample_transform=train_sample_transform,
+        test_sample_transform=test_sample_transform,
+        val_sample_transform=val_sample_transform,
     )
 
     if config.get('weight_loss', False):

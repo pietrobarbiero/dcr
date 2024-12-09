@@ -8,6 +8,8 @@ import sklearn.model_selection
 import torch
 import torchvision
 
+from cem.data.utils import LambdaDataset
+
 
 def _color_digit(
     x,
@@ -295,6 +297,10 @@ def load_color_mnist_addition(
     test_digit_color_distribution=None,
     spurious_strength=0,
     color_by_label=False,
+
+    train_sample_transform=None,
+    test_sample_transform=None,
+    val_sample_transform=None,
 ):
     if digit_color_distribution:
         real_distr_map = copy.deepcopy(digit_color_distribution)
@@ -409,6 +415,10 @@ def load_color_mnist_addition(
         c_test,
         g_test,
     )
+    test_data = LambdaDataset(
+        test_data,
+        trasnform=test_sample_transform,
+    )
     test_dl = torch.utils.data.DataLoader(
         test_data,
         batch_size=batch_size,
@@ -486,6 +496,10 @@ def load_color_mnist_addition(
         g_val = torch.LongTensor(g_val)
         c_val = torch.FloatTensor(c_val)
         val_data = torch.utils.data.TensorDataset(x_val, y_val, c_val, g_val)
+        val_data = LambdaDataset(
+            val_data,
+            trasnform=val_sample_transform,
+        )
         val_dl = torch.utils.data.DataLoader(
             val_data,
             batch_size=batch_size,
@@ -534,6 +548,10 @@ def load_color_mnist_addition(
         c_train,
         g_train,
     )
+    train_data = LambdaDataset(
+        train_data,
+        trasnform=train_sample_transform,
+    )
     train_dl = torch.utils.data.DataLoader(
         train_data,
         batch_size=batch_size,
@@ -551,6 +569,9 @@ def generate_data(
     seed=42,
     output_dataset_vars=False,
     rerun=False,
+    train_sample_transform=None,
+    test_sample_transform=None,
+    val_sample_transform=None,
 ):
     selected_digits = config.get("selected_digits", list(range(2)))
     num_operands = config.get("num_operands", 32)
@@ -695,6 +716,9 @@ def generate_data(
         digit_color_distribution=config.get("digit_color_distribution", None),
         test_digit_color_distribution=config.get("test_digit_color_distribution", None),
         color_by_label=config.get('color_by_label', False),
+        train_sample_transform=train_sample_transform,
+        test_sample_transform=test_sample_transform,
+        val_sample_transform=val_sample_transform
     )
 
     if config.get('weight_loss', False):

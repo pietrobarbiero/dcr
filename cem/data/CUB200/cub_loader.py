@@ -1722,6 +1722,8 @@ def load_data(
     clip_concept_embbedings_path=None,
     traveling_birds_root_dir=None,
     traveling_birds=False,
+
+    additional_sample_transform=None,
 ):
     """
     Note: Inception needs (299,299,3) images with inputs scaled between -1 and 1
@@ -1732,6 +1734,11 @@ def load_data(
     """
     resized_resol = int(resol * 256/224)
     is_training = any(['train.pkl' in f for f in pkl_paths])
+    additional_sample_transform = (
+        (lambda x: x) if additional_sample_transform is None
+        else additional_sample_transform
+    )
+
     if from_clip_embedding:
         transform = None
     elif is_training:
@@ -1741,13 +1748,16 @@ def load_data(
                 transforms.RandomHorizontalFlip(p=0.5),
                 transforms.ColorJitter(0.1),
                 transforms.ToTensor(),
+                additional_sample_transform,
             ])
         else:
             transform = transforms.Compose([
+                additional_sample_transform,
                 transforms.ColorJitter(brightness=32/255, saturation=(0.5, 1.5)),
                 transforms.RandomResizedCrop(resol),
                 transforms.RandomHorizontalFlip(),
                 transforms.ToTensor(), #implicitly divides by 255
+                additional_sample_transform,
                 transforms.Normalize(mean = [0.5, 0.5, 0.5], std = [2, 2, 2])
             ])
     else:
@@ -1755,11 +1765,13 @@ def load_data(
             transform = transforms.Compose([
                 transforms.CenterCrop((320, 320)),
                 transforms.ToTensor(),
+                additional_sample_transform,
             ])
         else:
             transform = transforms.Compose([
                 transforms.CenterCrop(resol),
                 transforms.ToTensor(), #implicitly divides by 255
+                additional_sample_transform,
                 transforms.Normalize(mean = [0.5, 0.5, 0.5], std = [2, 2, 2])
             ])
 
@@ -1869,6 +1881,9 @@ def generate_data(
     seed=42,
     output_dataset_vars=False,
     rerun=False,
+    train_sample_transform=None,
+    test_sample_transform=None,
+    val_sample_transform=None,
 ):
     if root_dir is None:
         root_dir = DATASET_DIR
@@ -1989,6 +2004,7 @@ def generate_data(
         clip_concept_embbedings_path=clip_concept_embbedings_path,
         traveling_birds_root_dir=traveling_birds_root_dir,
         traveling_birds=traveling_birds,
+        additional_sample_transform=train_sample_transform,
     )
     val_dl = load_data(
         pkl_paths=[val_data_path],
@@ -2008,6 +2024,7 @@ def generate_data(
         clip_concept_embbedings_path=clip_concept_embbedings_path,
         traveling_birds_root_dir=traveling_birds_root_dir,
         traveling_birds=traveling_birds,
+        additional_sample_transform=val_sample_transform,
     )
 
     test_dl = load_data(
@@ -2028,6 +2045,7 @@ def generate_data(
         clip_concept_embbedings_path=clip_concept_embbedings_path,
         traveling_birds_root_dir=traveling_birds_root_dir,
         traveling_birds=traveling_birds,
+        additional_sample_transform=test_sample_transform,
     )
     if not output_dataset_vars:
         return train_dl, val_dl, test_dl, imbalance

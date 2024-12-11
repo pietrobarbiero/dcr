@@ -4,6 +4,7 @@ model_selection_trials: 1
 results_dir: /anfs/bigdisc/me466/mixcem_results/cub_incomplete/
 
 model_selection_groups:
+  - ["^(DNN).*$", "DNN (Baseline)"]
   - ["^(CBM_Sigmoid_Baseline_).*$", "Joint CBM (Baseline)"]
   - ["^(Hybrid-CBM_).*(_Baseline_).*$", "Hybrid-CBM (Baseline)"]
   - ["^(CEM_Baseline_).*$", "CEM (Baseline)"]
@@ -146,14 +147,14 @@ shared_params:
             amount: 0.1
             s_vs_p: 0.5
 
-      #- name: "OOD_sap_0.25"
-      #  update_previous: True
-      #  dataset_config:
-      #    test_transformation_config:
-      #      post_generation: False
-      #      name: salt_and_pepper
-      #      amount: 0.25
-      #      s_vs_p: 0.5
+      - name: "OOD_sap_0.25"
+        update_previous: True
+        dataset_config:
+          test_transformation_config:
+            post_generation: False
+            name: salt_and_pepper
+            amount: 0.25
+            s_vs_p: 0.5
 
       - name: "OOD_sap_0.5"
         update_previous: True
@@ -164,14 +165,14 @@ shared_params:
             amount: 0.5
             s_vs_p: 0.5
 
-      #- name: "OOD_sap_0.75"
-      #  update_previous: True
-      #  dataset_config:
-      #    test_transformation_config:
-      #      post_generation: False
-      #      name: salt_and_pepper
-      #      amount: 0.75
-      #      s_vs_p: 0.5
+      - name: "OOD_sap_0.75"
+        update_previous: True
+        dataset_config:
+          test_transformation_config:
+            post_generation: False
+            name: salt_and_pepper
+            amount: 0.75
+            s_vs_p: 0.5
 
       - name: "OOD_sap_0.9"
         update_previous: True

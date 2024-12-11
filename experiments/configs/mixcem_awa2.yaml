@@ -3,6 +3,7 @@ model_selection_trials: 1
 results_dir: /anfs/bigdisc/me466/mixcem_results/awa2_complete/
 
 model_selection_groups:
+  - ["^(DNN).*$", "DNN (Baseline)"]
   - ["^(CBM_Sigmoid_Baseline_).*$", "Joint CBM (Baseline)"]
   - ["^(CBM_Logit_Baseline_).*$", "Joint Logit CBM (Baseline)"]
   - ["^(Hybrid-CBM_).*(_Baseline_).*$", "Hybrid-CBM (Baseline)"]

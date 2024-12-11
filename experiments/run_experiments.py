@@ -190,6 +190,11 @@ def _generate_dataset_and_update_config(
         )
 
     dataset_config = experiment_config['dataset_config']
+    dataset_config['num_workers'] = experiment_config.get(
+        'num_workers',
+        dataset_config.get('num_workers', 8),
+    )
+
     ds_name = dataset_config["dataset"].strip().lower()
     logging.debug(
         f"The dataset's root directory is {dataset_config.get('root_dir')}"

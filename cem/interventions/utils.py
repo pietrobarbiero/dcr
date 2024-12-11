@@ -332,6 +332,10 @@ def intervene_in_cbm(
     seed=None,
     use_auc=False,
 ):
+    print("train_dl.num_workers =", train_dl.num_workers)
+    print("test_dl.num_workers =", test_dl.num_workers)
+    print("config.get('num_workers', 1) =", config.get('num_workers', 1))
+    print("config.get('num_load_workers', config.get('num_workers', 1)) =", config.get('num_load_workers', config.get('num_workers', 1)))
     run_name = run_name or config.get('run_name', config['architecture'])
     if real_competence_generator is None:
         real_competence_generator = lambda x: x

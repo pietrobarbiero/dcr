@@ -3,6 +3,7 @@ model_selection_trials: 1
 results_dir: /anfs/bigdisc/me466/mixcem_results/travelingbirds_complete/
 
 model_selection_groups:
+  - ["^(DNN).*$", "DNN (Baseline)"]
   - ["^(CBM_Sigmoid).*$", "Joint CBM (Baseline)"]
   - ["^(CBM_Logit).*$", "Joint Logit CBM (Baseline)"]
   - ["^(Hybrid-CBM_).*$", "Hybrid-CBM (Baseline)"]

@@ -23,11 +23,13 @@ from torch.utils.data import Dataset, DataLoader
 N_CLASSES = 200
 
 
-# IMPORANT NOTE: THIS DATASET NEEDS TO BE DOWNLOADED FIRST BEFORE BEING ABLE
-#                TO RUN ANY CUB EXPERIMENTS!!
-#                Instructions on how to download it can be found
-#                in the original CBM paper's repository
+# IMPORANT NOTE: THIS PROCESSED DATASET NEEDS TO BE DOWNLOADED FIRST BEFORE
+#                BEING ABLE TO RUN ANY CUB EXPERIMENTS!!
+#                Instructions on how to download the pre-processed dataset can
+#                be found in the original CBM paper's repository
 #                found here: https://github.com/yewsiang/ConceptBottleneck
+#                Specifically, here: https://github.com/yewsiang/ConceptBottleneck/blob/master/CUB/
+
 # CAN BE OVERWRITTEN WITH AN ENV VARIABLE DATASET_DIR
 DATASET_DIR = os.environ.get("DATASET_DIR", 'cem/data/CUB200/')
 

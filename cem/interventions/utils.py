@@ -329,13 +329,10 @@ def intervene_in_cbm(
     y_test=None,
     c_test=None,
     g_test=None,
+    in_memory_dataset_cache=None, # Used for lazy in-memory dataset generation. Expected to have a single key 'loaded'.
     seed=None,
     use_auc=False,
 ):
-    print("train_dl.num_workers =", train_dl.num_workers)
-    print("test_dl.num_workers =", test_dl.num_workers)
-    print("config.get('num_workers', 1) =", config.get('num_workers', 1))
-    print("config.get('num_load_workers', config.get('num_workers', 1)) =", config.get('num_load_workers', config.get('num_workers', 1)))
     run_name = run_name or config.get('run_name', config['architecture'])
     if real_competence_generator is None:
         real_competence_generator = lambda x: x
@@ -418,12 +415,28 @@ def intervene_in_cbm(
         (c_test is None) or
         (g_test is None)
     ):
-        x_test, y_test, c_test, g_test = data_utils.daloader_to_memory(
-            test_dl,
-            as_torch=True,
-            output_groups=True,
-            num_workers=config.get('num_load_workers', config.get('num_workers', 1)),
-        )
+        if in_memory_dataset_cache is not None:
+            if 'loaded' not in in_memory_dataset_cache:
+                in_memory_dataset_cache['loaded'] = data_utils.daloader_to_memory(
+                    test_dl,
+                    as_torch=True,
+                    output_groups=True,
+                    num_workers=config.get(
+                        'num_load_workers',
+                        config.get('num_workers', 1),
+                    ),
+                )
+            x_test, y_test, c_test, g_test = in_memory_dataset_cache['loaded']
+        else:
+            x_test, y_test, c_test, g_test = data_utils.daloader_to_memory(
+                test_dl,
+                as_torch=True,
+                output_groups=True,
+                num_workers=config.get(
+                    'num_load_workers',
+                    config.get('num_workers', 1)
+                ),
+            )
     np.random.seed(42)
     indices = np.random.permutation(x_test.shape[0])[
         :int(np.ceil(x_test.shape[0]*test_subsampling))
@@ -1298,12 +1311,7 @@ def test_interventions(
     )
     results = {}
 
-    x_test, y_test, c_test, g_test = data_utils.daloader_to_memory(
-        test_dl,
-        as_torch=True,
-        output_groups=True,
-        num_workers=config.get('num_load_workers', config.get('num_workers', 1)),
-    )
+    in_memory_dataset_cache = {}
 
     for competence_level in competence_levels:
         def competence_generator(
@@ -1485,10 +1493,7 @@ def test_interventions(
                     competence_generator=competence_generator,
                     real_competence_generator=real_competence_generator,
                     group_level_competencies=group_level_competencies,
-                    x_test=x_test,
-                    y_test=y_test,
-                    c_test=c_test,
-                    g_test=g_test,
+                    in_memory_dataset_cache=in_memory_dataset_cache,
                     test_subsampling=dataset_config.get(
                         f'{dl_name}_subsampling',
                         1,

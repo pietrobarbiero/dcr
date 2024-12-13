@@ -63,6 +63,7 @@ optional arguments:
 """
 import argparse
 import copy
+import hashlib
 import joblib
 import json
 import logging
@@ -73,6 +74,8 @@ import re
 import sys
 import torch
 import yaml
+
+
 
 torch.multiprocessing.set_sharing_strategy('file_system')
 from collections import defaultdict
@@ -106,6 +109,23 @@ from cem.data.synthetic_loaders import (
 )
 from cem.data.utils import LambdaDataset, transform_from_config
 
+
+################################################################################
+## Global Register
+################################################################################
+
+DATASET_CACHE = {}
+
+################################################################################
+## HELPER FUNCTIONS
+################################################################################
+
+def hash_function(func):
+    if func is None:
+        return hash(None)
+    bytecode = func.__code__.co_code
+    return hashlib.sha256(bytecode).hexdigest()
+
 def _apply_transformation(dl, transformation_config):
     new_ds = LambdaDataset(
         dl.dataset,
@@ -116,11 +136,6 @@ def _apply_transformation(dl, transformation_config):
         batch_size=dl.batch_size,
         num_workers=dl.num_workers,
     )
-
-
-################################################################################
-## HELPER FUNCTIONS
-################################################################################
 
 def _update_config_with_dataset(
     config,
@@ -182,7 +197,8 @@ def _update_config_with_dataset(
     return task_class_weights
 
 def _generate_dataset_and_update_config(
-    experiment_config
+    experiment_config,
+    use_dataset_cache=False,
 ):
     if experiment_config.get("dataset_config", None) is None:
         raise ValueError(
@@ -248,16 +264,49 @@ def _generate_dataset_and_update_config(
     else:
         val_transform_fn = None
 
-    train_dl, val_dl, test_dl, imbalance, (n_concepts, n_tasks, concept_map) = \
-        data_module.generate_data(
-            config=dataset_config,
-            seed=42,
-            output_dataset_vars=True,
-            root_dir=dataset_config.get('root_dir', None),
-            train_sample_transform=train_transform_fn,
-            test_sample_transform=test_transform_fn,
-            val_sample_transform=val_transform_fn,
-        )
+    if use_dataset_cache:
+        key_dict = copy.deepcopy(dataset_config)
+        key_dict['seed'] = 42
+        key_dict['train_transform_fn'] = hash_function(train_transform_fn)
+        key_dict['test_transform_fn'] = hash_function(test_transform_fn)
+        key_dict['val_transform_fn'] = hash_function(val_transform_fn)
+        config_key = hashlib.sha256(
+            json.dumps(key_dict, sort_keys=True).encode()
+        ).hexdigest()
+        if config_key not in DATASET_CACHE:
+            print(
+                "First time we find dataset config, so adding it into our cache"
+            )
+            DATASET_CACHE[config_key] = data_module.generate_data(
+                config=dataset_config,
+                seed=42,
+                output_dataset_vars=True,
+                root_dir=dataset_config.get('root_dir', None),
+                train_sample_transform=train_transform_fn,
+                test_sample_transform=test_transform_fn,
+                val_sample_transform=val_transform_fn,
+            )
+
+        # Now we can safely fetch it from the dataset cache
+        (
+            train_dl,
+            val_dl,
+            test_dl,
+            imbalance,
+            (n_concepts, n_tasks, concept_map),
+        ) = DATASET_CACHE[config_key]
+
+    else:
+        train_dl, val_dl, test_dl, imbalance, (n_concepts, n_tasks, concept_map) = \
+            data_module.generate_data(
+                config=dataset_config,
+                seed=42,
+                output_dataset_vars=True,
+                root_dir=dataset_config.get('root_dir', None),
+                train_sample_transform=train_transform_fn,
+                test_sample_transform=test_transform_fn,
+                val_sample_transform=val_transform_fn,
+            )
 
     # For now, we assume that all concepts have the same
     # aquisition cost
@@ -552,6 +601,7 @@ def _multiprocess_run_trial(
     old_results,
     single_frequency_epochs,
     activation_freq,
+    use_dataset_cache=False,
 ):
     config = run_config #copy.deepcopy(run_config)
     (
@@ -565,6 +615,7 @@ def _multiprocess_run_trial(
         acquisition_costs
     ) = _generate_dataset_and_update_config(
         config,
+        use_dataset_cache=use_dataset_cache,
     )
     experiment_utils.evaluate_expressions(config)
 
@@ -730,6 +781,7 @@ def _multiprocess_run_trial(
             new_acquisition_costs
         ) = _generate_dataset_and_update_config(
             config_copy,
+            use_dataset_cache=use_dataset_cache,
         )
         eval_results = evaluate_models.evaluate_model(
             model,
@@ -786,6 +838,7 @@ def main(
     fast_run=False,
     no_new_runs=False,
     use_auc=False,
+    use_dataset_cache=False,
 ):
     seed_everything(42)
     # parameters for data, model, and training
@@ -969,6 +1022,7 @@ def main(
                             old_results=old_results,
                             single_frequency_epochs=single_frequency_epochs,
                             activation_freq=activation_freq,
+                            use_dataset_cache=use_dataset_cache,
                         ),
                     )
                     p.start()
@@ -994,6 +1048,7 @@ def main(
                         old_results=old_results,
                         single_frequency_epochs=single_frequency_epochs,
                         activation_freq=activation_freq,
+                        use_dataset_cache=use_dataset_cache,
                     )
                 training.update_statistics(
                     aggregate_results=results[f'{split}'][run_name],
@@ -1321,6 +1376,16 @@ def _build_arg_parser():
              "use ROC-AUC as the main performance metric rather than accuracy."
          ),
     )
+
+    parser.add_argument(
+        '--use_dataset_cache',
+        action="store_true",
+         default=False,
+         help=(
+            "we will avoid re-generating dataset loaders if they have already "
+            "been generated for previous runs."
+         ),
+    )
     return parser
 
 
@@ -1435,4 +1500,5 @@ if __name__ == '__main__':
         fast_run=args.fast_run,
         no_new_runs=args.no_new_runs,
         use_auc=args.use_auc,
+        use_dataset_cache=args.use_dataset_cache,
     )

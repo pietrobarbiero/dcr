@@ -69,7 +69,7 @@ shared_params:
   intervention_config:
     competence_levels: [1]
     intervention_freq: 1
-    intervention_batch_size: 256
+    intervention_batch_size: 512 #256
     val_intervention_policies:
       - policy: "random"
         group_level: True

@@ -120,23 +120,23 @@ shared_params:
       #       amount: 0.001
       #       s_vs_p: 0.5
 
-      #- name: "OOD_sap_0.01"
-      #  update_previous: True
-      #  dataset_config:
-      #    test_transformation_config:
-      #      post_generation: False
-      #      name: salt_and_pepper
-      #      amount: 0.01
-      #      s_vs_p: 0.5
+      - name: "OOD_sap_0.01"
+        update_previous: True
+        dataset_config:
+         test_transformation_config:
+           post_generation: False
+           name: salt_and_pepper
+           amount: 0.01
+           s_vs_p: 0.5
 
-      #- name: "OOD_sap_0.05"
-      #  update_previous: True
-      #  dataset_config:
-      #    test_transformation_config:
-      #      post_generation: False
-      #      name: salt_and_pepper
-      #      amount: 0.05
-      #      s_vs_p: 0.5
+      - name: "OOD_sap_0.05"
+        update_previous: True
+        dataset_config:
+         test_transformation_config:
+           post_generation: False
+           name: salt_and_pepper
+           amount: 0.05
+           s_vs_p: 0.5
 
       - name: "OOD_sap_0.1"
         update_previous: True

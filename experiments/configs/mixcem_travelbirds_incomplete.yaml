@@ -170,6 +170,30 @@ runs:
 
   - architecture: 'ProbabilisticConceptBottleneckModel'
     run_name: "ProbCBM_class_hidden_dim_{class_hidden_dim}_hidden_dim_{hidden_dim}_cwl_{concept_loss_weight}"
+    # n_samples_inference: 50
+    # use_neg_concept: True
+    # pred_class: True
+    # init_negative_scale: 5
+    # init_shift: 5
+    # pretrained: True
+    # hidden_dim: [4, 8, 16]
+    # class_hidden_dim: [16, 32]
+    # intervention_prob: 0.5
+    # # gradient_clip_val: 2.0
+    # max_concept_epochs: 50
+    # warmup_epochs: 5
+    # max_task_epochs: 100
+    # vib_beta: 0.00005
+    # concept_loss_weight: [1]
+    # lr_ratio: 10
+    # weight_decay: 0
+    # # weight_loss: False
+    # # optimizer: adam
+    # grid_variables:
+    #   - concept_loss_weight
+    #   - class_hidden_dim
+    #   - hidden_dim
+    # grid_search_mode: exhaustive
     n_samples_inference: 50
     use_neg_concept: True
     pred_class: True
@@ -178,22 +202,25 @@ runs:
     pretrained: True
     hidden_dim: [4, 8, 16]
     class_hidden_dim: [16, 32]
+    # hidden_dim: [16, 32]
+    # class_hidden_dim: [64, 128]
     intervention_prob: 0.5
-    # gradient_clip_val: 2.0
-    max_concept_epochs: 50
+    gradient_clip_val: 2.0
+    max_concept_epochs: 70
     warmup_epochs: 5
-    max_task_epochs: 100
+    max_task_epochs: 75
     vib_beta: 0.00005
-    concept_loss_weight: [1]
+    concept_loss_weight: 1
+    learning_rate: 0.001
     lr_ratio: 10
     weight_decay: 0
-    # weight_loss: False
-    # optimizer: adam
+    weight_loss: False
+    optimizer: adam
     grid_variables:
-      - concept_loss_weight
       - class_hidden_dim
       - hidden_dim
     grid_search_mode: exhaustive
+
 
 
 

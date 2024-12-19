@@ -399,6 +399,7 @@ class ConceptEmbeddingModel(ConceptBottleneckModel):
             intervention_idxs = self._standardize_indices(
                 intervention_idxs=intervention_idxs,
                 batch_size=x.shape[0],
+                device=x.device,
             )
 
         # Then, time to do the mixing between the positive and the

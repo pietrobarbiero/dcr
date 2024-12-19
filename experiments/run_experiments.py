@@ -602,6 +602,7 @@ def _multiprocess_run_trial(
     single_frequency_epochs,
     activation_freq,
     use_dataset_cache=False,
+    extra_datasets_filter_in_file=None,
 ):
     config = run_config #copy.deepcopy(run_config)
     (
@@ -760,56 +761,70 @@ def _multiprocess_run_trial(
     )
 
     eval_config = config.get('eval_config', {})
-    for new_test_dl_configs in eval_config.get('additional_test_sets', []):
-        config_copy = copy.deepcopy(config)
-        if new_test_dl_configs.get('update_previous', False):
-            config_copy['dataset_config'].update(
-                new_test_dl_configs['dataset_config']
+    run_additional = True
+    if extra_datasets_filter_in_file is not None:
+        run_additional = False
+        for reg in extra_datasets_filter_in_file:
+            if re.search(reg, f'{run_name}_split_{split}'):
+                logging.info(
+                    f'Including additional dataset runs for '
+                    f'{f"{run_name}_split_{split}"} as it '
+                    f'matched filter-out regex {reg}'
+                )
+                run_additional = True
+                break
+    config_copy = copy.deepcopy(config)
+    if run_additional:
+        for new_test_dl_configs in eval_config.get('additional_test_sets', []):
+            config_copy = copy.deepcopy(config)
+            if new_test_dl_configs.get('update_previous', False):
+                config_copy['dataset_config'].update(
+                    new_test_dl_configs['dataset_config']
+                )
+            else:
+                config_copy['dataset_config'] = (
+                    new_test_dl_configs['dataset_config']
+                )
+            (
+                _,
+                _,
+                new_test_dl,
+                new_imbalance,
+                new_concept_map,
+                new_intervened_groups,
+                new_task_class_weights,
+                new_acquisition_costs
+            ) = _generate_dataset_and_update_config(
+                config_copy,
+                use_dataset_cache=use_dataset_cache,
             )
-        else:
-            config_copy['dataset_config'] = (
-                new_test_dl_configs['dataset_config']
+            eval_results = evaluate_models.evaluate_model(
+                model,
+                config_copy,
+                [(new_test_dl, (new_test_dl_configs['name'] + "_test"))],
+                train_dl,
+                val_dl=val_dl,
+                run_name=run_name,
+                task_class_weights=new_task_class_weights,
+                imbalance=new_imbalance,
+                acquisition_costs=new_acquisition_costs,
+                result_dir=result_dir,
+                concept_map=new_concept_map,
+                intervened_groups=new_intervened_groups,
+                accelerator=accelerator,
+                devices=devices,
+                split=split,
+                rerun=current_rerun,
+                old_results=old_results,
             )
-        (
-            _,
-            _,
-            new_test_dl,
-            new_imbalance,
-            new_concept_map,
-            new_intervened_groups,
-            new_task_class_weights,
-            new_acquisition_costs
-        ) = _generate_dataset_and_update_config(
-            config_copy,
-            use_dataset_cache=use_dataset_cache,
-        )
-        eval_results = evaluate_models.evaluate_model(
-            model,
-            config_copy,
-            [(new_test_dl, (new_test_dl_configs['name'] + "_test"))],
-            train_dl,
-            val_dl=val_dl,
-            run_name=run_name,
-            task_class_weights=new_task_class_weights,
-            imbalance=new_imbalance,
-            acquisition_costs=new_acquisition_costs,
-            result_dir=result_dir,
-            concept_map=new_concept_map,
-            intervened_groups=new_intervened_groups,
-            accelerator=accelerator,
-            devices=devices,
-            split=split,
-            rerun=current_rerun,
-            old_results=old_results,
-        )
-        training.update_statistics(
-            aggregate_results=trial_results,
-            run_config=config,
-            model=model,
-            test_results=eval_results,
-            run_name=run_name,
-            prefix="",
-        )
+            training.update_statistics(
+                aggregate_results=trial_results,
+                run_config=config,
+                model=model,
+                test_results=eval_results,
+                run_name=run_name,
+                prefix="",
+            )
     return config_copy
 
 
@@ -839,6 +854,7 @@ def main(
     no_new_runs=False,
     use_auc=False,
     use_dataset_cache=False,
+    extra_datasets_filter_in_file=None,
 ):
     seed_everything(42)
     # parameters for data, model, and training
@@ -915,7 +931,7 @@ def main(
                 run_name = run_config["run_name"]
 
                 # Determine filtering in and filtering out of run
-                if filter_out_regex is not None:
+                if filter_out_regex:
                     skip = False
                     for reg in filter_out_regex:
                         if re.search(reg, f'{run_name}_split_{split}'):
@@ -928,7 +944,7 @@ def main(
                             break
                     if skip:
                         continue
-                if filter_in_regex is not None:
+                if filter_in_regex:
                     found = False
                     for reg in filter_in_regex:
                         if re.search(reg, f'{run_name}_split_{split}'):
@@ -1023,6 +1039,7 @@ def main(
                             single_frequency_epochs=single_frequency_epochs,
                             activation_freq=activation_freq,
                             use_dataset_cache=use_dataset_cache,
+                            extra_datasets_filter_in_file=extra_datasets_filter_in_file,
                         ),
                     )
                     p.start()
@@ -1049,6 +1066,7 @@ def main(
                         single_frequency_epochs=single_frequency_epochs,
                         activation_freq=activation_freq,
                         use_dataset_cache=use_dataset_cache,
+                        extra_datasets_filter_in_file=extra_datasets_filter_in_file,
                     )
                 training.update_statistics(
                     aggregate_results=results[f'{split}'][run_name],
@@ -1301,6 +1319,26 @@ def _build_arg_parser():
         ),
     )
     parser.add_argument(
+        "--filter_in_file",
+        action='append',
+        metavar=('model_selection_file.joblib'),
+        default=None,
+        help=(
+            "includes only runs whose names are in the joblib file outputed "
+            "from a previous model selection run."
+        ),
+    )
+    parser.add_argument(
+        "--extra_datasets_filter_in_file",
+        action='append',
+        metavar=('model_selection_file.joblib'),
+        default=None,
+        help=(
+            "includes for extra dataset evaluation only runs whose names are "
+            "in the joblib file outputed from a previous model selection run."
+        ),
+    )
+    parser.add_argument(
         "--model_selection_metrics",
         action='append',
         metavar=('metric_name'),
@@ -1476,6 +1514,31 @@ if __name__ == '__main__':
     if args.model_selection_metrics:
         model_selection_metrics = args.model_selection_metrics
 
+    if args.filter_in_file is not None:
+        if args.filter_in is None:
+            args.filter_in = []
+        for file_path in args.filter_in_file:
+            if not os.path.exists(file_path):
+                raise ValueError(
+                    f'Path for filter-in file {file_path} is not a valid path'
+                )
+            loaded_selection = joblib.load(file_path)
+            for _, method_name in loaded_selection.items():
+                args.filter_in.append(method_name)
+    extra_datasets_filter_in_file = None
+    if args.extra_datasets_filter_in_file is not None:
+        extra_datasets_filter_in_file = []
+        if args.filter_in is None:
+            args.filter_in = []
+        for file_path in args.extra_datasets_filter_in_file:
+            if not os.path.exists(file_path):
+                raise ValueError(
+                    f'Path for extra dataset filter-in file {file_path} is '
+                    f'not a valid path'
+                )
+            loaded_selection = joblib.load(file_path)
+            for _, method_name in loaded_selection.items():
+                extra_datasets_filter_in_file.append(method_name)
     main(
         rerun=args.rerun,
         result_dir=(
@@ -1501,4 +1564,5 @@ if __name__ == '__main__':
         no_new_runs=args.no_new_runs,
         use_auc=args.use_auc,
         use_dataset_cache=args.use_dataset_cache,
+        extra_datasets_filter_in_file=extra_datasets_filter_in_file,
     )

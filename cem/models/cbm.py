@@ -266,7 +266,11 @@ class ConceptBottleneckModel(pl.LightningModule):
             prev_interventions = None
         return x, y, (c, g, competencies, prev_interventions)
 
-    def _standardize_indices(self, intervention_idxs, batch_size):
+    def _standardize_indices(self, intervention_idxs, batch_size, device='gpu'):
+        if getattr(self, 'force_all_interventions', False):
+            intervention_idxs = torch.ones(
+                (batch_size, self.n_concepts)
+            ).to(device)
         if isinstance(intervention_idxs, list):
             intervention_idxs = np.array(intervention_idxs)
         if isinstance(intervention_idxs, np.ndarray):
@@ -369,6 +373,7 @@ class ConceptBottleneckModel(pl.LightningModule):
         intervention_idxs = self._standardize_indices(
             intervention_idxs=intervention_idxs,
             batch_size=c_pred.shape[0],
+            device=c_pred.device,
         )
         intervention_idxs = intervention_idxs.to(c_pred.device)
         # Check whether the mask needs to be extended because of

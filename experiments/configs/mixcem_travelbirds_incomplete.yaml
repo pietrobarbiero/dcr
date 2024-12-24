@@ -6,6 +6,8 @@ model_selection_groups:
   - ["^(DNN).*$", "DNN (Baseline)"]
   - ["^(CBM_Sigmoid).*$", "Joint CBM (Baseline)"]
   - ["^(CBM_Logit).*$", "Joint Logit CBM (Baseline)"]
+  - ["^(CBM_Seq).*$", "Sequential CBM (Baseline)"]
+  - ["^(CBM_Ind).*$", "Independent CBM (Baseline)"]
   - ["^(Hybrid-CBM_).*$", "Hybrid-CBM (Baseline)"]
   - ["^(CEM).*$", "CEM (Baseline)"]
   - ["^(DNN_).*$", "DNN (Baseline)"]
@@ -18,10 +20,21 @@ model_selection_groups:
   - ["^(Linear_CMCMixIntCEM).*(_ce_30_).*$", "Linear CMCMixIntCEM (Baseline)"]
   - ["^(Linear_CMCMixCEM).*(_ce_0_).*$", "Linear CMCMixCEM No Calibration (Baseline)"]
   - ["^(Linear_CMCMixCEM).*(_ce_30_).*$", "Linear CMCMixCEM (Baseline)"]
-  - ["^(Entropy_CMCMixIntCEM).*(_ce_0_).*$", "Entropy CMCMixIntCEM No Calibration (Baseline)"]
-  - ["^(Entropy_CMCMixIntCEM).*(_ce_30_).*$", "Entropy CMCMixIntCEM (Baseline)"]
-  - ["^(Entropy_CMCMixCEM).*(_ce_0_).*$", "Entropy CMCMixCEM No Calibration (Baseline)"]
-  - ["^(Entropy_CMCMixCEM).*(_ce_30_).*$", "Entropy CMCMixCEM (Baseline)"]
+
+  - ["^(Entropy_CMCMixIntCEM).*((r_1_)|(r_0.1_)).*(_ce_0_).*((g_ood_0.1_)|(g_ood_0.5_)).*$", "Entropy CMCMixIntCEM No Calibration (Baseline)"]
+  - ["^(Entropy_CMCMixIntCEM).*((r_1_)|(r_0.1_)).*(_ce_30_).*((g_ood_0.1_)|(g_ood_0.5_)).*$", "Entropy CMCMixIntCEM (Baseline)"]
+  - ["^(Entropy_CMCMixCEM).*((r_1_)|(r_0.1_)).*(_ce_0_).*((g_ood_0.1_)|(g_ood_0.5_)).*$", "Entropy CMCMixCEM No Calibration (Baseline)"]
+  - ["^(Entropy_CMCMixCEM).*((r_1_)|(r_0.1_)).*(_ce_30_).*((g_ood_0.1_)|(g_ood_0.5_)).*$", "Entropy CMCMixCEM (Baseline)"]
+
+  - ["^(Entropy_CMCMixIntCEM).*(r_0_).*(_ce_0_).*$", "Entropy CMCMixIntCEM (r=0) No Calibration (Baseline)"]
+  - ["^(Entropy_CMCMixIntCEM).*(r_0_).*(_ce_30_).*$", "Entropy CMCMixIntCEM (r=0) (Baseline)"]
+  - ["^(Entropy_CMCMixCEM).*(r_0_).*(_ce_0_).*$", "Entropy CMCMixCEM (r=0) No Calibration (Baseline)"]
+  - ["^(Entropy_CMCMixCEM).*(r_0_).*(_ce_30_).*$", "Entropy CMCMixCEM (r=0) (Baseline)"]
+
+  - ["^(Entropy_CMCMixIntCEM).*(_ce_0_).*(g_ood_0_).*$", "Entropy CMCMixIntCEM (drop=0) No Calibration (Baseline)"]
+  - ["^(Entropy_CMCMixIntCEM).*(_ce_30_).*(g_ood_0_).*$", "Entropy CMCMixIntCEM (drop=0) (Baseline)"]
+  - ["^(Entropy_CMCMixCEM).*(_ce_0_).*(g_ood_0_).*$", "Entropy CMCMixCEM (drop=0) No Calibration (Baseline)"]
+  - ["^(Entropy_CMCMixCEM).*(_ce_30_).*(g_ood_0_).*$", "Entropy CMCMixCEM (drop=0) (Baseline)"]
 
 
 model_selection_metrics:
@@ -144,17 +157,23 @@ runs:
     sigmoidal_extra_capacity: False
     sigmoidal_prob: True
 
-  - architecture: 'IndependentConceptBottleneckModel'
-    run_name: "IndependentCBM_Baseline_cwl_{concept_loss_weight}"
-    training_intervention_prob: 0
+  - architecture: 'SequentialConceptBottleneckModel'
+    run_name: "CBM_Seq"
+    concept_loss_weight: [1]
     embedding_activation: "leakyrelu"
     bool: False
     extra_dims: 0
     sigmoidal_extra_capacity: False
     sigmoidal_prob: True
-    concept_loss_weight: 1
-    grid_variables: []
-    grid_search_mode: exhaustive
+
+  - architecture: 'IndependentConceptBottleneckModel'
+    run_name: "CBM_Ind"
+    concept_loss_weight: [1]
+    embedding_activation: "leakyrelu"
+    bool: False
+    extra_dims: 0
+    sigmoidal_extra_capacity: False
+    sigmoidal_prob: True
 
   - architecture: 'ConceptBottleneckModel'
     run_name: "Hybrid-CBM_Sigmoid_extra_dims_{extra_dims}_Baseline_cwl_{concept_loss_weight}"
@@ -499,4 +518,58 @@ runs:
       - temperature
       - calibration_epochs
       - uncerainty_threshold_percentile
+    grid_search_mode: exhaustive
+
+
+  - architecture: 'PosthocConceptBottleneckModel'
+    run_name: "PCBM_reg_{reg_strength}_l1_{l1_ratio}_penalty_{svd_penalty}"
+    residual: False
+    reg_strength: [0.000001, 0.001, 0.1]
+    l1_ratio: [0.99]
+    freeze_pretrained_model: True
+    freeze_concept_embeddings: True
+    emb_size: null
+
+    svd_penalty: [1]
+    active_top_percentile: 95
+    active_bottom_percentile: 5
+    blackbox_model_config:
+      name: resnet18
+      imagenet_pretrained: True
+      add_linear_layers: [112]  # Add an intermediate layer with the same size as the number of concepts so that the evaluation is fair
+    blackbox_training_epochs: 150
+    max_residual_epochs: 150
+    max_epochs: 150
+    blackbox_path: 'PCBM_BlackBox_Model_{blackbox_model_config[name]}_pre_{blackbox_model_config[imagenet_pretrained]}_fold_{split}_layers_{blackbox_model_config[add_linear_layers]}'
+
+
+    grid_variables:
+      - reg_strength
+      - l1_ratio
+      - svd_penalty
+    grid_search_mode: exhaustive
+
+  - architecture: 'PosthocConceptBottleneckModel'
+    run_name: "HybridPCBM_reg_{reg_strength}_l1_{l1_ratio}_penalty_{svd_penalty}"
+    residual: True  # TURN ON THE RESIDUAL MODEL!
+    reg_strength: [0.000001, 0.001, 0.1]
+    l1_ratio: [0.99]
+    freeze_pretrained_model: True
+    freeze_concept_embeddings: True
+    emb_size: null
+
+    svd_penalty: [1]
+    blackbox_model_config:
+      name: resnet18
+      imagenet_pretrained: True
+      add_linear_layers: [112]  # Add an intermediate layer with the same size as the number of concepts so that the evaluation is fair
+    blackbox_training_epochs: 150
+    max_residual_epochs: 150
+    max_epochs: 150
+    blackbox_path: 'PCBM_BlackBox_Model_{blackbox_model_config[name]}_pre_{blackbox_model_config[imagenet_pretrained]}_fold_{split}_layers_{blackbox_model_config[add_linear_layers]}'
+
+    grid_variables:
+      - reg_strength
+      - l1_ratio
+      - svd_penalty
     grid_search_mode: exhaustive

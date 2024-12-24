@@ -6,6 +6,8 @@ model_selection_groups:
   - ["^(DNN).*$", "DNN (Baseline)"]
   - ["^(CBM_Sigmoid_Baseline_).*$", "Joint CBM (Baseline)"]
   - ["^(CBM_Logit_Baseline_).*$", "Joint Logit CBM (Baseline)"]
+  - ["^(CBM_Seq).*$", "Sequential CBM (Baseline)"]
+  - ["^(CBM_Ind).*$", "Independent CBM (Baseline)"]
   - ["^(Hybrid-CBM_).*$", "Hybrid-CBM (Baseline)"]
   - ["^(CEM).*$", "CEM (Baseline)"]
   - ["^(IntCEM_).*$", "IntCEM (Baseline)"]
@@ -118,20 +120,78 @@ shared_params:
             name: random_noise
             low_noise_level: 1
             noise_level: 0.5
-      # - name: "OOD_heavy"
-      #   update_previous: True
-      #   dataset_config:
-      #     test_transformation_config:
-      #       name: random_noise
-      #       low_noise_level: 1
-      #       noise_level: 0.75
-      # - name: "OOD_heavier"
-      #   update_previous: True
-      #   dataset_config:
-      #     test_transformation_config:
-      #       name: random_noise
-      #       low_noise_level: 1
-      #       noise_level: 0.95
+
+      - name: "OOD_sap_0.01"
+        update_previous: True
+        dataset_config:
+         test_transformation_config:
+           post_generation: False
+           name: salt_and_pepper
+           amount: 0.01
+           s_vs_p: 0.5
+
+      - name: "OOD_sap_0.05"
+        update_previous: True
+        dataset_config:
+         test_transformation_config:
+           post_generation: False
+           name: salt_and_pepper
+           amount: 0.05
+           s_vs_p: 0.5
+
+      - name: "OOD_sap_0.1"
+        update_previous: True
+        dataset_config:
+          test_transformation_config:
+            post_generation: False
+            name: salt_and_pepper
+            amount: 0.1
+            s_vs_p: 0.5
+
+      - name: "OOD_sap_0.25"
+        update_previous: True
+        dataset_config:
+          test_transformation_config:
+            post_generation: False
+            name: salt_and_pepper
+            amount: 0.25
+            s_vs_p: 0.5
+
+      - name: "OOD_sap_0.5"
+        update_previous: True
+        dataset_config:
+          test_transformation_config:
+            post_generation: False
+            name: salt_and_pepper
+            amount: 0.5
+            s_vs_p: 0.5
+
+      - name: "OOD_sap_0.75"
+        update_previous: True
+        dataset_config:
+          test_transformation_config:
+            post_generation: False
+            name: salt_and_pepper
+            amount: 0.75
+            s_vs_p: 0.5
+
+      - name: "OOD_sap_0.9"
+        update_previous: True
+        dataset_config:
+          test_transformation_config:
+            post_generation: False
+            name: salt_and_pepper
+            amount: 0.9
+            s_vs_p: 0.5
+
+      - name: "OOD_sap_0.99"
+        update_previous: True
+        dataset_config:
+          test_transformation_config:
+            post_generation: False
+            name: salt_and_pepper
+            amount: 0.99
+            s_vs_p: 0.5
 
 
 runs:
@@ -319,6 +379,24 @@ runs:
     extra_dims: 0
     sigmoidal_extra_capacity: False
     sigmoidal_prob: False
+
+  - architecture: 'SequentialConceptBottleneckModel'
+    run_name: "CBM_Seq"
+    concept_loss_weight: [1]
+    embedding_activation: "leakyrelu"
+    bool: False
+    extra_dims: 0
+    sigmoidal_extra_capacity: False
+    sigmoidal_prob: True
+
+  - architecture: 'IndependentConceptBottleneckModel'
+    run_name: "CBM_Ind"
+    concept_loss_weight: [1]
+    embedding_activation: "leakyrelu"
+    bool: False
+    extra_dims: 0
+    sigmoidal_extra_capacity: False
+    sigmoidal_prob: True
 
   - architecture: 'ProbabilisticConceptBottleneckModel'
     run_name: "ProbCBM_cwl_class_hidden_dim_{class_hidden_dim}_hidden_dim_{hidden_dim}_n_samples_inference_{n_samples_inference}_max_concept_epochs_{max_concept_epochs}_max_task_epochs_{max_task_epochs}"

@@ -6,6 +6,9 @@ results_dir: /anfs/bigdisc/me466/mixcem_results/cub_incomplete/
 model_selection_groups:
   - ["^(DNN).*$", "DNN (Baseline)"]
   - ["^(CBM_Sigmoid_Baseline_).*$", "Joint CBM (Baseline)"]
+  - ["^(CBM_Logit_Baseline_).*$", "Joint Logit CBM (Baseline)"]
+  - ["^(CBM_Seq).*$", "Sequential CBM (Baseline)"]
+  - ["^(CBM_Ind).*$", "Independent CBM (Baseline)"]
   - ["^(Hybrid-CBM_).*(_Baseline_).*$", "Hybrid-CBM (Baseline)"]
   - ["^(CEM_Baseline_).*$", "CEM (Baseline)"]
   - ["^(IntCEM_).*(_Baseline).*$", "IntCEM (Baseline)"]
@@ -110,16 +113,6 @@ shared_params:
   # Evaluation configuration
   eval_config:
     additional_test_sets:
-
-      # - name: "OOD_sap_0.001"
-      #   update_previous: True
-      #   dataset_config:
-      #     test_transformation_config:
-      #       post_generation: False
-      #       name: salt_and_pepper
-      #       amount: 0.001
-      #       s_vs_p: 0.5
-
       - name: "OOD_sap_0.01"
         update_previous: True
         dataset_config:
@@ -346,6 +339,24 @@ runs:
     extra_dims: 0
     sigmoidal_extra_capacity: False
     sigmoidal_prob: False
+
+  - architecture: 'SequentialConceptBottleneckModel'
+    run_name: "CBM_Seq"
+    concept_loss_weight: [1]
+    embedding_activation: "leakyrelu"
+    bool: False
+    extra_dims: 0
+    sigmoidal_extra_capacity: False
+    sigmoidal_prob: True
+
+  - architecture: 'IndependentConceptBottleneckModel'
+    run_name: "CBM_Ind"
+    concept_loss_weight: [1]
+    embedding_activation: "leakyrelu"
+    bool: False
+    extra_dims: 0
+    sigmoidal_extra_capacity: False
+    sigmoidal_prob: True
 
 
   # - architecture: 'MCIntCEM'

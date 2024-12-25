@@ -2,9 +2,12 @@ trials: 3
 model_selection_trials: 1
 results_dir: /anfs/bigdisc/me466/mixcem_results/cub_complete/
 
+num_load_workers: 0
+
 model_selection_groups:
   - ["^(DNN).*$", "DNN (Baseline)"]
   - ["^(CBM_Sigmoid_Baseline_).*$", "Joint CBM (Baseline)"]
+  - ["^(CBM_Logit_Baseline_).*$", "Joint Logit CBM (Baseline)"]
   - ["^(Hybrid-CBM_).*(_Baseline_).*$", "Hybrid-CBM (Baseline)"]
   - ["^(CEM_Baseline_).*$", "CEM (Baseline)"]
   - ["^(IntCEM_).*(_Baseline).*$", "IntCEM (Baseline)"]
@@ -53,7 +56,7 @@ shared_params:
   intervention_config:
     competence_levels: [1]
     intervention_freq: 1
-    intervention_batch_size: 256
+    intervention_batch_size: 1024 #256
     val_intervention_policies:
       - policy: "random"
         group_level: True
@@ -485,6 +488,23 @@ runs:
     sigmoidal_extra_capacity: False
     sigmoidal_prob: False
 
+  - architecture: 'SequentialConceptBottleneckModel'
+    run_name: "CBM_Seq"
+    embedding_activation: "leakyrelu"
+    bool: False
+    extra_dims: 0
+    concept_loss_weight: [1]
+    sigmoidal_extra_capacity: False
+    sigmoidal_prob: True
+
+  - architecture: 'IndependentConceptBottleneckModel'
+    run_name: "CBM_Ind"
+    embedding_activation: "leakyrelu"
+    bool: False
+    extra_dims: 0
+    concept_loss_weight: [1]
+    sigmoidal_extra_capacity: False
+    sigmoidal_prob: True
 
   - architecture: 'PosthocConceptBottleneckModel'
     run_name: "PCBM_reg_{reg_strength}_l1_{l1_ratio}_penalty_{svd_penalty}"

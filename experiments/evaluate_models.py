@@ -83,6 +83,10 @@ def evaluate_model(
                     'competence_levels',
                     [1],
                 ),
+                fast_intervention=intervention_config.get(
+                    'fast_intervention',
+                    False,
+                ),
             )
             if "real_competencies" in intervention_config:
                 for real_comp in intervention_config['real_competencies']:

@@ -20,29 +20,44 @@ def gauss_noise_tensor(img, sigma):
 
     return out
 
-def salt_and_pepper_noise_tensor(img, s_vs_p=0.5, amount=0.05):
+def salt_and_pepper_noise_tensor(
+    img,
+    s_vs_p=0.5,
+    amount=0.05,
+    all_channels=False,
+):
     assert isinstance(img, torch.Tensor), type(img).__name__
     dtype = img.dtype
+    max_elem, min_elem = 1.0, 0.0
     if not img.is_floating_point():
-        img = img.to(torch.float32)
+        img = img.to(torch.float32)/255.0
 
     out = img + 0.0
 
     # Salt mode
-    num_salt = np.ceil(amount * np.prod(tuple(img.shape)) * s_vs_p)
+    shape_to_use = img.shape[:-1] if all_channels else img.shape
+    num_salt = np.ceil(amount * np.prod(tuple(shape_to_use)) * s_vs_p)
     coords = [
         np.random.randint(0, i - 1, int(num_salt))
-        for i in tuple(img.shape)
+        for i in tuple(shape_to_use)
     ]
-    out[coords] = 1
+    if all_channels:
+        out[coords, :] = max_elem
+    else:
+        out[coords] = max_elem
+
 
     # Pepper mode
-    num_pepper = np.ceil(amount* np.prod(tuple(img.shape)) * (1. - s_vs_p))
+    num_pepper = np.ceil(amount* np.prod(tuple(shape_to_use)) * (1. - s_vs_p))
     coords = [
         np.random.randint(0, i - 1, int(num_pepper))
-        for i in tuple(img.shape)
+        for i in tuple(shape_to_use)
     ]
-    out[coords] = 0
+    if all_channels:
+        out[coords, :] = min_elem
+    else:
+        out[coords] = min_elem
+
     return out
 
 class LambdaDataset(torch.utils.data.Dataset):
@@ -89,6 +104,7 @@ def transform_from_config(transform):
             x,
             s_vs_p=transform.get('s_vs_p', 0.5),
             amount=transform.get('amount', 0.01),
+            all_channels=transform.get('all_channels', False),
         )
     if transform_name == "random_noise":
         if transform['noise_level'] > 0.0:

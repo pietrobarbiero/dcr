@@ -6,6 +6,8 @@ model_selection_groups:
   - ["^(DNN).*$", "DNN (Baseline)"]
   - ["^(CBM_Sigmoid_Baseline_).*$", "Joint CBM (Baseline)"]
   - ["^(CBM_Logit_Baseline_).*$", "Joint Logit CBM (Baseline)"]
+  - ["^(CBM_Seq).*$", "Sequential CBM (Baseline)"]
+  - ["^(CBM_Ind).*$", "Independent CBM (Baseline)"]
   - ["^(Hybrid-CBM_).*(_Baseline_).*$", "Hybrid-CBM (Baseline)"]
   - ["^(CEM_Baseline_).*$", "CEM (Baseline)"]
   - ["^(IntCEM_).*(_Baseline).*$", "IntCEM (Baseline)"]
@@ -141,6 +143,24 @@ runs:
     extra_dims: 0
     sigmoidal_extra_capacity: False
     sigmoidal_prob: False
+
+  - architecture: 'SequentialConceptBottleneckModel'
+    run_name: "CBM_Seq"
+    concept_loss_weight: [1]
+    embedding_activation: "leakyrelu"
+    bool: False
+    extra_dims: 0
+    sigmoidal_extra_capacity: False
+    sigmoidal_prob: True
+
+  - architecture: 'IndependentConceptBottleneckModel'
+    run_name: "CBM_Ind"
+    concept_loss_weight: [1]
+    embedding_activation: "leakyrelu"
+    bool: False
+    extra_dims: 0
+    sigmoidal_extra_capacity: False
+    sigmoidal_prob: True
 
   - architecture: 'ConceptBottleneckModel'
     run_name: "Hybrid-CBM_Sigmoid_extra_dims_{extra_dims}_Baseline_cwl_{concept_loss_weight}"

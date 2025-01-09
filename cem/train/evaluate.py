@@ -38,15 +38,6 @@ def evaluate_cbm(
         return eval_results
     # model.freeze()
     def _inner_call():
-        # [eval_results] = trainer.test(model, test_dl)
-        # output = [
-        #     eval_results[f"test_c_accuracy"],
-        #     eval_results[f"test_y_accuracy"],
-        #     eval_results[f"test_c_auc"],
-        #     eval_results[f"test_y_auc"],
-        #     eval_results[f"test_c_f1"],
-        #     eval_results[f"test_y_f1"],
-        # ]
         batch_results = trainer.predict(model, test_dl)
         y_true, c_true = data_utils.daloader_to_memory(
             test_dl,

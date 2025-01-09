@@ -385,7 +385,7 @@ def intervene_in_cbm(
     if (not rerun) and key_name:
         result_file = os.path.join(
             result_dir,
-            key_name + f"_fold_{split}.npy",
+            key_name + f"_{run_name}_fold_{split}.npy",
         )
         if os.path.exists(result_file):
             result = np.load(result_file)
@@ -409,6 +409,9 @@ def intervene_in_cbm(
             else:
                 construct_time = 0
             return result, avg_time, construct_time
+        else:
+            print("We could not find:", result_file)
+
 
     model = load_trained_model(
         config=config,

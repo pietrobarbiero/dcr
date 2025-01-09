@@ -114,7 +114,7 @@ shared_params:
   eval_config:
     additional_test_sets:
       - name: "OOD"
-        update_previous: True # Difference only for CelebA
+        update_previous: True
         dataset_config:
           test_transformation_config:
             name: random_noise
@@ -122,73 +122,73 @@ shared_params:
             noise_level: 0.5
 
       - name: "OOD_sap_0.01"
-        update_previous: False # Difference only for CelebA
+        update_previous: True
         dataset_config:
          test_transformation_config:
-           post_generation: False
+           post_generation: True # Difference only for CelebA
            name: salt_and_pepper
            amount: 0.01
            s_vs_p: 0.5
 
       - name: "OOD_sap_0.05"
-        update_previous: False # Difference only for CelebA
+        update_previous: True
         dataset_config:
          test_transformation_config:
-           post_generation: False
+           post_generation: True # Difference only for CelebA
            name: salt_and_pepper
            amount: 0.05
            s_vs_p: 0.5
 
       - name: "OOD_sap_0.1"
-        update_previous: False # Difference only for CelebA
+        update_previous: True
         dataset_config:
           test_transformation_config:
-            post_generation: False
+            post_generation: True # Difference only for CelebA
             name: salt_and_pepper
             amount: 0.1
             s_vs_p: 0.5
 
       - name: "OOD_sap_0.25"
-        update_previous: False # Difference only for CelebA
+        update_previous: True
         dataset_config:
           test_transformation_config:
-            post_generation: False
+            post_generation: True # Difference only for CelebA
             name: salt_and_pepper
             amount: 0.25
             s_vs_p: 0.5
 
       - name: "OOD_sap_0.5"
-        update_previous: False # Difference only for CelebA
+        update_previous: True
         dataset_config:
           test_transformation_config:
-            post_generation: False
+            post_generation: True # Difference only for CelebA
             name: salt_and_pepper
             amount: 0.5
             s_vs_p: 0.5
 
       - name: "OOD_sap_0.75"
-        update_previous: False # Difference only for CelebA
+        update_previous: True
         dataset_config:
           test_transformation_config:
-            post_generation: False
+            post_generation: True # Difference only for CelebA
             name: salt_and_pepper
             amount: 0.75
             s_vs_p: 0.5
 
       - name: "OOD_sap_0.9"
-        update_previous: False # Difference only for CelebA
+        update_previous: True
         dataset_config:
           test_transformation_config:
-            post_generation: False
+            post_generation: True # Difference only for CelebA
             name: salt_and_pepper
             amount: 0.9
             s_vs_p: 0.5
 
       - name: "OOD_sap_0.99"
-        update_previous: False # Difference only for CelebA
+        update_previous: True
         dataset_config:
           test_transformation_config:
-            post_generation: False
+            post_generation: True # Difference only for CelebA
             name: salt_and_pepper
             amount: 0.99
             s_vs_p: 0.5

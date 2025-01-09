@@ -114,7 +114,7 @@ shared_params:
   eval_config:
     additional_test_sets:
       - name: "OOD"
-        update_previous: True
+        update_previous: True # Difference only for CelebA
         dataset_config:
           test_transformation_config:
             name: random_noise
@@ -122,7 +122,7 @@ shared_params:
             noise_level: 0.5
 
       - name: "OOD_sap_0.01"
-        update_previous: True
+        update_previous: False # Difference only for CelebA
         dataset_config:
          test_transformation_config:
            post_generation: False
@@ -131,7 +131,7 @@ shared_params:
            s_vs_p: 0.5
 
       - name: "OOD_sap_0.05"
-        update_previous: True
+        update_previous: False # Difference only for CelebA
         dataset_config:
          test_transformation_config:
            post_generation: False
@@ -140,7 +140,7 @@ shared_params:
            s_vs_p: 0.5
 
       - name: "OOD_sap_0.1"
-        update_previous: True
+        update_previous: False # Difference only for CelebA
         dataset_config:
           test_transformation_config:
             post_generation: False
@@ -149,7 +149,7 @@ shared_params:
             s_vs_p: 0.5
 
       - name: "OOD_sap_0.25"
-        update_previous: True
+        update_previous: False # Difference only for CelebA
         dataset_config:
           test_transformation_config:
             post_generation: False
@@ -158,7 +158,7 @@ shared_params:
             s_vs_p: 0.5
 
       - name: "OOD_sap_0.5"
-        update_previous: True
+        update_previous: False # Difference only for CelebA
         dataset_config:
           test_transformation_config:
             post_generation: False
@@ -167,7 +167,7 @@ shared_params:
             s_vs_p: 0.5
 
       - name: "OOD_sap_0.75"
-        update_previous: True
+        update_previous: False # Difference only for CelebA
         dataset_config:
           test_transformation_config:
             post_generation: False
@@ -176,7 +176,7 @@ shared_params:
             s_vs_p: 0.5
 
       - name: "OOD_sap_0.9"
-        update_previous: True
+        update_previous: False # Difference only for CelebA
         dataset_config:
           test_transformation_config:
             post_generation: False
@@ -185,7 +185,7 @@ shared_params:
             s_vs_p: 0.5
 
       - name: "OOD_sap_0.99"
-        update_previous: True
+        update_previous: False # Difference only for CelebA
         dataset_config:
           test_transformation_config:
             post_generation: False

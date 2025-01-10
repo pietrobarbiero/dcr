@@ -11,20 +11,21 @@ import cem.models.adversarial_cbm as adversarial_cbm
 import cem.models.backtracking as backtrack
 import cem.models.cbm as models_cbm
 import cem.models.cem as models_cem
+import cem.models.certificate_cem as certificate_cem
+import cem.models.concept_to_label as models_c2l
 import cem.models.defer_cem as defer_cem
 import cem.models.direction_cem as direction_cem
+import cem.models.global_approx_cem as models_global_approx
 import cem.models.global_bank_cem as models_global_mixcem
 import cem.models.hybrid_cem as models_hcem
 import cem.models.intcbm as models_intcbm
+import cem.models.mc_intcem as mc_intcem
 import cem.models.mixcem as models_mixcem
 import cem.models.posthoc_cbm as models_pcbm
-import cem.models.probcbm as models_probcbm
-import cem.models.standard as standard_models
-import cem.models.global_approx_cem as models_global_approx
-import cem.models.separator_cem as separator_cem
 import cem.models.prob_cem as prob_cem
-import cem.models.certificate_cem as certificate_cem
-import cem.models.mc_intcem as mc_intcem
+import cem.models.probcbm as models_probcbm
+import cem.models.separator_cem as separator_cem
+import cem.models.standard as standard_models
 import cem.train.utils as utils
 
 
@@ -1188,6 +1189,22 @@ def construct_model(
             "x2c_model": x2c_model,
             "c2y_model": c2y_model,
             "c2y_layers": config.get("c2y_layers", []),
+        }
+
+    elif (
+        "ConceptToLabelModel" == config["architecture"] or
+        "C2L" == config["architecture"]
+    ):
+        model_cls = models_c2l.ConceptToLabelModel
+        extra_params = {
+            "intervention_policy": intervention_policy,
+            "c2y_model": c2y_model,
+            "c2y_layers": config.get("c2y_layers", []),
+            "feature_drop_out": config.get('feature_drop_out', 0.25),
+            "intervene_concept_vals": config.get(
+                'intervene_concept_vals',
+                0.5,
+            ),
         }
 
 

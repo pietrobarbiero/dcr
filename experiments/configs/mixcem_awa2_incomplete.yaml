@@ -33,6 +33,8 @@ model_selection_groups:
   - ["^(Entropy_CMCMixCEM).*(_ce_0_).*(g_ood_0_).*$", "Entropy CMCMixCEM (drop=0) No Calibration (Baseline)"]
   - ["^(Entropy_CMCMixCEM).*(_ce_30_).*(g_ood_0_).*$", "Entropy CMCMixCEM (drop=0) (Baseline)"]
 
+  - ["^(ConceptToLabelModel).*$", "Bayes MLP (Baseline)"]
+
 
 model_selection_metrics:
   - val_acc_y_random_group_level_True_use_prior_False_int_auc
@@ -468,3 +470,10 @@ runs:
       - calibration_epochs
       - uncerainty_threshold_percentile
     grid_search_mode: exhaustive
+
+  - architecture: 'ConceptToLabelModel'
+    run_name: "ConceptToLabelModel"
+    c2y_layers: [128, 64, 32]
+    grid_variables: []
+    max_epochs: 75
+    feature_drop_out: 0.25

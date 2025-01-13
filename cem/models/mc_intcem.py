@@ -317,11 +317,20 @@ class MonteCarloIntCEM(IntAwareConceptEmbeddingModel):
 
     def _predict_labels(self, bottleneck, **task_loss_kwargs):
         outputs = []
-        for sample_idx in range(2, bottleneck.shape[-1]):
-            out_vals = self.c2y_model(bottleneck[:, :, :, sample_idx])
-            out_vals = self.logit_temperatures[0, 0] * out_vals
-            outputs.append(out_vals.unsqueeze(-1))
-        outputs = torch.concat(outputs, dim=-1)
+        if bottleneck.shape[-1] == 2:
+            # Then no test time sampling was done!! So let's just use the
+            # normal mixed bottleneck. This will always be the first
+            # trial output
+            outputs.append(
+                self.logit_temperatures[0, 0] *
+                self.c2y_model(bottleneck[:, :, :, 0])
+            )
+        else:
+            for trial_idx in range(2, bottleneck.shape[-1]):
+                out_vals = self.c2y_model(bottleneck[:, :, :, trial_idx])
+                out_vals = self.logit_temperatures[0, 0] * out_vals
+                outputs.append(out_vals.unsqueeze(-1))
+            outputs = torch.concat(outputs, dim=-1)
         self._mixed_stds = torch.std(outputs, dim=-1)
         outputs = torch.mean(outputs, dim=-1)
         if (not self.training) and self.inference_threshold and (
@@ -353,10 +362,23 @@ class MonteCarloIntCEM(IntAwareConceptEmbeddingModel):
         # masks.Then, downstream in the line with _predict_labels, we will
         # unpack them, make a label prediction, and compute the mean and
         # variance of all samples
+        extra_scale = 1
         if self.deterministic or (self.hard_selection_value is not None):
             n_trials = 1
+        elif self.training:
+            if self.montecarlo_test_tries == 0:
+                # Then we will interpret this as a normal dropout rescaling
+                # during inference
+                n_trials = 1
+                extra_scale = (
+                    self.ood_dropout_prob if self.ood_dropout_prob > 0
+                    else 1
+                )
+            else:
+                n_trials = self.montecarlo_test_tries
         else:
-            n_trials = self.montecarlo_train_tries if self.training else self.montecarlo_test_tries
+            n_trials = self.montecarlo_train_tries
+
 
         global_pos_embeddings = pos_embeddings[:, :, :self.emb_size]
         contextual_pos_embeddings = pos_embeddings[:, :, self.emb_size:]
@@ -375,8 +397,10 @@ class MonteCarloIntCEM(IntAwareConceptEmbeddingModel):
         bottlenecks = []
         # The first two elements of the array will always be the contextual
         # mixed embedding followed by just the one using the global embeddings
-        combined_pos_embs = global_pos_embeddings + contextual_pos_embeddings
-        combined_neg_embs = global_neg_embeddings + contextual_neg_embeddings
+        combined_pos_embs = global_pos_embeddings + \
+            extra_scale * contextual_pos_embeddings
+        combined_neg_embs = global_neg_embeddings + \
+            extra_scale * contextual_neg_embeddings
         new_bottleneck = (
             combined_pos_embs * torch.unsqueeze(probs, dim=-1) + (
                 combined_neg_embs * (

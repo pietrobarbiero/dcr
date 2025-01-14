@@ -1,6 +1,6 @@
 trials: 3
 model_selection_trials: 1
-results_dir: /anfs/bigdisc/me466/mixcem_results/siim_arc_complete/
+results_dir: /anfs/bigdisc/me466/mixcem_results/siim_arc_complete_zero_shot/
 
 num_load_workers: 0
 
@@ -29,12 +29,46 @@ shared_params:
     num_workers: 8
     batch_size: 64
 
+    binarization_mode: zero_shot_uncertain #clustering #zero_shot
+    regenerate: True
+    zero_shot_scale: 5000
+    template: new_template
+    emb_mode: resnet50 #cxrclip
+    # selected_concepts:
+    #   - "Absent lung markings"
+    #   - "Visible pleural line"
+    #   - "Deep sulcus sign"
+    #   - "Asymmetric lung density"
+    #   - "Collapsed lung"
+    #   - "Mediastinal shift"
+    #   - "Air distribution pattern"
+      # - "Diaphragmatic contour"
+      # - "Subcutaneous emphysema"
+
+    #   # - "Mediastinal shift"
+    #   # - "Visible pleural line"
+    #   # - "Diaphragmatic contour"
+    #   # - "Rib fractures"
+    #   # - "Subcutaneous emphysema"
+    #   # - "Pleural effusion"
+    #   # - "Lung consolidation"
+    #   # - "Emphysematous changes"
+    #   # - "Lung fibrosis"
+    #   # - "Asymmetric lung density"
+    #   # - "Cardiac shadow abnormality"
+    #   # - "Mediastinal contour"
+    #   # - "Deep sulcus sign"
+    #   # - "Hyperinflated lung"
+    #   # - "Radiodensity changes"
+    #   # - "Symmetry analysis"
+    #   # - "Air distribution pattern"
+
     # DATASET VARIABLES
     root_dir: /anfs/bigdisc/me466/siim_arc/standard
     sampling_percent: 1
     sampling_groups: True
     test_subsampling: 1
-    weight_loss: False
+    weight_loss: True
 
   # Intervention Parameters
   intervention_config:
@@ -61,11 +95,13 @@ shared_params:
   patience: 15
   emb_size: 16
   extra_dims: 0
-  concept_loss_weight: [1, 5, 10]
+  concept_loss_weight: [10, 5, 1]
   learning_rate: 0.01
   weight_decay: 0.000001
-  weight_loss: False
-  c_extractor_arch: resnet18
+  weight_loss: True
+  c_extractor_arch: mlp
+  c_extractor_arch_layers: [256, 128, 64, 32]
+  # c2y_layers: [32, 16, 8]
   optimizer: sgd
   bool: False
   early_stopping_monitor: val_loss
@@ -81,14 +117,27 @@ shared_params:
   # Evaluation configuration
   eval_config:
     additional_test_sets:
-      - name: "OOD_sap_0.1"
+      - name: "OOD_sigma_0.5"
         update_previous: True
         dataset_config:
           test_transformation_config:
             post_generation: True
-            name: salt_and_pepper
-            amount: 0.1
-            s_vs_p: 0.5
+            name: gaussian_noise
+            sigma: 0.5
+      - name: "OOD_sigma_1"
+        update_previous: True
+        dataset_config:
+          test_transformation_config:
+            post_generation: True
+            name: gaussian_noise
+            sigma: 1
+      - name: "OOD_sigma_2"
+        update_previous: True
+        dataset_config:
+          test_transformation_config:
+            post_generation: True
+            name: gaussian_noise
+            sigma: 2
 
 runs:
   - architecture: 'ConceptBottleneckModel'
@@ -105,6 +154,13 @@ runs:
     sigmoidal_prob: True
     training_intervention_prob: 0.25
     embedding_activation: "leakyrelu"
+
+  - architecture: 'ConceptToLabelModel'
+    run_name: "ConceptToLabelModel"
+    c2y_layers: [256, 128, 64, 32]
+    grid_variables: []
+    max_epochs: 75
+    feature_drop_out: 0.25
 
   - architecture: 'ConceptBottleneckModel'
     run_name: "DNN_extra_dims_{extra_dims}"
@@ -174,7 +230,7 @@ runs:
     learning_rate: 0.001
     lr_ratio: 10
     weight_decay: 0
-    weight_loss: False
+    weight_loss: True
     grid_variables:
       - class_hidden_dim
       - hidden_dim

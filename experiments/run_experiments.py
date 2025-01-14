@@ -383,17 +383,19 @@ def _generate_dataset_and_update_config(
     elif isinstance(experiment_config['c_extractor_arch'], str) and (
         experiment_config['c_extractor_arch'].lower() == 'mlp'
     ):
-        input_features = dataset_config["input_features"]
+        input_features = experiment_config["input_shape"][-1]
         def c_extractor_arch(
             output_dim,
         ):
             if output_dim is None:
                 output_dim = 128
             layer_units = [input_features] + experiment_config.get('c_extractor_arch_layers', []) + [output_dim]
-            used_layers = [torch.nn.Linear(input_features, layer_units[1])]
-            for i, num_units in enumerate(layer_units[1:], start=1):
-                used_layers.append(torch.nn.LeakyReLU())
+            used_layers = []
+            for i in range(1, len(layer_units)):
+                num_units = layer_units[i]
                 used_layers.append(torch.nn.Linear(layer_units[i - 1], num_units))
+                if i != len(layer_units) - 1:
+                    used_layers.append(torch.nn.LeakyReLU())
             return torch.nn.Sequential(*used_layers)
 
         experiment_config["c_extractor_arch"] = c_extractor_arch

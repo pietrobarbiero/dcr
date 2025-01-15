@@ -1,32 +1,34 @@
-import os
-import numpy as np
-import torch
-import pytorch_lightning as pl
-import logging
-import joblib
 import io
-from contextlib import redirect_stdout
+import joblib
+import logging
+import numpy as np
+import os
+import pytorch_lightning as pl
+import re
 import scipy.special
 import sklearn.metrics
-from scipy.special import expit
 import time
+import torch
+
+from contextlib import redirect_stdout
 from pytorch_lightning import seed_everything
+from scipy.special import expit
 from typing import Callable
 
 import cem.utils.data as data_utils
 
-from cem.train.utils import load_call
-from cem.models.construction import load_trained_model
-from cem.interventions.random import IndependentRandomMaskIntPolicy
-from cem.interventions.random import IndependentRandomMaskIntPolicy
-from cem.interventions.uncertainty import UncertaintyMaximizerPolicy
-from cem.interventions.coop import CooP
-from cem.interventions.optimal import GreedyOptimal
 from cem.interventions.behavioural_learning import BehavioralLearningPolicy
+from cem.interventions.coop import CooP
 from cem.interventions.global_policies import (
     GlobalValidationPolicy,
     GlobalValidationImprovementPolicy,
 )
+from cem.interventions.optimal import GreedyOptimal
+from cem.interventions.random import IndependentRandomMaskIntPolicy
+from cem.interventions.random import IndependentRandomMaskIntPolicy
+from cem.interventions.uncertainty import UncertaintyMaximizerPolicy
+from cem.models.construction import load_trained_model
+from cem.train.utils import load_call
 
 ################################################################################
 ## Global Variables
@@ -1577,8 +1579,13 @@ def test_interventions(
     task_class_weights=None,
     dl_name='test',
     fast_intervention=False,
+    intervention_config=None,
 ):
-    intervention_config = config.get('intervention_config', {})
+    if intervention_config is None:
+        intervention_config = config.get(
+            'intervention_config',
+            {},
+        )
     use_auc = intervention_config.get('use_auc', False)
     if f'{dl_name}_intervention_policies' in intervention_config:
         used_policies = intervention_config[f'{dl_name}_intervention_policies']
@@ -1660,6 +1667,33 @@ def test_interventions(
                 ) == "1"
             ):
                 continue
+            # We give the option for some policies to be ran only for certain
+            # methods
+            included = policy_args.get('include_run_names', None) is None
+            for include_regex in policy_args.get('include_run_names', []):
+                if re.search(include_regex, run_name):
+                    # Then time to included it!
+                    included = True
+                    break
+            if not included:
+                logging.debug(
+                    f'Skipping policy {key_policy_name} for run {run_name} '
+                    f'after it did not match any of the include_run_names.'
+                )
+                continue
+            included = True
+            for skip_regex in policy_args.get('skip_run_names', []):
+                if re.search(skip_regex, run_name):
+                    # Then time to skip it!
+                    logging.debug(
+                        f'Skipping policy {key_policy_name} for run {run_name} '
+                        f'after it matched with skip regex "{skip_regex}".'
+                    )
+                    included = False
+                    break
+            if not included:
+                continue
+
             policy_params_fn, concept_selection_policy = get_int_policy(
                 policy_args=policy_args,
                 config=config,

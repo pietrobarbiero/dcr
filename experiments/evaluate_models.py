@@ -151,6 +151,7 @@ def evaluate_model(
             eval_results.update(intervention_utils.test_interventions(
                     dl_name=dl_name,
                     test_dl=test_dataloader,
+                    intervention_config=intervention_config,
                     **test_int_args
                 ),
             )

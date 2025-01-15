@@ -1,3 +1,4 @@
+import copy
 import io
 import joblib
 import logging
@@ -1484,6 +1485,7 @@ def _evaluate_intervention_auc(
     real_competence_level="same",
     group_level_competencies=False,
     dl_name="test",
+    run_name="",
 ):
     intervention_config = config.get('intervention_config', {})
     use_auc = intervention_config.get('use_auc', False)
@@ -1504,9 +1506,12 @@ def _evaluate_intervention_auc(
                 used_policies,
             )
         for policy_args in currently_used_policies:
+            useful_args = copy.deepcopy(policy_args)
+            useful_args.pop('include_run_names', None)
+            useful_args.pop('exclude_run_names', None)
             key_policy_name = policy_args["policy"] + "_" + "_".join([
                 f'{key}_{policy_args[key]}'
-                for key in sorted(policy_args.keys())
+                for key in sorted(useful_args.keys())
                 if key != 'policy'
             ])
             if (
@@ -1515,6 +1520,32 @@ def _evaluate_intervention_auc(
                     "0"
                 ) == "1"
             ):
+                continue
+            # We give the option for some policies to be ran only for certain
+            # methods
+            included = policy_args.get('include_run_names', None) is None
+            for include_regex in policy_args.get('include_run_names', []):
+                if re.search(include_regex, run_name):
+                    # Then time to included it!
+                    included = True
+                    break
+            if not included:
+                logging.debug(
+                    f'Skipping policy {key_policy_name} for run {run_name} '
+                    f'after it did not match any of the include_run_names.'
+                )
+                continue
+            included = True
+            for skip_regex in policy_args.get('exclude_run_names', []):
+                if re.search(skip_regex, run_name):
+                    # Then time to skip it!
+                    logging.debug(
+                        f'Skipping policy {key_policy_name} for run {run_name} '
+                        f'after it matched with skip regex "{skip_regex}".'
+                    )
+                    included = False
+                    break
+            if not included:
                 continue
             if competence_level == 1:
                 int_results_key = f'{dl_name}_{"auc" if use_auc else "acc"}_y_{key_policy_name}_ints'
@@ -1655,9 +1686,12 @@ def test_interventions(
                 used_policies,
             )
         for policy_args in currently_used_policies:
+            useful_args = copy.deepcopy(policy_args)
+            useful_args.pop('include_run_names', None)
+            useful_args.pop('exclude_run_names', None)
             key_policy_name = policy_args["policy"] + "_" + "_".join([
                 f'{key}_{policy_args[key]}'
-                for key in sorted(policy_args.keys())
+                for key in sorted(useful_args.keys())
                 if key != 'policy'
             ])
             if (
@@ -1682,7 +1716,7 @@ def test_interventions(
                 )
                 continue
             included = True
-            for skip_regex in policy_args.get('skip_run_names', []):
+            for skip_regex in policy_args.get('exclude_run_names', []):
                 if re.search(skip_regex, run_name):
                     # Then time to skip it!
                     logging.debug(
@@ -1855,6 +1889,7 @@ def test_interventions(
         real_competence_level=real_competence_level,
         group_level_competencies=group_level_competencies,
         dl_name=dl_name,
+        run_name=run_name,
     )
     if use_auc:
         # Then rerun this but without AUC so that we also collect metrics

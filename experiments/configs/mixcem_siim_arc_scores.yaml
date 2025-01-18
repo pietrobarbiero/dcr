@@ -1,6 +1,7 @@
 trials: 3
 model_selection_trials: 1
-results_dir: /anfs/bigdisc/me466/mixcem_results/siim_arc_complete_zero_shot_no_scale/
+results_dir: /anfs/bigdisc/me466/mixcem_results/siim_arc_percentile_threshold_derp_2/
+include_c_aucs: True
 
 num_load_workers: 0
 
@@ -27,13 +28,16 @@ shared_params:
   dataset_config:
     dataset: "siim_arc"
     num_workers: 8
-    batch_size: 64
+    batch_size: 512
 
-    binarization_mode: zero_shot_uncertain #clustering #zero_shot
+    binarization_mode: percentile_threshold #zero_shot #percentile_threshold #zero_shot #percentile_threshold #normalized_class_score #zero_shot_uncertain #clustering #zero_shot
     regenerate: True
-    zero_shot_scale: 100
+    # zero_shot_scale: 1000 #null
     template: new_template
-    emb_mode: resnet50
+    emb_mode: resnet50 #cxrclip #resnet50
+    # normalized_emb: True # False
+    # threshold: 50 #70 #80
+    threshold: 90
 
     # DATASET VARIABLES
     root_dir: /anfs/bigdisc/me466/siim_arc/standard
@@ -41,6 +45,59 @@ shared_params:
     sampling_groups: True
     test_subsampling: 1
     weight_loss: True
+    # c_aucs = [0.710639880952381, 0.7601376483487199, 0.789498931330722, 0.7805713154025303, 0.741355159581091, 0.7654870011591324, 0.8341790766793437, 0.6669153678565443, 0.7642113095238096, 0.794651663253422, 0.7515154182390461, 0.849235450148229, 0.7849774172387624, 0.811056981339242, 0.7775713562010728, 0.7964377089399466, 0.8077911612101446, 0.8318968272725803, 0.8143619136719428]
+    # selected_concepts: [6, 9, 11, 13, 14, 15, 15]
+    # selected_concepts: [6, 9, 11, 12, 13, 14, 15, 16, 17, 18]
+    # [
+    #   0 0.6747480715454792,
+    #   1 0.7479951338165008,
+    #   2 0.7655267325407624,
+    #   3 0.7497322733845782,
+    #   4 0.7049595231843604,
+    #   5 0.746019873949829,
+    #   6 0.8226623610429892,
+    #   7 0.6261451032243189,
+    #   8 0.72906037414966,
+    #   9 0.7787043982665918,
+    #   10 0.723001235858922,
+    #   11 0.8147742428925655,
+    #   12 0.7768706180863139,
+    #   13 0.7866054171501007,
+    #   14 0.7635124478990649,
+    #   15 0.7802853196552282,
+    #   16 0.7711851095136344,
+    #   17 0.7983267397562456,
+    #   18 0.793268149251971,
+    # ]
+    # selected_concepts:
+    #   - "Absent lung markings"
+    #   - "Visible pleural line"
+    #   - "Deep sulcus sign"
+    #   - "Asymmetric lung density"
+    #   - "Collapsed lung"
+    #   - "Mediastinal shift"
+    #   # - "Air distribution pattern"
+    #   - "Diaphragmatic contour"
+    #   - "Subcutaneous emphysema"
+
+    #   # - "Mediastinal shift"
+    #   # - "Visible pleural line"
+    #   # - "Diaphragmatic contour"
+    #   # - "Rib fractures"
+    #   # - "Subcutaneous emphysema"
+    #   # - "Pleural effusion"
+    #   # - "Lung consolidation"
+    #   # - "Emphysematous changes"
+    #   # - "Lung fibrosis"
+    #   # - "Asymmetric lung density"
+    #   # - "Cardiac shadow abnormality"
+    #   # - "Mediastinal contour"
+    #   # - "Deep sulcus sign"
+    #   # - "Hyperinflated lung"
+    #   # - "Radiodensity changes"
+    #   # - "Symmetry analysis"
+    #   # - "Air distribution pattern"
+
 
   # Intervention Parameters
   intervention_config:
@@ -62,20 +119,21 @@ shared_params:
   # evaluation (may significantly increase experiment times)
   skip_repr_evaluation: True
 
-  max_epochs: 50
+  max_epochs: 150
   top_k_accuracy: null
   save_model: True
   patience: 15
   emb_size: 16
   extra_dims: 0
-  concept_loss_weight: [10, 5, 1]
-  learning_rate: 0.01
-  weight_decay: 0.000001
+  concept_loss_weight: [10, 5] #[10, 5, 1]
+  learning_rate: 0.001
+  # weight_decay: 0.000001
   weight_loss: True
   c_extractor_arch: mlp
-  c_extractor_arch_layers: [256, 128, 64, 32]
+  c_extractor_arch_layers: [] #[256, 128, 64, 32]
+  # batch_norm_layers: [1, 3, 5]
   # c2y_layers: [32, 16, 8]
-  optimizer: sgd
+  optimizer: adam #sgd
   bool: False
   early_stopping_monitor: val_loss
   early_stopping_mode: min
@@ -113,6 +171,89 @@ shared_params:
             sigma: 2
 
 runs:
+
+  - architecture: 'ConceptBottleneckModel'
+    run_name: "CBM_Sigmoid_Baseline_cwl_{concept_loss_weight}"
+    training_intervention_prob: 0
+    embedding_activation: "leakyrelu"
+    bool: False
+    extra_dims: 0
+    concept_loss_weight: [5]
+    sigmoidal_extra_capacity: False
+    sigmoidal_prob: True
+
+  - architecture: 'ConceptEmbeddingModel'
+    run_name: "CEM_Baseline_cwl_{concept_loss_weight}"
+    sigmoidal_prob: True
+    concept_loss_weight: [5]
+    training_intervention_prob: 0.25
+    embedding_activation: "leakyrelu"
+
+  - architecture: 'MCIntCEM'
+    run_name: "Entropy_CMCMixIntCEM_t_{temperature}_r_{all_intervened_loss_weight}_{pooling_mode}_{uncerainty_threshold_percentile}_{global_epochs}_mpc_{mixed_probs_coeff}_tmc_{montecarlo_train_tries}_emc_{montecarlo_test_tries}_cwc_{class_wise_temperature}_ce_{calibration_epochs}_g_ood_{ood_dropout_prob}_emb_{emb_size}_{finetune_with_val}_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_cwl_{concept_loss_weight}"
+    load_path_name: "Entropy_CMCMixIntCEM_t_{temperature}_r_{all_intervened_loss_weight}_{pooling_mode}_None_{global_epochs}_mpc_{mixed_probs_coeff}_tmc_1_emc_{montecarlo_test_tries}_cwc_{class_wise_temperature}_ce_0_g_ood_{ood_dropout_prob}_emb_{emb_size}_True_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_cwl_{concept_loss_weight}"
+
+    concept_loss_weight: [5, 1]
+    emb_size: [16]
+    shared_emb_generator: True
+    montecarlo_train_tries: [1]
+    montecarlo_test_tries: [0]
+    ood_dropout_prob: [0.1] #, 0.5]
+    pooling_mode: ['concat']
+    calibration_epochs: [0, 30]
+    finetune_with_val: [True]
+    learnable_temps: False
+    class_wise_temperature: False
+    global_epochs: [0]
+    global_mixed_probs_coeff: 0
+    freeze_global_embeddings: False
+    max_epochs: 150
+    uncerainty_threshold_percentile: [null]
+    inference_threshold: False
+    mixed_probs_coeff: [1]
+    all_intervened_loss_weight: [10, 0.1, 1]
+    calibrate_concept_probs: True
+    dynamic_confidence_scaling: True
+    temperature: [1]
+    scale_fn: entropy
+
+    ###############################################################################################
+
+    # IntCEM stuff
+    embedding_activation: null
+    training_intervention_prob: [0.25]
+    intervention_task_discount: [1.1] #1.1]
+    use_concept_groups: True
+    int_model_use_bn: True
+    int_model_layers: [128, 128, 64, 64]
+    max_horizon: 6
+    horizon_rate: 1.005
+    intervention_weight: [0.1] #5] #0.1]
+    grid_variables:
+      - training_intervention_prob
+      - intervention_task_discount
+      - ood_dropout_prob
+      - emb_size
+      - finetune_with_val
+      - concept_loss_weight
+      - pooling_mode
+      - intervention_weight
+      - global_epochs
+      - montecarlo_train_tries
+      - montecarlo_test_tries
+      - mixed_probs_coeff
+      - all_intervened_loss_weight
+      - temperature
+      - calibration_epochs
+      - uncerainty_threshold_percentile
+    grid_search_mode: exhaustive
+
+  - architecture: 'ConceptEmbeddingModel'
+    run_name: "CEM_Baseline_cwl_{concept_loss_weight}"
+    sigmoidal_prob: True
+    training_intervention_prob: 0.25
+    embedding_activation: "leakyrelu"
+
   - architecture: 'ConceptBottleneckModel'
     run_name: "CBM_Sigmoid_Baseline_cwl_{concept_loss_weight}"
     training_intervention_prob: 0
@@ -122,17 +263,11 @@ runs:
     sigmoidal_extra_capacity: False
     sigmoidal_prob: True
 
-  - architecture: 'ConceptEmbeddingModel'
-    run_name: "CEM_Baseline_cwl_{concept_loss_weight}"
-    sigmoidal_prob: True
-    training_intervention_prob: 0.25
-    embedding_activation: "leakyrelu"
-
   - architecture: 'ConceptToLabelModel'
     run_name: "ConceptToLabelModel"
     c2y_layers: [256, 128, 64, 32]
     grid_variables: []
-    max_epochs: 75
+    max_epochs: 150
     feature_drop_out: 0.25
 
   - architecture: 'ConceptBottleneckModel'
@@ -222,6 +357,7 @@ runs:
     horizon_rate: 1.005
     gradient_clip_val: 100
     emb_size: [16, 32]
+    concept_loss_weight: [5] #[10, 5, 1]
     grid_variables:
         - concept_loss_weight
         - intervention_task_discount
@@ -247,7 +383,7 @@ runs:
       add_linear_layers: [19]  # Add an intermediate layer with the same size as the number of concepts so that the evaluation is fair
     blackbox_training_epochs: 50
     max_residual_epochs: 50
-    max_epochs: 50
+    max_epochs: 150
     blackbox_path: 'PCBM_BlackBox_Model_{blackbox_model_config[name]}_pre_{blackbox_model_config[imagenet_pretrained]}_fold_{split}_layers_{blackbox_model_config[add_linear_layers]}'
 
 
@@ -273,70 +409,11 @@ runs:
       add_linear_layers: [19]  # Add an intermediate layer with the same size as the number of concepts so that the evaluation is fair
     blackbox_training_epochs: 50
     max_residual_epochs: 50
-    max_epochs: 50
+    max_epochs: 150
     blackbox_path: 'PCBM_BlackBox_Model_{blackbox_model_config[name]}_pre_{blackbox_model_config[imagenet_pretrained]}_fold_{split}_layers_{blackbox_model_config[add_linear_layers]}'
 
     grid_variables:
       - reg_strength
       - l1_ratio
       - svd_penalty
-    grid_search_mode: exhaustive
-
-  - architecture: 'MCIntCEM'
-    run_name: "Entropy_CMCMixIntCEM_t_{temperature}_r_{all_intervened_loss_weight}_{pooling_mode}_{uncerainty_threshold_percentile}_{global_epochs}_mpc_{mixed_probs_coeff}_tmc_{montecarlo_train_tries}_emc_{montecarlo_test_tries}_cwc_{class_wise_temperature}_ce_{calibration_epochs}_g_ood_{ood_dropout_prob}_emb_{emb_size}_{finetune_with_val}_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_cwl_{concept_loss_weight}"
-    load_path_name: "Entropy_CMCMixIntCEM_t_{temperature}_r_{all_intervened_loss_weight}_{pooling_mode}_None_{global_epochs}_mpc_{mixed_probs_coeff}_tmc_1_emc_{montecarlo_test_tries}_cwc_{class_wise_temperature}_ce_0_g_ood_{ood_dropout_prob}_emb_{emb_size}_True_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_cwl_{concept_loss_weight}"
-
-    concept_loss_weight: [1, 5, 10]
-    emb_size: [16]
-    shared_emb_generator: True
-    montecarlo_train_tries: [1]
-    montecarlo_test_tries: [0] #, 1, 50]
-    ood_dropout_prob: [0.1, 0.5]
-    pooling_mode: ['concat']
-    calibration_epochs: [0, 30]
-    finetune_with_val: [True]
-    learnable_temps: False
-    class_wise_temperature: False
-    global_epochs: [0]
-    global_mixed_probs_coeff: 0
-    freeze_global_embeddings: False
-    max_epochs: 50 # 150
-    uncerainty_threshold_percentile: [null]
-    inference_threshold: False
-    mixed_probs_coeff: [1]
-    all_intervened_loss_weight: [0.1, 1]
-    calibrate_concept_probs: True
-    dynamic_confidence_scaling: True
-    temperature: [1]
-    scale_fn: entropy
-
-    ###############################################################################################
-
-    # IntCEM stuff
-    embedding_activation: null
-    training_intervention_prob: [0.25]
-    intervention_task_discount: [1.1]
-    use_concept_groups: True
-    int_model_use_bn: True
-    int_model_layers: [128, 128, 64, 64]
-    max_horizon: 6
-    horizon_rate: 1.005
-    intervention_weight: [0.1]
-    grid_variables:
-      - training_intervention_prob
-      - intervention_task_discount
-      - ood_dropout_prob
-      - emb_size
-      - finetune_with_val
-      - concept_loss_weight
-      - pooling_mode
-      - intervention_weight
-      - global_epochs
-      - montecarlo_train_tries
-      - montecarlo_test_tries
-      - mixed_probs_coeff
-      - all_intervened_loss_weight
-      - temperature
-      - calibration_epochs
-      - uncerainty_threshold_percentile
     grid_search_mode: exhaustive

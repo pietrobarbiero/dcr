@@ -1,42 +1,168 @@
 """
-Dataloader the SIIM-ARC Dataset
+Dataloader the Cifar10 Dataset
 """
 import numpy as np
 import os
 import torch
+import torchvision
 
 from scipy.special import softmax
 from pytorch_lightning import seed_everything
 from sklearn.cluster import KMeans
 from torch.utils.data import Dataset, Subset, DataLoader
+from torchvision import transforms
 
 ########################################################
 ## GENERAL DATASET GLOBAL VARIABLES
 ########################################################
 
-N_CLASSES = 1
-DATASET_DIR = os.environ.get("DATASET_DIR", 'data/siim_arc/')
+N_CLASSES = 10
+DATASET_DIR = os.environ.get("DATASET_DIR", 'data/cifar10/')
 
 CONCEPT_SEMANTICS = [
-    "Collapsed lung",
-    "Mediastinal shift",
-    "Visible pleural line",
-    "Diaphragmatic contour",
-    "Rib fractures",
-    "Subcutaneous emphysema",
-    "Absent lung markings",
-    "Pleural effusion",
-    "Lung consolidation",
-    "Emphysematous changes",
-    "Lung fibrosis",
-    "Asymmetric lung density",
-    "Cardiac shadow abnormality",
-    "Mediastinal contour",
-    "Deep sulcus sign",
-    "Hyperinflated lung",
-    "Radiodensity changes",
-    "Symmetry analysis",
-    "Air distribution pattern",
+    "Hunter",
+    "barn",
+    "beak",
+    "bed",
+    "bed for carrying cargo",
+    "beetle",
+    "bird feeder",
+    "birdfeeder",
+    "birdhouse",
+    "bit",
+    "boat",
+    "branch",
+    "bridle",
+    "cab for the driver",
+    "cage",
+    "captain",
+    "cat bed",
+    "cat food dish",
+    "cat toy",
+    "collar",
+    "copilot",
+    "crew",
+    "dashboard",
+    "deck",
+    "deer stand",
+    "dock",
+    "dog bowl",
+    "driver",
+    "field",
+    "flat back end",
+    "flat front and back",
+    "flight attendant",
+    "fly",
+    "food bowl",
+    "forest",
+    "four-legged mammal",
+    "gear shift",
+    "green or brown body",
+    "grille",
+    "halter",
+    "hitch",
+    "large body",
+    "large size",
+    "large, metal body",
+    "large, rectangular body",
+    "lead rope",
+    "leaf",
+    "leash",
+    "lily pad",
+    "litter box",
+    "long neck",
+    "mane and tail",
+    "mast",
+    "mosquito",
+    "nest",
+    "net",
+    "nose",
+    "passenger",
+    "pasture",
+    "pedal",
+    "person",
+    "pilot",
+    "pointed front end",
+    "pond",
+    "port",
+    "reddish-brown coat",
+    "reins",
+    "rider",
+    "rifle",
+    "road",
+    "rudder",
+    "runway",
+    "saddle",
+    "scratching post",
+    "seat",
+    "seatbelt",
+    "short, stocky build",
+    "slender body",
+    "small, lithe body",
+    "spider",
+    "steering wheel",
+    "suitcase",
+    "tail",
+    "tire",
+    "tough, durable frame",
+    "toy",
+    "trailer",
+    "tree",
+    "wet nose",
+    "wheel",
+    "wide mouth",
+    "windshield",
+    "worm",
+    "amphibian",
+    "an engine",
+    "animal",
+    "antlers",
+    "cargo",
+    "engines",
+    "engines on the wings",
+    "feathers",
+    "food",
+    "four legs",
+    "four round, black tires",
+    "four wheels",
+    "fur",
+    "grass",
+    "hooves",
+    "insects",
+    "landing gear",
+    "large sails or engines",
+    "large, brown eyes",
+    "large, bulging eyes",
+    "lily pads",
+    "living thing",
+    "long ears",
+    "long hind legs for jumping",
+    "long, thin legs",
+    "machine",
+    "mammal",
+    "multiple decks",
+    "multiple sails",
+    "nature",
+    "object",
+    "organism",
+    "passengers",
+    "pointed ears",
+    "quadruped",
+    "side windows",
+    "taillights",
+    "the ability to fly",
+    "the ocean",
+    "transportation",
+    "trees",
+    "two headlights",
+    "vertebrate",
+    "vessel",
+    "watercraft",
+    "webbed feet",
+    "whiskers",
+    "white spots on the coat",
+    "wings",
+    "woods",
 ]
 
 
@@ -44,14 +170,9 @@ CONCEPT_SEMANTICS = [
 ## Dataset Loader
 ########################################################
 
-# Normalize embeddings
-def normalize(embedding):
-    return embedding / np.linalg.norm(embedding)
-
-
-class SiimArcDataset(Dataset):
+class Cifar10Dataset(Dataset):
     """
-    Siim-Arc dataset
+    Cifar10 dataset
     """
 
     def __init__(
@@ -60,13 +181,11 @@ class SiimArcDataset(Dataset):
         split='train',
         concept_transform=None,
         additional_sample_transform=None,
-        emb_mode='cxrclip',
         binarization_mode='clustering',
         zero_shot_scale=1000,
         threshold=None,
         regenerate=False,
         template="",
-        normalized_emb=False,
     ):
         self.root_dir = root_dir
         self.split = split
@@ -74,11 +193,11 @@ class SiimArcDataset(Dataset):
         if concept_transform is None:
             concept_transform = lambda x: x
         self.concept_transform = concept_transform
-        self.emb_mode = emb_mode
         self.binarization_mode = binarization_mode
         self.zero_shot_scale = zero_shot_scale
         self.threshold = threshold
-        self.normalized_emb = normalized_emb
+
+        self.transform = additional_sample_transform
 
         if not os.path.exists(self.root_dir):
             raise ValueError(
@@ -86,91 +205,75 @@ class SiimArcDataset(Dataset):
                 f'dataset first.'
             )
 
-        self.transform = additional_sample_transform
-        self._embs, self._labels, self._concepts = self._process_xray_concepts(
+        self._download_data_and_splits()
+        self._concepts = self._process_vit_concepts(
             split=split,
             regenerate=regenerate,
             template=template,
         )
 
-    def _process_xray_concepts(self, split='train', regenerate=False, template=""):
-        x = torch.tensor(torch.load(
-            os.path.join(self.root_dir, f'x_{split}_{self.emb_mode}.pt')
-        )).float()
+    def _download_data_and_splits(self):
+        self._inner_dataset = torchvision.datasets.CIFAR10(
+            root=os.path.expanduser(self.root_dir),
+            download=True,
+            train=self.split in ['train', 'val'],
+            transform=transforms.Compose(
+                (
+                    [
+                        transforms.ToTensor(),
+                        transforms.ConvertImageDtype(torch.float32),
+                    ] +
+                    ([self.transform] if self.transform is not None else []) +
+                    [
+                        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+                    ]
+                )
+            ),
+        )
+        split_path = os.path.join(self.root_dir, f'{self.split}_idxs.npy')
+        self.idx_remap = list(range(len(self._inner_dataset)))
+        if self.split in ['train', 'val']:
+            if os.path.exists(split_path):
+                self.idx_remap = np.load(split_path)
+            else:
+                rng = np.random.default_rng(42)
+                val_idxs = sorted(
+                    rng.choice(
+                        len(self._inner_dataset),
+                        size=int(np.ceil(len(self._inner_dataset) * 0.2)),
+                        replace=False,
+                    )
+                )
+                if self.split == 'val':
+                    self.idx_remap = val_idxs
+                else:
+                    exclude_set = set(val_idxs)
+                    self.idx_remap = [
+                        i for i in range(len(self._inner_dataset))
+                        if i not in exclude_set
+                    ]
+                np.save(split_path, self.idx_remap)
+
+    def _process_vit_concepts(
+        self,
+        split='train',
+        regenerate=False,
+        template="",
+    ):
         template = template + "_" if template else ""
+        used_split = 'train' if split == 'val' else split
         if regenerate or not os.path.exists(
             os.path.join(
                 self.root_dir,
-                f'{template}c_{split}_{self.binarization_mode}_bool.pt',
+                f'{template}c_{used_split}_{self.binarization_mode}_bool.pt',
             )
         ):
-            if self.binarization_mode == 'scores':
-                c = torch.tensor(torch.load(
-                    os.path.join(self.root_dir, f'{template}c_{split}.pt')
-                )).float()
-                if self.threshold is not None:
-                    c = (c >= self.threshold).float()
-            elif self.binarization_mode == 'percentile_threshold':
-                # Let's find the normalization factors
-                all_scores = np.concatenate(
-                    [
-                        torch.tensor(torch.load(
-                            os.path.join(
-                                self.root_dir,
-                                f'{template}c_{s}.pt'
-                            )
-                        )).float().detach().cpu().numpy()
-                        for s in ['train', 'val', 'test']
-                    ],
-                    axis=0,
-                )
-                thresh = self.threshold or 50
-                split_values = np.expand_dims(
-                    np.percentile(all_scores, thresh, axis=0),
-                    axis=0,
-                )
-                c = torch.tensor(torch.load(
-                    os.path.join(self.root_dir, f'{template}c_{split}.pt')
-                ) >= split_values).float()
-            elif self.binarization_mode == 'normalized_class_score':
-                # Let's find the normalization factors
-                all_scores = np.concatenate(
-                    [
-                        torch.tensor(torch.load(
-                            os.path.join(
-                                self.root_dir,
-                                f'{template}c_{s}.pt'
-                            )
-                        )).float().detach().cpu().numpy()
-                        for s in ['train', 'val', 'test']
-                    ],
-                    axis=0,
-                )
-                min_values = np.expand_dims(np.min(all_scores, axis=0), axis=0)
-                print("Max values:", np.max(all_scores, axis=0))
-                print("Min values:", min_values)
-                print("Mean values:", np.mean(all_scores, axis=0))
-                print("Norm values:", np.linalg.norm(all_scores, axis=0))
-                all_scores = all_scores - min_values
-                print("\tAfter adjustment... Max values:", np.max(all_scores, axis=0))
-                print("\tAfter adjustment... Min values:", np.min(all_scores, axis=0))
-                print("\tAfter adjustment... Mean values:", np.mean(all_scores, axis=0))
-                print("\tAfter adjustment... Norm values:", np.linalg.norm(all_scores, axis=0))
-                min_values = torch.tensor(min_values)
-                norms = torch.tensor(
-                    np.linalg.norm(all_scores, axis=0)
-                ).unsqueeze(0)
-                c = torch.tensor(torch.load(
-                    os.path.join(self.root_dir, f'{template}c_{split}.pt')
-                )).float()
-                c = (c - min_values) / (norms + 1e-6)
-                if self.threshold is not None:
-                    c = (c >= self.threshold).float()
-            elif self.binarization_mode == 'zero_shot':
+
+            if self.binarization_mode == 'zero_shot':
                 # Then we will use the zero-shot classifier to make concept
                 # labels
                 concept_scores = torch.tensor(torch.load(
-                    os.path.join(self.root_dir, f'{template}neg_c_{split}.pt')
+                    os.path.join(self.root_dir, f'{template}c_{used_split}.pt')
                 )).float()
                 concept_scores = concept_scores.numpy()
                 n_concepts = concept_scores.shape[1]//2
@@ -189,61 +292,28 @@ class SiimArcDataset(Dataset):
                 if self.threshold is not None:
                     c = (c >= self.threshold).float()
 
-            elif self.binarization_mode == 'zero_shot_uncertain':
-                # Then we will use the zero-shot classifier to make concept
-                # labels
-                concept_scores = torch.tensor(torch.load(
-                    os.path.join(self.root_dir, f'{template}neg_c_{split}.pt')
-                )).float()
-                concept_scores = concept_scores.numpy()
-                n_concepts = concept_scores.shape[1]//2
-                cluster_assignments = np.zeros(
-                    (concept_scores.shape[0], n_concepts)
+            elif self.binarization_mode == 'percentile_threshold':
+                # Let's find the normalization factors
+                all_scores = np.concatenate(
+                    [
+                        torch.tensor(torch.load(
+                            os.path.join(
+                                self.root_dir,
+                                f'{template}c_{s}.pt'
+                            )
+                        )).float().detach().cpu().numpy()
+                        for s in ['train', 'test']
+                    ],
+                    axis=0,
                 )
-                # n_samples, n_concept
-                for concept_idx in range(n_concepts):
-                    pos_scores = concept_scores[:, 2*concept_idx:2*concept_idx+1]
-                    neg_scores = concept_scores[:, 2*concept_idx + 1:2*concept_idx + 2]
-                    cluster_assignments[:, concept_idx] = softmax(
-                        np.concatenate([self.zero_shot_scale * neg_scores, self.zero_shot_scale * pos_scores], axis=-1),
-                        axis=-1
-                    )[:, 1]
-                c = torch.tensor(cluster_assignments).float()
-                if self.threshold is not None:
-                    c = (c >= self.threshold).float()
-
-            elif self.binarization_mode == 'clustering':
-                concept_scores = torch.tensor(torch.load(
-                    os.path.join(self.root_dir, f'{template}c_{split}.pt')
-                )).float()
-                concept_scores = concept_scores.numpy()
-                # Initialize an array to hold the cluster assignments
-                cluster_assignments = np.zeros_like(concept_scores)
-
-                # Iterate over each dimension
-                for i in range(concept_scores.shape[1]):
-                    # Reshape the dimension to be a 2D array (n, 1)
-                    dimension_data = concept_scores[:, i].reshape(-1, 1)
-
-                    # Apply k-means clustering with 2 clusters
-                    kmeans = KMeans(n_clusters=2, random_state=0)
-                    kmeans.fit(dimension_data)
-
-                    # Get the cluster labels
-                    labels = kmeans.labels_
-
-                    # Calculate the mean of each cluster
-                    cluster_means = [
-                        dimension_data[labels == j].mean() for j in range(2)
-                    ]
-
-                    # Determine which cluster has the lower mean and which has the
-                    # higher mean
-                    if cluster_means[0] < cluster_means[1]:
-                        cluster_assignments[:, i] = labels
-                    else:
-                        cluster_assignments[:, i] = 1 - labels
-                c = torch.tensor(cluster_assignments).float()
+                thresh = self.threshold or 50
+                split_values = torch.tensor(np.expand_dims(
+                    np.percentile(all_scores, thresh, axis=0),
+                    axis=0,
+                ))
+                c = torch.tensor(torch.load(
+                    os.path.join(self.root_dir, f'{template}c_{used_split}.pt')
+                ) >= split_values).float()
             else:
                 raise ValueError(
                     f'Unsupported binarization mode {self.binarization_mode}'
@@ -253,70 +323,57 @@ class SiimArcDataset(Dataset):
                 c,
                 os.path.join(
                     self.root_dir,
-                    f'{template}c_{split}_{self.binarization_mode}_bool.pt',
+                    f'{template}c_{used_split}_{self.binarization_mode}_bool.pt',
                 ),
             )
         else:
             c = torch.tensor(torch.load(
                 os.path.join(
                     self.root_dir,
-                    f'{template}c_{split}_{self.binarization_mode}_bool.pt',
+                    f'{template}c_{used_split}_{self.binarization_mode}_bool.pt',
                 ),
             ))
         print(f"[Split {split}] Concept distribution is: {list(np.mean(c.detach().cpu().numpy(), axis=0))}")
-        y = torch.tensor(torch.load(
-            os.path.join(self.root_dir, f'y_true_{split}.pt')
-        )).float()
-        # y = torch.nn.functional.one_hot(y, num_classes=2).float()
-        return x, y, c
+        return c
 
     def __len__(self):
-        return self._embs.shape[0]
+        return len(self.idx_remap)
 
     def __getitem__(self, idx):
-        x = self._embs[idx]
-        y = self._labels[idx]
-        c = self._concepts[idx]
-        if self.normalized_emb:
-            x = x/(torch.norm(x, dim=-1).unsqueeze(-1) + 1e-8)
+        x, y = self._inner_dataset[self.idx_remap[idx]]
+        c = self._concepts[self.idx_remap[idx]]
         if self.concept_transform is not None:
             c = self.concept_transform(c)
-        if self.transform is not None:
-            x = self.transform(x)
         return x, y, c
 
 def load_data(
     split,
     batch_size,
-    root_dir='data/siim_arc/',
+    root_dir='data/cifar10/',
     num_workers=1,
     dataset_transform=lambda x: x,
     dataset_size=None,
     concept_transform=None,
     additional_sample_transform=None,
-    emb_mode='cxrclip',
-    binarization_mode='clustering',
+    binarization_mode='zero_shot',
     zero_shot_scale=1000,
     threshold=None,
     regenerate=False,
-    normalized_emb=False,
     template="",
 ):
     """
     TODO
     """
-    dataset = SiimArcDataset(
+    dataset = Cifar10Dataset(
         split=split,
         root_dir=root_dir,
         concept_transform=concept_transform,
         additional_sample_transform=additional_sample_transform,
-        emb_mode=emb_mode,
         binarization_mode=binarization_mode,
         zero_shot_scale=zero_shot_scale,
         threshold=threshold,
         regenerate=regenerate,
         template=template,
-        normalized_emb=normalized_emb,
     )
     if dataset_size is not None:
         # Then we will subsample this training set so that after splitting
@@ -383,10 +440,8 @@ def generate_data(
     train_sample_transform=None,
     test_sample_transform=None,
     val_sample_transform=None,
-    emb_mode='cxrclip',
     binarization_mode='clustering',
     zero_shot_scale=1000,
-    normalized_emb=False,
     threshold=None,
     regenerate=False,
     selected_concepts=None,
@@ -407,7 +462,6 @@ def generate_data(
     dataset_size = config.get('dataset_size', None)
     batch_size = config.get('batch_size', 32)
     selected_concepts = config.get('selected_concepts', selected_concepts)
-    emb_mode = config.get('emb_mode', emb_mode)
     binarization_mode = config.get(
         'binarization_mode',
         binarization_mode,
@@ -416,7 +470,6 @@ def generate_data(
     regenerate = config.get('regenerate', regenerate)
     template = config.get('template', template)
     threshold = config.get('threshold', threshold)
-    normalized_emb = config.get('normalized_emb', normalized_emb)
 
     n_concepts = get_num_attributes(**config)
     concept_group_map = None
@@ -464,11 +517,9 @@ def generate_data(
         dataset_size=dataset_size,
         concept_transform=concept_transform,
         additional_sample_transform=train_sample_transform,
-        emb_mode=emb_mode,
         binarization_mode=binarization_mode,
         zero_shot_scale=zero_shot_scale,
         threshold=threshold,
-        normalized_emb=normalized_emb,
         regenerate=regenerate,
         template=template,
     )
@@ -493,11 +544,9 @@ def generate_data(
         dataset_size=dataset_size,
         concept_transform=concept_transform,
         additional_sample_transform=val_sample_transform,
-        emb_mode=emb_mode,
         binarization_mode=binarization_mode,
         zero_shot_scale=zero_shot_scale,
         threshold=threshold,
-        normalized_emb=normalized_emb,
         regenerate=regenerate,
         template=template,
     )
@@ -511,11 +560,9 @@ def generate_data(
         dataset_size=dataset_size,
         concept_transform=concept_transform,
         additional_sample_transform=test_sample_transform,
-        emb_mode=emb_mode,
         binarization_mode=binarization_mode,
         zero_shot_scale=zero_shot_scale,
         threshold=threshold,
-        normalized_emb=normalized_emb,
         regenerate=regenerate,
         template=template,
     )

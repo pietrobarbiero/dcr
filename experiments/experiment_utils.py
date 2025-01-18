@@ -342,6 +342,8 @@ def print_table(
         for i, (mean, std) in enumerate(row):
             if mean is None or std is None:
                 row[i] = "N/A"
+            elif mean != mean: # Nan!
+                row[i] = f'{mean} ± {std}'
             elif int(mean) == float(mean):
                 row[i] = f'{mean} ± {std:}'
             else:

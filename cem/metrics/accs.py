@@ -6,8 +6,9 @@ import torch
 ## HELPER FUNCTIONS
 ################################################################################
 
-def compute_bin_accuracy(c_pred, y_pred, c_true, y_true):
+def compute_bin_accuracy(c_pred, y_pred, c_true, y_true, include_c_aucs=False):
     c_accuracy, c_auc, c_f1, y_accuracy, y_auc, y_f1 = 0, 0, 0, 0, 0, 0
+    c_aucs = []
     if (c_true is not None) and (c_pred is not None):
         c_pred = c_pred.cpu().detach().numpy() > 0.5
         c_true = c_true.cpu().detach().numpy()
@@ -26,12 +27,14 @@ def compute_bin_accuracy(c_pred, y_pred, c_true, y_true):
                 pred_vars,
             )
             if len(np.unique(true_vars)) == 1:
-                c_auc += sklearn.metrics.accuracy_score(true_vars,  pred_vars)
+                c_aucs.append(
+                    sklearn.metrics.accuracy_score(true_vars,  pred_vars)
+                )
             else:
-                c_auc += sklearn.metrics.roc_auc_score(
+                c_aucs.append(sklearn.metrics.roc_auc_score(
                     true_vars,
                     pred_vars,
-                )
+                ))
             c_f1 += sklearn.metrics.f1_score(
                 true_vars,
                 pred_vars,
@@ -39,7 +42,7 @@ def compute_bin_accuracy(c_pred, y_pred, c_true, y_true):
             )
         num_seen = num_seen if num_seen else 1
         c_accuracy = c_accuracy/num_seen
-        c_auc = c_auc/num_seen
+        c_auc = np.mean(c_aucs) if num_seen else 0
         c_f1 = c_f1/num_seen
     if (y_true is not None) and (y_pred is not None):
         y_probs = y_pred.cpu().detach().numpy()
@@ -51,6 +54,9 @@ def compute_bin_accuracy(c_pred, y_pred, c_true, y_true):
         else:
             y_auc = sklearn.metrics.roc_auc_score(y_true, y_probs)
         y_f1 = sklearn.metrics.f1_score(y_true, y_pred)
+    if include_c_aucs:
+        print("c_aucs =", c_aucs)
+        return (c_accuracy, c_auc, c_f1, c_aucs), (y_accuracy, y_auc, y_f1)
     return (c_accuracy, c_auc, c_f1), (y_accuracy, y_auc, y_f1)
 
 
@@ -59,8 +65,10 @@ def compute_accuracy(
     y_pred,
     c_true,
     y_true,
+    include_c_aucs=False,
 ):
     c_accuracy, c_auc, c_f1, y_accuracy, y_auc, y_f1 = 0, 0, 0, 0, 0, 0
+    c_aucs = []
     if (y_pred is not None) and (y_true is not None):
         if (len(y_pred.shape) < 2) or (y_pred.shape[-1] == 1):
             return compute_bin_accuracy(
@@ -68,6 +76,7 @@ def compute_accuracy(
                 y_pred,
                 c_true,
                 y_true,
+                include_c_aucs=include_c_aucs,
             )
         y_probs = torch.nn.Softmax(dim=-1)(y_pred).cpu().detach()
         y_pred = y_pred.argmax(dim=-1).cpu().detach()
@@ -105,17 +114,21 @@ def compute_accuracy(
             ) / c_true.shape[-1]
 
             if len(np.unique(true_vars)) == 1:
-                c_auc += np.mean(true_vars == pred_vars)/c_true.shape[-1]
+                c_aucs.append(
+                    np.mean(true_vars == pred_vars)/c_true.shape[-1]
+                )
             else:
-                c_auc += sklearn.metrics.roc_auc_score(
+                c_aucs.append(sklearn.metrics.roc_auc_score(
                     true_vars,
                     pred_vars,
-                )/c_true.shape[-1]
+                ))
             c_f1 += sklearn.metrics.f1_score(
                 true_vars,
                 pred_vars,
                 average='macro',
             )/c_true.shape[-1]
-
-
+        c_auc = np.mean(c_aucs)
+    if include_c_aucs:
+        print("c_aucs =", c_aucs)
+        return (c_accuracy, c_auc, c_f1, c_aucs), (y_accuracy, y_auc, y_f1)
     return (c_accuracy, c_auc, c_f1), (y_accuracy, y_auc, y_f1)

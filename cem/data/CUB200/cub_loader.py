@@ -1754,7 +1754,6 @@ def load_data(
             ])
         else:
             transform = transforms.Compose([
-                additional_sample_transform,
                 transforms.ColorJitter(brightness=32/255, saturation=(0.5, 1.5)),
                 transforms.RandomResizedCrop(resol),
                 transforms.RandomHorizontalFlip(),

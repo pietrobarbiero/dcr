@@ -85,6 +85,7 @@ from pytorch_lightning import seed_everything
 
 import cem.data.awa2_loader as awa2_data_module
 import cem.data.celeba_loader as celeba_data_module
+import cem.data.cifar_10_loader as cifar_10_data_module
 import cem.data.color_mnist_add as color_mnist_data_module
 import cem.data.CUB200.cub_loader as cub_data_module
 import cem.data.mnist_add as mnist_data_module
@@ -233,6 +234,8 @@ def _generate_dataset_and_update_config(
         data_module = traffic_data_module
     elif ds_name in ["siim_arc", "siim-arc", "siim"]:
         data_module = siim_arc_data_module
+    elif ds_name in ['cifar10', 'cifar_10']:
+        data_module = cifar_10_data_module
     elif ds_name == "color_mnist_add":
         data_module = color_mnist_data_module
     else:
@@ -396,6 +399,12 @@ def _generate_dataset_and_update_config(
                 used_layers.append(torch.nn.Linear(layer_units[i - 1], num_units))
                 if i != len(layer_units) - 1:
                     used_layers.append(torch.nn.LeakyReLU())
+                if i in experiment_config.get('batch_norm_layers', []) and (
+                    i != len(layer_units) - 1
+                ):
+                    used_layers.append(
+                        torch.nn.BatchNorm1d(num_units)
+                    )
             return torch.nn.Sequential(*used_layers)
 
         experiment_config["c_extractor_arch"] = c_extractor_arch

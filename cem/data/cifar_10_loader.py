@@ -273,7 +273,7 @@ class Cifar10Dataset(Dataset):
                 # Then we will use the zero-shot classifier to make concept
                 # labels
                 concept_scores = torch.tensor(torch.load(
-                    os.path.join(self.root_dir, f'{template}c_{used_split}.pt')
+                    os.path.join(self.root_dir, f'cifar10_concepts_{used_split}.pt')
                 )).float()
                 concept_scores = concept_scores.numpy()
                 n_concepts = concept_scores.shape[1]//2

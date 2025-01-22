@@ -790,6 +790,19 @@ def _multiprocess_run_trial(
     config_copy = copy.deepcopy(config)
     if run_additional:
         for new_test_dl_configs in eval_config.get('additional_test_sets', []):
+            skip = False
+            for skip_regex in new_test_dl_configs.get('skip_list', []):
+                if re.search(skip_regex, f'{run_name}_split_{split}'):
+                    logging.info(
+                        f"Skipping evaluation of dataset "
+                        f"{new_test_dl_configs['name'] + '_test'} as it "
+                        f"matched skip regex {skip_regex}"
+                    )
+                    skip = True
+                    break
+            if skip:
+                continue
+
             config_copy = copy.deepcopy(config)
             if new_test_dl_configs.get('update_previous', False):
                 config_copy['dataset_config'].update(
@@ -1003,8 +1016,17 @@ def main(
                         f"as requested by the config"
                     )
                 if (not current_rerun) and os.path.exists(current_results_path):
-                    with open(current_results_path, 'rb') as f:
-                        old_results = joblib.load(f)
+                    try:
+                        with open(current_results_path, 'rb') as f:
+                            old_results = joblib.load(f)
+                    except Exception as e:
+                        logging.info(
+                            f'\t\t[IMPORTANT] We found previous results for '
+                            f'run {run_name} at trial {split + 1} but we were '
+                            f'unable to properly open them after encountering '
+                            f'exception {e}'
+                        )
+                        old_results = None
                 if fast_run and (old_results is not None):
                     logging.info(
                         f'\t\t[IMPORTANT] We found previous results for '

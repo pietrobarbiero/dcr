@@ -1503,6 +1503,7 @@ class CUBDataset(Dataset):
         clip_model=None,
         traveling_birds=False,
         traveling_birds_root_dir=None,
+        use_uncertainty_as_competence=False,
     ):
         """
         Arguments:
@@ -1536,6 +1537,7 @@ class CUBDataset(Dataset):
         self.clip_model = clip_model
         self.traveling_birds = traveling_birds
         self.traveling_birds_root_dir = traveling_birds_root_dir
+        self.use_uncertainty_as_competence = use_uncertainty_as_competence
         self.is_val = any(["val" in path for path in pkl_file_paths])
         if zero_shot_clip_attrs:
             embeddings_file = (
@@ -1652,6 +1654,8 @@ class CUBDataset(Dataset):
                     return one_hot_attr_label, class_label
                 else:
                     return attr_label, class_label
+            elif self.use_uncertainty_as_competence:
+                return img, class_label, torch.FloatTensor(attr_label), torch.FloatTensor(img_data['uncertain_attribute_label'])
             else:
                 return img, class_label, torch.FloatTensor(attr_label)
         else:
@@ -1726,6 +1730,7 @@ def load_data(
     traveling_birds=False,
 
     additional_sample_transform=None,
+    use_uncertainty_as_competence=False,
 ):
     """
     Note: Inception needs (299,299,3) images with inputs scaled between -1 and 1
@@ -1794,6 +1799,7 @@ def load_data(
         clip_concept_embbedings_path=clip_concept_embbedings_path,
         traveling_birds_root_dir=traveling_birds_root_dir,
         traveling_birds=traveling_birds,
+        use_uncertainty_as_competence=use_uncertainty_as_competence,
     )
     if is_training:
         drop_last = True
@@ -1885,6 +1891,7 @@ def generate_data(
     train_sample_transform=None,
     test_sample_transform=None,
     val_sample_transform=None,
+    use_uncertainty_as_competence=False,
 ):
     if root_dir is None:
         root_dir = DATASET_DIR
@@ -1906,6 +1913,10 @@ def generate_data(
     clip_model = config.get('clip_model', 'ViT-B/32')
     traveling_birds_root_dir = config.get('traveling_birds_root_dir', None)
     traveling_birds = config.get('traveling_birds', False)
+    use_uncertainty_as_competence = config.get(
+        'use_uncertainty_as_competence',
+        use_uncertainty_as_competence,
+    )
 
     if zero_shot_clip_attrs:
         concept_group_map = UNSUPERVISED_CONCEPT_GROUP_MAP.copy()
@@ -2006,6 +2017,7 @@ def generate_data(
         traveling_birds_root_dir=traveling_birds_root_dir,
         traveling_birds=traveling_birds,
         additional_sample_transform=train_sample_transform,
+        use_uncertainty_as_competence=use_uncertainty_as_competence,
     )
     val_dl = load_data(
         pkl_paths=[val_data_path],
@@ -2026,6 +2038,7 @@ def generate_data(
         traveling_birds_root_dir=traveling_birds_root_dir,
         traveling_birds=traveling_birds,
         additional_sample_transform=val_sample_transform,
+        use_uncertainty_as_competence=use_uncertainty_as_competence,
     )
 
     test_dl = load_data(
@@ -2047,6 +2060,7 @@ def generate_data(
         traveling_birds_root_dir=traveling_birds_root_dir,
         traveling_birds=traveling_birds,
         additional_sample_transform=test_sample_transform,
+        use_uncertainty_as_competence=use_uncertainty_as_competence,
     )
     if not output_dataset_vars:
         return train_dl, val_dl, test_dl, imbalance

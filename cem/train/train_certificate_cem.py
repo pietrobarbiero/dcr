@@ -160,7 +160,7 @@ def train_certificate_cem(
             global_epochs = config.get('global_epochs', 0)
             if (not loaded_weights) and global_epochs:
                 print(
-                    f"\tTraining up the global model for {global_epochs} epochs"
+                    f"\tTraining up the global embeddings for {global_epochs} epochs"
                 )
                 # Else it is time to train it
 
@@ -186,6 +186,15 @@ def train_certificate_cem(
                     if 'global_mixed_probs_coeff' in config:
                         prev_mixed_probs_coeff = model.mixed_probs_coeff
                         model.mixed_probs_coeff = config['global_mixed_probs_coeff']
+                    if 'global_all_intervened_loss_weight' in config:
+                        prev_all_intervened_loss_weight = model.all_intervened_loss_weight
+                        model.all_intervened_loss_weight = config['global_all_intervened_loss_weight']
+                        prev_task_loss_weight = model.task_loss_weight
+                        model.task_loss_weight = 0
+                    if 'global_concept_loss_weight' in config:
+                        prev_concept_loss_weight = model.concept_loss_weight
+                        model.concept_loss_weight = config['global_concept_loss_weight']
+
                     global_callbacks, global_ckpt_call = _make_callbacks(
                         config,
                         result_dir,
@@ -230,6 +239,11 @@ def train_certificate_cem(
                         model.cem_only_pass = False
                     if 'global_mixed_probs_coeff' in config:
                         model.mixed_probs_coeff = prev_mixed_probs_coeff
+                    if 'global_all_intervened_loss_weight' in config:
+                        model.all_intervened_loss_weight = prev_all_intervened_loss_weight
+                        model.task_loss_weight = prev_task_loss_weight
+                    if 'global_concept_loss_weight' in config:
+                        model.concept_loss_weight = prev_concept_loss_weight
                     if "global_model_path" in config:
                         global_model_saved_path = os.path.join(
                             result_dir or ".",

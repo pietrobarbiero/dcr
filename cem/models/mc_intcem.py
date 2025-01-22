@@ -287,6 +287,32 @@ class MonteCarloIntCEM(IntAwareConceptEmbeddingModel):
                     (1 - concept_probs) * torch.log2(1 - concept_probs + 1e-6)
                 )
                 return self.temperature * (1 - entr)
+            elif self.scale_fn in ['mean_entropy', 'mean_entr']:
+                entr = (
+                    -concept_probs * torch.log2(concept_probs + 1e-6) -
+                    (1 - concept_probs) * torch.log2(1 - concept_probs + 1e-6)
+                )
+                scaled = self.temperature * (1 - entr)
+                reduced = torch.mean(scaled, dim=-1, keepdim=True)
+                return reduced.expand(-1, scaled.shape[-1])
+            elif self.scale_fn in ['max_entropy', 'max_entr']:
+                entr = (
+                    -concept_probs * torch.log2(concept_probs + 1e-6) -
+                    (1 - concept_probs) * torch.log2(1 - concept_probs + 1e-6)
+                )
+                entr = torch.max(entr, dim=-1, keepdim=True)[0].expand(-1, entr.shape[-1])
+                return self.temperature * (1 - entr)
+            elif self.scale_fn in ['diff_max_entropy', 'diff_max_entr']:
+                entr = (
+                    -concept_probs * torch.log2(concept_probs + 1e-6) -
+                    (1 - concept_probs) * torch.log2(1 - concept_probs + 1e-6)
+                )
+                entr = torch.sum(
+                    entr * torch.log(torch.softmax(10 * entr, dim=-1)),
+                    dim=-1,
+                    keepdim=True,
+                ).expand(-1, entr.shape[-1])
+                return self.temperature * (1 - entr)
             elif self.scale_fn in ['exponential_entropy', 'exp_entr']:
                 eps = 1e-4
                 numerator = torch.pow(concept_probs, self.temperature)
@@ -532,9 +558,6 @@ class MonteCarloIntCEM(IntAwareConceptEmbeddingModel):
 
         # Now we can compute all the probabilites!
         c_sem = []
-        c_logits_dynamic = []
-        c_logits_global = []
-        c_logits = []
 
         for concept_idx in range(self.n_concepts):
             if self.shared_prob_gen:
@@ -542,26 +565,24 @@ class MonteCarloIntCEM(IntAwareConceptEmbeddingModel):
             else:
                 prob_gen = self.concept_prob_generators[concept_idx]
             if self.dyn_prob_with_global:
-                dyn_logits = prob_gen(
-                    global_contexts[:, concept_idx, :] +
-                    dynamic_contexts[:, concept_idx, :]
-                )
+                if self.hard_selection_value is None:
+                    dyn_logits = prob_gen(
+                        global_contexts[:, concept_idx, :] +
+                        dynamic_contexts[:, concept_idx, :]
+                    )
+                else:
+                    # Else we adjust the contextual embeddings here directly
+                    dyn_logits = prob_gen(
+                        global_contexts[:, concept_idx, :] +
+                        (1 - self.hard_selection_value) * dynamic_contexts[:, concept_idx, :]
+                    )
             else:
                 dyn_logits = prob_gen(
                     dynamic_contexts[:, concept_idx, :]
                 )
-            c_logits.append(dyn_logits)
-            pos_anchor = self.concept_embeddings[concept_idx:concept_idx+1, 0, :].expand(global_emb_center.shape[0], -1)
-            neg_anchor = self.concept_embeddings[concept_idx:concept_idx+1, 1, :].expand(global_emb_center.shape[0], -1)
-            neg_dist = (neg_anchor - global_emb_center).pow(2).sum(-1).sqrt()
-            pos_dist = (pos_anchor - global_emb_center).pow(2).sum(-1).sqrt()
-            global_logits = torch.exp(self.concept_scales[concept_idx]) * (neg_dist - pos_dist).unsqueeze(-1)
-
-            c_logits_dynamic.append(dyn_logits)
-            c_logits_global.append(global_logits)
-
-            dyn_prob = self.sig(self._concept_platt_scaling(dyn_logits, concept_idx))
-            global_prob = self.sig(self._concept_platt_scaling(global_logits, concept_idx))
+            dyn_prob = self.sig(
+                self._concept_platt_scaling(dyn_logits, concept_idx)
+            )
             mixed_factor = self.mixed_probs_coeff
             if self.anneal_rate != 1:
                 # Then time to do some annealing
@@ -582,13 +603,31 @@ class MonteCarloIntCEM(IntAwareConceptEmbeddingModel):
                         )
                     )
                 mixed_factor = float(np.clip(mixed_factor, 0, 1))
-            # if self.current_steps.detach() % 10:
-            #     print("For step", self.current_steps.detach(), "mixing factor is", mixed_factor)
-            prob = (
-               mixed_factor * dyn_prob +
-                (1 -mixed_factor) * global_prob
-            )
+
+            if mixed_factor != 1:
+                pos_anchor = self.concept_embeddings[concept_idx:concept_idx+1, 0, :].expand(global_emb_center.shape[0], -1)
+                neg_anchor = self.concept_embeddings[concept_idx:concept_idx+1, 1, :].expand(global_emb_center.shape[0], -1)
+                neg_dist = (
+                    neg_anchor - global_emb_center
+                ).pow(2).sum(-1).sqrt()
+                pos_dist = (
+                    pos_anchor - global_emb_center
+                ).pow(2).sum(-1).sqrt()
+                global_logits = (
+                    torch.exp(self.concept_scales[concept_idx]) *
+                    (neg_dist - pos_dist).unsqueeze(-1)
+                )
+                global_prob = self.sig(
+                    self._concept_platt_scaling(global_logits, concept_idx)
+                )
+                prob = (
+                    mixed_factor * dyn_prob +
+                    (1 -mixed_factor) * global_prob
+                )
+            else:
+                prob = dyn_prob
             c_sem.append(prob)
+
         c_sem = torch.cat(c_sem, axis=-1)
         self._context_scale_factors = self._uncertainty_based_context_addition(
             concept_probs=c_sem,

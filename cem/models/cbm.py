@@ -266,7 +266,7 @@ class ConceptBottleneckModel(pl.LightningModule):
             prev_interventions = None
         return x, y, (c, g, competencies, prev_interventions)
 
-    def _standardize_indices(self, intervention_idxs, batch_size, device='gpu'):
+    def _standardize_indices(self, intervention_idxs, batch_size, device='cuda'):
         if getattr(self, 'force_all_interventions', False):
             intervention_idxs = torch.ones(
                 (batch_size, self.n_concepts)

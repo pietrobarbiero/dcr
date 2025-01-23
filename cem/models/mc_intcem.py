@@ -391,7 +391,7 @@ class MonteCarloIntCEM(IntAwareConceptEmbeddingModel):
         extra_scale = 1
         if self.deterministic or (self.hard_selection_value is not None):
             n_trials = 1
-        elif self.training:
+        elif not self.training:
             if self.montecarlo_test_tries == 0:
                 # Then we will interpret this as a normal dropout rescaling
                 # during inference
@@ -401,9 +401,9 @@ class MonteCarloIntCEM(IntAwareConceptEmbeddingModel):
                     else 1
                 )
             else:
-                n_trials = self.montecarlo_test_tries
+                n_trials = max(self.montecarlo_test_tries, 0)
         else:
-            n_trials = self.montecarlo_train_tries
+            n_trials = max(self.montecarlo_train_tries, 0)
 
 
         global_pos_embeddings = pos_embeddings[:, :, :self.emb_size]

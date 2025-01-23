@@ -1115,10 +1115,12 @@ def construct_model(
             result_dir,
             f'{full_run_name}_CAVs.npy'
         )
+        cav_path = config.get('cav_path', cav_path)
         intercept_path = os.path.join(
             result_dir,
             f'{full_run_name}_Intercepts.npy'
         )
+        intercept_path = config.get('intercept_path', intercept_path)
         if (config.get('concept_vectors', None) is None) and (
             os.path.exists(cav_path)
         ):

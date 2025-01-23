@@ -6,7 +6,13 @@ import torch
 ## HELPER FUNCTIONS
 ################################################################################
 
-def compute_bin_accuracy(c_pred, y_pred, c_true, y_true, include_c_aucs=False):
+def compute_bin_accuracy(
+    c_pred=None,
+    y_pred=None,
+    c_true=None,
+    y_true=None,
+    include_c_aucs=False,
+):
     c_accuracy, c_auc, c_f1, y_accuracy, y_auc, y_f1 = 0, 0, 0, 0, 0, 0
     c_aucs = []
     if (c_true is not None) and (c_pred is not None):
@@ -61,10 +67,10 @@ def compute_bin_accuracy(c_pred, y_pred, c_true, y_true, include_c_aucs=False):
 
 
 def compute_accuracy(
-    c_pred,
-    y_pred,
-    c_true,
-    y_true,
+    c_pred=None,
+    y_pred=None,
+    c_true=None,
+    y_true=None,
     include_c_aucs=False,
 ):
     c_accuracy, c_auc, c_f1, y_accuracy, y_auc, y_f1 = 0, 0, 0, 0, 0, 0

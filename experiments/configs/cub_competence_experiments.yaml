@@ -1,13 +1,17 @@
 trials: 3
-model_selection_trials: 1
+model_selection_trials: 3
 results_dir: /anfs/bigdisc/me466/cub_competence_results/
 
 num_load_workers: 0
 
 model_selection_groups:
-  - ["^(CBM_Logit_Baseline_).*$", "Joint Logit CBM (Baseline)"]
-  - ["^(CEM_Baseline_).*$", "CEM (Baseline)"]
-  - ["^(IntCEM_).*(_Baseline).*$", "IntCEM (Baseline)"]
+  - ["^(CEM_).*$", "CEM"]
+  - ["^(IntCEM).*().*$", "IntCEM"]
+  - ["^(CBM_Logit).*$", "Joint Logit CBM"]
+  - ["^(CBM_Sigmoid).*$", "Joint Sigmoid CBM"]
+  - ["^(CBM_Seq).*$", "Sequential CBM"]
+  - ["^(CBM_Ind).*$", "Independent CBM"]
+  - ["^(DNN).*$", "DNN"]
 
 model_selection_metrics:
   - val_acc_y_random_group_level_True_use_prior_False_int_auc
@@ -32,17 +36,18 @@ shared_params:
     competence_levels: [1]
     intervention_freq: 4
     intervention_batch_size: 512
+    val_intervention_policies: []
     intervention_policies:
       - policy: "random"
-        group_level: False
+        group_based: False
         use_prior: False
       - policy: "random"
-        group_level: False
+        group_based: False
         use_prior: True  # We will evaluate the learnt policy of IntCEMs!
         include_run_names:
           - ".*(IntCEM).*"
       - policy: "uncertainty"
-        group_level: False
+        group_based: False
         use_prior: False
 
   # Representation metrics
@@ -69,6 +74,7 @@ shared_params:
   momentum: 0.9
   sigmoidal_prob: False
   training_intervention_prob: 0
+  use_concept_groups: False
   grid_variables:
     - concept_loss_weight
   grid_search_mode: exhaustive

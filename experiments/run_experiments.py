@@ -1316,7 +1316,7 @@ def _build_arg_parser():
         '--param',
         action='append',
         nargs=2,
-        metavar=('param_name=value'),
+        metavar=('param_name', 'value'),
         help=(
             'Allows the passing of a config param that will overwrite '
             'anything passed as part of the config file itself.'

@@ -249,22 +249,33 @@ def print_table(
 
     # And intervention summaries if we chose to also include them
     if len(shared_params.get("intervention_config", {}).get("intervention_policies", [])) > 0:
-        field_names.extend([
-            "25% Int ROC-AUC" if use_int_auc else "25% Int Acc",
-            "50% Int ROC-AUC" if use_int_auc else "50% Int Acc",
-            "75% Int ROC-AUC" if use_int_auc else "75% Int Acc",
-            "100% Int ROC-AUC" if use_int_auc else "100% Int Acc",
-            "Val Int AUC",
-            "Test Int AUC",
-        ])
-        result_table_fields_keys.extend([
-            f"test_{'auc' if use_int_auc else 'acc'}_y_random_group_level_True_use_prior_False_ints_25%",
-            f"test_{'auc' if use_int_auc else 'acc'}_y_random_group_level_True_use_prior_False_ints_50%",
-            f"test_{'auc' if use_int_auc else 'acc'}_y_random_group_level_True_use_prior_False_ints_75%",
-            f"test_{'auc' if use_int_auc else 'acc'}_y_random_group_level_True_use_prior_False_ints_100%",
-            f"val_{'auc' if use_int_auc else 'acc'}_y_random_group_level_True_use_prior_False_int_auc",
-            f"test_{'auc' if use_int_auc else 'acc'}_y_random_group_level_True_use_prior_False_int_auc",
-        ])
+        policy_config = shared_params['intervention_config']['intervention_policies'][0]
+        # Then add the first policy we see as the default thing we print
+        if policy_config['policy'] == 'random':
+            useful_args = copy.deepcopy(policy_config)
+            useful_args.pop('include_run_names', None)
+            useful_args.pop('exclude_run_names', None)
+            policy_arg_name = policy_config["policy"] + "_" + "_".join([
+                f'{key}_{policy_config[key]}'
+                for key in sorted(useful_args.keys())
+                if key != 'policy'
+            ])
+            field_names.extend([
+                "25% Int ROC-AUC" if use_int_auc else "25% Int Acc",
+                "50% Int ROC-AUC" if use_int_auc else "50% Int Acc",
+                "75% Int ROC-AUC" if use_int_auc else "75% Int Acc",
+                "100% Int ROC-AUC" if use_int_auc else "100% Int Acc",
+                "Val Int AUC",
+                "Test Int AUC",
+            ])
+            result_table_fields_keys.extend([
+                f"test_{'auc' if use_int_auc else 'acc'}_y_{policy_arg_name}_ints_25%",
+                f"test_{'auc' if use_int_auc else 'acc'}_y_{policy_arg_name}_ints_50%",
+                f"test_{'auc' if use_int_auc else 'acc'}_y_{policy_arg_name}_ints_75%",
+                f"test_{'auc' if use_int_auc else 'acc'}_y_{policy_arg_name}_ints_100%",
+                f"val_{'auc' if use_int_auc else 'acc'}_y_{policy_arg_name}_int_auc",
+                f"test_{'auc' if use_int_auc else 'acc'}_y_{policy_arg_name}_int_auc",
+            ])
 
     if summary_table_metrics is not None:
         for field in summary_table_metrics:

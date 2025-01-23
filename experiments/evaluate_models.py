@@ -1,5 +1,6 @@
 import numpy as np
 import pytorch_lightning as pl
+import re
 
 import cem.interventions.utils as intervention_utils
 import cem.train.evaluate as evaluate
@@ -24,6 +25,7 @@ def evaluate_model(
     rerun=False,
     old_results=None,
 ):
+    eval_config = config.get('eval_config', {})
     eval_results = {}
     eval_trainer = pl.Trainer(
         accelerator=accelerator,
@@ -50,6 +52,30 @@ def evaluate_model(
             f'{dl_name} c_auc: {eval_results[f"{dl_name}_auc_c"]*100:.2f}%, '
             f'{dl_name} y_auc: {eval_results[f"{dl_name}_auc_y"]*100:.2f}%'
         )
+
+        # Now, additional metrics
+        for additional_metric in eval_config.get('additional_metrics', []):
+            include_list = additional_metric.get('include_list', None)
+            include = include_list is None
+            for regex in (include_list or []):
+                if re.search(regex, f'{run_name}_split_{split}'):
+                    include = True
+                    break
+            if not include:
+                continue
+            eval_results.update(evaluate.evaluate_metric(
+                metric_name=additional_metric['name'],
+                current_results=eval_results,
+                metric_config=additional_metric,
+                model=model,
+                trainer=eval_trainer,
+                config=config,
+                run_name=run_name,
+                old_results=old_results,
+                rerun=rerun,
+                test_dl=test_dataloader,
+                dl_name=dl_name,
+            ))
         if (f'{dl_name}_intervention_config' in config) or (
             'intervention_config' in config
         ):
@@ -155,7 +181,6 @@ def evaluate_model(
                     **test_int_args
                 ),
             )
-
         eval_results.update(evaluate.evaluate_representation_metrics(
                 config=config,
                 n_concepts=config['n_concepts'],

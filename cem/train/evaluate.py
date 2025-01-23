@@ -140,6 +140,127 @@ def evaluate_cbm(
     return eval_results
 
 
+def evaluate_metric(
+    metric_name,
+    model,
+    trainer,
+    config,
+    run_name,
+    metric_config={},
+    old_results=None,
+    rerun=False,
+    test_dl=None,
+    dl_name="test",
+    current_results=None,
+):
+    eval_results = {}
+    if test_dl is None:
+        return eval_results
+    if metric_name == 'mixcem_sel':
+        keys = [f"{dl_name}_mixcem_sel_acc", f"{dl_name}_mixcem_sel_auc"]
+        current_results = current_results or {}
+        def _inner_call():
+            accs_to_include = []
+            aucs_to_include = []
+            y_true = None
+            if (f"{dl_name}_acc_y" in current_results) and (
+                f"{dl_name}_auc_y" in current_results
+            ):
+                vanilla_y_accuracy = current_results[f"{dl_name}_acc_y"]
+                vanilla_y_auc = current_results[f"{dl_name}_auc_y"]
+            else:
+                y_true, _ = data_utils.daloader_to_memory(
+                    test_dl,
+                    as_torch=True,
+                    only_labels=True,
+                    num_workers=config.get('num_load_workers', config.get('num_workers', 1)),
+                )
+                # Make predictions without any interventions or global embedding use
+                vanilla_batch_results = trainer.predict(model, test_dl)
+                vanilla_y_pred = torch.cat(
+                    list(map(lambda x: x[2].detach().cpu(), vanilla_batch_results)),
+                    axis=0,
+                )
+                _, (vanilla_y_accuracy, vanilla_y_auc, _) = \
+                    accs.compute_accuracy(
+                        y_pred=vanilla_y_pred,
+                        y_true=y_true,
+                    )
+            accs_to_include.append(vanilla_y_accuracy)
+            aucs_to_include.append(vanilla_y_auc)
+
+
+
+            # Force the model to intervene on all concepts
+            if y_true is None:
+                y_true, _ = data_utils.daloader_to_memory(
+                    test_dl,
+                    as_torch=True,
+                    only_labels=True,
+                    num_workers=config.get(
+                        'num_load_workers',
+                        config.get('num_workers', 1),
+                    ),
+                )
+            prev_force_all_interventions = getattr(model, 'force_all_interventions', False)
+            model.force_all_interventions = True
+            all_int_batch_results = trainer.predict(model, test_dl)
+            all_int_y_pred = torch.cat(
+                list(map(lambda x: x[2].detach().cpu(), all_int_batch_results)),
+                axis=0,
+            )
+            _, (all_int_y_accuracy, all_int_y_auc, _) = \
+                accs.compute_accuracy(
+                    y_pred=all_int_y_pred,
+                    y_true=y_true,
+                )
+            accs_to_include.append(all_int_y_accuracy)
+            aucs_to_include.append(all_int_y_auc)
+
+            # Force the selection to always use the global embeddings when we
+            # intervene on, and compute that accuracy
+            if hasattr(model, 'hard_selection_value'):
+                prev_hard_selection_value = model.hard_selection_value
+                model.hard_selection_value = 1
+                global_int_batch_results = trainer.predict(model, test_dl)
+                global_int_y_pred = torch.cat(
+                    list(map(lambda x: x[2].detach().cpu(), global_int_batch_results)),
+                    axis=0,
+                )
+                _, (global_int_y_accuracy, global_int_y_auc, _) = \
+                    accs.compute_accuracy(
+                        y_pred=global_int_y_pred,
+                        y_true=y_true,
+                    )
+                accs_to_include.append(global_int_y_accuracy)
+                aucs_to_include.append(global_int_y_auc)
+
+
+            # Reset the model accordingly
+            if hasattr(model, 'hard_selection_value'):
+                model.hard_selection_value = prev_hard_selection_value
+            model.force_all_interventions = prev_force_all_interventions
+            return [np.mean(accs_to_include), np.mean(aucs_to_include)]
+    else:
+        raise ValueError(
+            f'Unsupported metric "{metric_name}".'
+        )
+    values, _ = utils.load_call(
+        function=_inner_call,
+        keys=keys,
+        run_name=run_name,
+        old_results=old_results,
+        rerun=rerun,
+        kwargs={},
+    )
+    for (key, val) in zip(keys, values):
+        eval_results[key] = val
+        print(
+            f'{dl_name} {key}: {val}'
+        )
+    return eval_results
+
+
 def representation_avg_task_pred(
     c_embs_train,
     c_embs_test,

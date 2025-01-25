@@ -188,7 +188,7 @@ CONCEPT_GROUPS = {
     'smelly': ['smelly'],
     'transport_mechanism': ['flys', 'hops', 'swims', 'tunnels', 'walks'],
     'speed': ['fast', 'slow'],
-    'strenght': ['strong', 'weak'],
+    'strength': ['strong', 'weak'],
     'muscle': ['muscle'],
     'movement_move': ['bipedal', 'quadrapedal'],
     'active': ['active', 'inactive'],

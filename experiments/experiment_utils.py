@@ -148,6 +148,11 @@ def perform_model_selection(
             )
             for method_name in selected_methods
         ]
+        selected_values = [
+            (method_name, vals)
+            for (method_name, vals) in selected_values
+            if not np.isnan(vals)
+        ]
         if selected_values:
             selected_values.sort(key=lambda x: -x[1])
             selected_method = selected_values[0][0]

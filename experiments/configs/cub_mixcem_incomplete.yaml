@@ -825,7 +825,7 @@ runs:
     emb_size: [16]
     shared_emb_generator: True
     montecarlo_train_tries: [1]
-    montecarlo_test_tries: [1, 50]  # No MC Sampling
+    montecarlo_test_tries: [50] #[1, 50]  # MC Sampling
     ood_dropout_prob: [0.1, 0.9]
     pooling_mode: ['concat']
     calibration_epochs: [0, 30]

@@ -120,6 +120,7 @@ shared_params:
 
       - name: "OOD_sap_0.01"
         update_previous: True
+        include_list: ['.*(MixCEM_Final).*']
         dataset_config:
          test_transformation_config:
            post_generation: False
@@ -559,7 +560,7 @@ runs:
     emb_size: [16]
     shared_emb_generator: True
     montecarlo_train_tries: [1]
-    montecarlo_test_tries: [1, 50]
+    montecarlo_test_tries: [50] #[1, 50]
     ood_dropout_prob: [0.5, 0.9]
     pooling_mode: ['concat']
     calibration_epochs: [0, 30]

@@ -116,14 +116,14 @@ shared_params:
       - name: mixcem_sel
         include_list: ['.*(MixCEM).*', '.*(MixIntCEM).*']
     additional_test_sets:
-      - name: "OOD"
-        update_previous: True
-        skip_list: [".*(Entropy_CMCMixCEM_ablat).*", ".*(MixCEM_Final).*"]
-        dataset_config:
-          test_transformation_config:
-            name: random_noise
-            low_noise_level: 1
-            noise_level: 0.5
+      # - name: "OOD"
+      #   update_previous: True
+      #   skip_list: [".*(Entropy_CMCMixCEM_ablat).*", ".*(MixCEM_Final).*"]
+      #   dataset_config:
+      #     test_transformation_config:
+      #       name: random_noise
+      #       low_noise_level: 1
+      #       noise_level: 0.5
 
       - name: "OOD_sap_0.01"
         update_previous: True

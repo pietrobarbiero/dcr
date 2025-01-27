@@ -25,7 +25,7 @@ def daloader_to_memory(
             if len(dl.dataset.tensors) >= 4:
                 g_data = dl.dataset.tensors[3]
             else:
-                g_data =  np.ones((x_data.shape[0], 1), dtype=np.int32)
+                g_data =  np.ones((x_data.shape[0], 1), dtype=np.float32)
         if not as_torch:
             x_data = x_data.detach().cpu().numpy()
             y_data = y_data.detach().cpu().numpy()
@@ -65,8 +65,8 @@ def daloader_to_memory(
         if g_data:
             g_data = np.concatenate(g_data, axis=0)
         else:
-            g_data = np.ones((y_data.shape[0], 1), dtype=np.int32)
-            g_type = torch.int32
+            g_data = np.ones((y_data.shape[0], 1), dtype=np.float32)
+            g_type = torch.float32
 
         if as_torch:
             if not only_labels:

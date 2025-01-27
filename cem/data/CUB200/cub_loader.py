@@ -1445,11 +1445,12 @@ def discrete_to_continuous_unc(unc_val, attr_label, unc_map):
     '''
     unc_val = unc_val.item()
     attr_label = attr_label.item()
-    if attr_label == 1:
-        return unc_map[unc_val]
-    else:
-        if unc_val == 0 or unc_val==1: return unc_map[unc_val]
-        else: return 1-unc_map[unc_val]
+    return float(unc_map[unc_val])
+    # if attr_label == 1:
+    #     return unc_map[unc_val]
+    # else:
+    #     if unc_val == 0 or unc_val==1: return unc_map[unc_val]
+    #     else: return 1-unc_map[unc_val]
 
 ##########################################################
 ## ORIGINAL SAMPLER/CLASSES FROM CBM PAPER
@@ -1688,10 +1689,10 @@ class CUBDataset(Dataset):
             elif self.use_uncertainty_as_competence:
                 discrete_unc_label = np.array(img_data['attribute_certainty'])[SELECTED_CONCEPTS]
                 instance_attr_label = np.array(img_data['attribute_label'])
-                attr_label = []
+                competencies = []
                 for (discrete_unc_val, hard_concept_val) in zip(discrete_unc_label, instance_attr_label):
-                    attr_label.append(discrete_to_continuous_unc(discrete_unc_val, hard_concept_val, self.unc_map))
-                return img, class_label, torch.FloatTensor(attr_label), torch.FloatTensor(np.array(attr_label))
+                    competencies.append(discrete_to_continuous_unc(discrete_unc_val, hard_concept_val, self.unc_map))
+                return img, class_label, torch.FloatTensor(attr_label), torch.FloatTensor(np.array(competencies))
             else:
                 return img, class_label, torch.FloatTensor(attr_label)
         else:
@@ -1767,6 +1768,7 @@ def load_data(
 
     additional_sample_transform=None,
     use_uncertainty_as_competence=False,
+    augment=True,
 ):
     """
     Note: Inception needs (299,299,3) images with inputs scaled between -1 and 1
@@ -1784,7 +1786,7 @@ def load_data(
 
     if from_clip_embedding:
         transform = None
-    elif is_training:
+    elif is_training and augment:
         if is_chexpert:
             transform = transforms.Compose([
                 transforms.CenterCrop((320, 320)),
@@ -1928,6 +1930,7 @@ def generate_data(
     test_sample_transform=None,
     val_sample_transform=None,
     use_uncertainty_as_competence=False,
+    train_augment=True,
 ):
     if root_dir is None:
         root_dir = DATASET_DIR
@@ -1949,6 +1952,7 @@ def generate_data(
     clip_model = config.get('clip_model', 'ViT-B/32')
     traveling_birds_root_dir = config.get('traveling_birds_root_dir', None)
     traveling_birds = config.get('traveling_birds', False)
+    train_augment = config.get('train_augment', train_augment)
     use_uncertainty_as_competence = config.get(
         'use_uncertainty_as_competence',
         use_uncertainty_as_competence,
@@ -1965,7 +1969,7 @@ def generate_data(
         if sampling_groups:
             new_n_groups = int(np.ceil(len(concept_group_map) * sampling_percent))
             selected_groups_file = os.path.join(
-                DATASET_DIR,
+                root_dir,
                 f"selected_groups_sampling_{sampling_percent}.npy",
             )
             if (not rerun) and os.path.exists(selected_groups_file):
@@ -1983,7 +1987,7 @@ def generate_data(
         else:
             new_n_concepts = int(np.ceil(n_concepts * sampling_percent))
             selected_concepts_file = os.path.join(
-                DATASET_DIR,
+                root_dir,
                 f"selected_concepts_sampling_{sampling_percent}.npy",
             )
             if (not rerun) and os.path.exists(selected_concepts_file):
@@ -2054,6 +2058,7 @@ def generate_data(
         traveling_birds=traveling_birds,
         additional_sample_transform=train_sample_transform,
         use_uncertainty_as_competence=use_uncertainty_as_competence,
+        augment=train_augment,
     )
     val_dl = load_data(
         pkl_paths=[val_data_path],
@@ -2075,6 +2080,7 @@ def generate_data(
         traveling_birds=traveling_birds,
         additional_sample_transform=val_sample_transform,
         use_uncertainty_as_competence=use_uncertainty_as_competence,
+        augment=False,
     )
 
     test_dl = load_data(
@@ -2097,6 +2103,7 @@ def generate_data(
         traveling_birds=traveling_birds,
         additional_sample_transform=test_sample_transform,
         use_uncertainty_as_competence=use_uncertainty_as_competence,
+        augment=False,
     )
     if not output_dataset_vars:
         return train_dl, val_dl, test_dl, imbalance

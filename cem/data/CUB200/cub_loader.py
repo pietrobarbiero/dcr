@@ -1445,11 +1445,12 @@ def discrete_to_continuous_unc(unc_val, attr_label, unc_map):
     '''
     unc_val = unc_val.item()
     attr_label = attr_label.item()
-    if attr_label == 1:
-        return unc_map[unc_val]
-    else:
-        if unc_val == 0 or unc_val==1: return unc_map[unc_val]
-        else: return 1-unc_map[unc_val]
+    return float(unc_map[unc_val])
+    # if attr_label == 1:
+    #     return unc_map[unc_val]
+    # else:
+    #     if unc_val == 0 or unc_val==1: return unc_map[unc_val]
+    #     else: return 1-unc_map[unc_val]
 
 ##########################################################
 ## ORIGINAL SAMPLER/CLASSES FROM CBM PAPER
@@ -1688,10 +1689,10 @@ class CUBDataset(Dataset):
             elif self.use_uncertainty_as_competence:
                 discrete_unc_label = np.array(img_data['attribute_certainty'])[SELECTED_CONCEPTS]
                 instance_attr_label = np.array(img_data['attribute_label'])
-                attr_label = []
+                competencies = []
                 for (discrete_unc_val, hard_concept_val) in zip(discrete_unc_label, instance_attr_label):
-                    attr_label.append(discrete_to_continuous_unc(discrete_unc_val, hard_concept_val, self.unc_map))
-                return img, class_label, torch.FloatTensor(attr_label), torch.FloatTensor(np.array(attr_label))
+                    competencies.append(discrete_to_continuous_unc(discrete_unc_val, hard_concept_val, self.unc_map))
+                return img, class_label, torch.FloatTensor(attr_label), torch.FloatTensor(np.array(competencies))
             else:
                 return img, class_label, torch.FloatTensor(attr_label)
         else:

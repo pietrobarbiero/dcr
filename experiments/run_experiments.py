@@ -317,22 +317,7 @@ def _generate_dataset_and_update_config(
     # For now, we assume that all concepts have the same
     # aquisition cost
     acquisition_costs = None
-    if concept_map is not None:
-        intervened_groups = list(
-            range(
-                0,
-                len(concept_map) + 1,
-                intervention_config.get('intervention_freq', 1),
-            )
-        )
-    else:
-        intervened_groups = list(
-            range(
-                0,
-                n_concepts + 1,
-                intervention_config.get('intervention_freq', 1),
-            )
-        )
+
 
     task_class_weights = _update_config_with_dataset(
         config=experiment_config,
@@ -528,7 +513,6 @@ def _generate_dataset_and_update_config(
         test_dl,
         imbalance,
         concept_map,
-        intervened_groups,
         task_class_weights,
         acquisition_costs,
     )
@@ -625,7 +609,6 @@ def _multiprocess_run_trial(
         test_dl,
         imbalance,
         concept_map,
-        intervened_groups,
         task_class_weights,
         acquisition_costs
     ) = _generate_dataset_and_update_config(
@@ -758,7 +741,6 @@ def _multiprocess_run_trial(
         acquisition_costs=acquisition_costs,
         result_dir=result_dir,
         concept_map=concept_map,
-        intervened_groups=intervened_groups,
         accelerator=accelerator,
         devices=devices,
         split=split,
@@ -818,7 +800,6 @@ def _multiprocess_run_trial(
                 new_test_dl,
                 new_imbalance,
                 new_concept_map,
-                new_intervened_groups,
                 new_task_class_weights,
                 new_acquisition_costs
             ) = _generate_dataset_and_update_config(
@@ -837,7 +818,6 @@ def _multiprocess_run_trial(
                 acquisition_costs=new_acquisition_costs,
                 result_dir=result_dir,
                 concept_map=new_concept_map,
-                intervened_groups=new_intervened_groups,
                 accelerator=accelerator,
                 devices=devices,
                 split=split,

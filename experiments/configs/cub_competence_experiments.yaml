@@ -37,18 +37,22 @@ shared_params:
     intervention_freq: 4
     intervention_batch_size: 512
     val_intervention_policies: []
+    group_level: False
     intervention_policies:
       - policy: "random"
-        group_based: False
+        group_level: False
         use_prior: False
+        use_sample_competence: True
       - policy: "random"
-        group_based: False
+        group_level: False
         use_prior: True  # We will evaluate the learnt policy of IntCEMs!
+        use_sample_competence: True
         include_run_names:
           - ".*(IntCEM).*"
       - policy: "uncertainty"
-        group_based: False
+        group_level: False
         use_prior: False
+        use_sample_competence: True
 
   # Representation metrics
   # Change to False if you want representation metrics to be included in the

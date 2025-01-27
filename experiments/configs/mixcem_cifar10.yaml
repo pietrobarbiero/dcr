@@ -238,32 +238,32 @@ runs:
       - extra_dims
     grid_search_mode: exhaustive
 
-  - architecture: 'ProbabilisticConceptBottleneckModel'
-    run_name: "ProbCBM_cwl_class_hidden_dim_{class_hidden_dim}_hidden_dim_{hidden_dim}_n_samples_inference_{n_samples_inference}_max_concept_epochs_{max_concept_epochs}_max_task_epochs_{max_task_epochs}"
-    n_samples_inference: 50
-    use_neg_concept: True
-    pred_class: True
-    init_negative_scale: 5
-    init_shift: 5
-    pretrained: True
-    hidden_dim: [16, 32]
-    class_hidden_dim: [64, 128]
-    intervention_prob: 0.5
-    gradient_clip_val: 2.0
-    max_concept_epochs: [50] #20
-    warmup_epochs: 20 #5
-    max_task_epochs: 50 #30
-    vib_beta: 0.00005
-    concept_loss_weight: 1
-    learning_rate: 0.001
-    lr_ratio: 10
-    weight_decay: 0.000001 #0
-    weight_loss: True
-    grid_variables:
-      - class_hidden_dim
-      - hidden_dim
-      - max_concept_epochs
-    grid_search_mode: exhaustive
+  # - architecture: 'ProbabilisticConceptBottleneckModel'
+  #   run_name: "ProbCBM_cwl_class_hidden_dim_{class_hidden_dim}_hidden_dim_{hidden_dim}_n_samples_inference_{n_samples_inference}_max_concept_epochs_{max_concept_epochs}_max_task_epochs_{max_task_epochs}"
+  #   n_samples_inference: 50
+  #   use_neg_concept: True
+  #   pred_class: True
+  #   init_negative_scale: 5
+  #   init_shift: 5
+  #   pretrained: True
+  #   hidden_dim: [16, 32]
+  #   class_hidden_dim: [64, 128]
+  #   intervention_prob: 0.5
+  #   gradient_clip_val: 2.0
+  #   max_concept_epochs: [50] #20
+  #   warmup_epochs: 20 #5
+  #   max_task_epochs: 50 #30
+  #   vib_beta: 0.00005
+  #   concept_loss_weight: 1
+  #   learning_rate: 0.001
+  #   lr_ratio: 10
+  #   weight_decay: 0.000001 #0
+  #   weight_loss: True
+  #   grid_variables:
+  #     - class_hidden_dim
+  #     - hidden_dim
+  #     - max_concept_epochs
+  #   grid_search_mode: exhaustive
 
   - architecture: 'ProbabilisticConceptBottleneckModel'
     run_name: "ProbCBM_lr_{learning_rate}_class_hidden_dim_{class_hidden_dim}_hidden_dim_{hidden_dim}_n_samples_inference_{n_samples_inference}_max_concept_epochs_{max_concept_epochs}_max_task_epochs_{max_task_epochs}"
@@ -273,34 +273,34 @@ runs:
     init_negative_scale: 5
     init_shift: 5
     pretrained: True
-    hidden_dim: [16, 32]
-    class_hidden_dim: [64, 128]
+    hidden_dim: [16] #, 32]
+    class_hidden_dim: [64] #, 128]
     intervention_prob: 0.5
     gradient_clip_val: 2.0
-    max_concept_epochs: [50, 100] #20
-    warmup_epochs: 20 #5
-    max_task_epochs: 50 #30
+    max_concept_epochs: [50] #[25] #[50, 100] #20
+    warmup_epochs: 5 #20
+    max_task_epochs: 50 #25 #50 #30
     vib_beta: 0.00005
     concept_loss_weight: 1
     learning_rate: 0.01
     lr_ratio: 10
     weight_decay: 0.000001 #0
     weight_loss: True
-    dataset_config:
-      dataset: "cifar10"
-      num_workers: 8
-      batch_size: 128 # 512 # LOWERING CAUSE IT DOESN'T FIT IN THE GPU!
+    # dataset_config:
+    #   dataset: "cifar10"
+    #   num_workers: 8
+    #   batch_size: 128 # 512 # LOWERING CAUSE IT DOESN'T FIT IN THE GPU!
 
-      binarization_mode: percentile_threshold #zero_shot
-      regenerate: True
-      threshold: 50
+    #   binarization_mode: percentile_threshold #zero_shot
+    #   regenerate: True
+    #   threshold: 50
 
-      # DATASET VARIABLES
-      root_dir: /anfs/bigdisc/me466/cifar10
-      sampling_percent: 1
-      sampling_groups: True
-      test_subsampling: 1
-      weight_loss: True
+    #   # DATASET VARIABLES
+    #   root_dir: /anfs/bigdisc/me466/cifar10
+    #   sampling_percent: 1
+    #   sampling_groups: True
+    #   test_subsampling: 1
+    #   weight_loss: True
     grid_variables:
       - class_hidden_dim
       - hidden_dim
@@ -529,7 +529,7 @@ runs:
     global_epochs: [0]
     global_mixed_probs_coeff: 0
     freeze_global_embeddings: False
-    max_epochs: 150
+    max_epochs: 50
     uncerainty_threshold_percentile: [null]
     inference_threshold: False
     mixed_probs_coeff: [1]
@@ -589,7 +589,7 @@ runs:
     global_epochs: [0]
     global_mixed_probs_coeff: 0
     freeze_global_embeddings: False
-    max_epochs: 150
+    max_epochs: 50
     uncerainty_threshold_percentile: [null]
     inference_threshold: False
     mixed_probs_coeff: [1]

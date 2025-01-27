@@ -117,6 +117,7 @@ shared_params:
     additional_test_sets:
       - name: "OOD_sap_0.01"
         update_previous: True
+        skip_list: [".*(MixCEM_Final).*"]
         dataset_config:
          test_transformation_config:
            post_generation: False
@@ -126,6 +127,7 @@ shared_params:
 
       - name: "OOD_sap_0.05"
         update_previous: True
+        skip_list: [".*(MixCEM_Final).*"]
         dataset_config:
          test_transformation_config:
            post_generation: False
@@ -144,6 +146,7 @@ shared_params:
 
       - name: "OOD_sap_0.25"
         update_previous: True
+        skip_list: [".*(MixCEM_Final).*"]
         dataset_config:
           test_transformation_config:
             post_generation: False
@@ -153,8 +156,8 @@ shared_params:
 
       - name: "OOD_sap_0.5"
         update_previous: True
+        skip_list: [".*(MixCEM_Final).*"]
         dataset_config:
-          skip_list: [".*(MixCEM_Final).*"]
           test_transformation_config:
             post_generation: False
             name: salt_and_pepper
@@ -164,7 +167,6 @@ shared_params:
       - name: "OOD_sap_0.75"
         update_previous: True
         dataset_config:
-          skip_list: [".*(MixCEM_Final).*"]
           test_transformation_config:
             post_generation: False
             name: salt_and_pepper
@@ -173,8 +175,8 @@ shared_params:
 
       - name: "OOD_sap_0.9"
         update_previous: True
+        skip_list: [".*(MixCEM_Final).*"]
         dataset_config:
-          skip_list: [".*(MixCEM_Final).*"]
           test_transformation_config:
             post_generation: False
             name: salt_and_pepper
@@ -183,8 +185,8 @@ shared_params:
 
       - name: "OOD_sap_0.99"
         update_previous: True
+        skip_list: [".*(MixCEM_Final).*"]
         dataset_config:
-          skip_list: [".*(MixCEM_Final).*"]
           test_transformation_config:
             post_generation: False
             name: salt_and_pepper
@@ -193,8 +195,8 @@ shared_params:
 
       - name: "OOD"
         update_previous: True
+        skip_list: [".*(MixCEM_Final).*"]
         dataset_config:
-          skip_list: [".*(MixCEM_Final).*"]
           test_transformation_config:
             name: random_noise
             low_noise_level: 1

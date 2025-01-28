@@ -1,0 +1,150 @@
+trials: 5
+model_selection_trials: 5
+
+results_dir: /anfs/bigdisc/me466/mixcem_results/celeba_ablation/
+model_selection_groups:
+  - [".*(MixCEM_Final).*(_ce_0_).*$", "MixCEM Final No Calibration (Baseline)"]
+  - [".*(MixCEM_Final)_.*(_ce_30_).*$", "MixCEM Final (Baseline)"]
+  - [".*(MixCEM_Final)_.*$", "MixCEM Final All (Baseline)"]
+
+model_selection_metrics:
+  - val_acc_y_random_group_level_True_use_prior_False_int_auc
+  - val_acc_y
+  - val_loss
+  - val_mixcem_sel_acc
+
+shared_params:
+  # Dataset Configuration
+  dataset_config:
+    dataset: "celeba"
+    image_size: 64
+    num_classes: 1000
+    batch_size: 512
+    root_dir:  /anfs/bigdisc/me466/
+    use_imbalance: True
+    use_binary_vector_class: True
+    num_concepts: 6
+    label_binary_width: 1
+    label_dataset_subsample: 12
+    num_hidden_concepts: 2
+    selected_concepts: False
+    num_workers: 8
+
+  # Intervention Parameters
+  intervention_config:
+    competence_levels: [1]
+    intervention_freq: 1
+    intervention_batch_size: 256
+    val_intervention_policies:
+      - policy: "random"
+        group_level: True
+        use_prior: False
+    intervention_policies:
+      - policy: "random"
+        group_level: True
+        use_prior: False
+
+  # Representation metrics
+  # Change to False if you want representation metrics to be included in the
+  # evaluation (may significantly increase experiment times)
+  skip_repr_evaluation: True
+
+  # top_k_accuracy: [3, 5, 10]
+  save_model: True
+  max_epochs: 150
+  lr_scheduler_patience: 10
+  patience: 5
+  emb_size: 16
+  extra_dims: 0
+  concept_loss_weight: [1, 10]
+  learning_rate: 0.005
+  weight_decay: 0.000004
+  weight_loss: False
+  c_extractor_arch: resnet34
+  optimizer: sgd
+  bool: False
+  early_stopping_monitor: val_loss
+  early_stopping_mode: min
+  early_stopping_delta: 0.0
+  momentum: 0.9
+  sigmoidal_prob: False
+  training_intervention_prob: 0.25
+
+  grid_variables:
+    - concept_loss_weight
+  grid_search_mode: exhaustive
+
+  # Evaluation configuration
+  eval_config:
+    additional_metrics:
+      - name: mixcem_sel
+        include_list: ['.*(MixCEM).*', '.*(MixIntCEM).*']
+    additional_test_sets:
+      - name: "OOD_sap_0.1"
+        update_previous: True
+        dataset_config:
+          test_transformation_config:
+            post_generation: True # Difference only for CelebA
+            name: salt_and_pepper
+            amount: 0.1
+            s_vs_p: 0.5
+
+runs:
+  - architecture: 'MCIntCEM'
+    run_name: "MixCEM_Final_t_{temperature}_{all_intervened_loss_weight}_{pooling_mode}_{uncerainty_threshold_percentile}_{global_epochs}_mpc_{mixed_probs_coeff}_tmc_{montecarlo_train_tries}_emc_{montecarlo_test_tries}_cwc_{class_wise_temperature}_ce_{calibration_epochs}_g_ood_{ood_dropout_prob}_emb_{emb_size}_{finetune_with_val}_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_cwl_{concept_loss_weight}"
+    load_path_name: "MixCEM_Final_t_{temperature}_{all_intervened_loss_weight}_{pooling_mode}_None_{global_epochs}_mpc_{mixed_probs_coeff}_tmc_{montecarlo_train_tries}_emc_0_cwc_{class_wise_temperature}_ce_0_g_ood_{ood_dropout_prob}_emb_{emb_size}_True_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_cwl_{concept_loss_weight}"
+
+    concept_loss_weight: [10]
+    emb_size: [16]
+    shared_emb_generator: True
+    montecarlo_train_tries: [1]
+    montecarlo_test_tries: [0, 50, 100]
+    ood_dropout_prob: [0.9] #[0.5, 0.9, 0.1]
+    pooling_mode: ['concat']
+    calibration_epochs: [0, 30]
+    finetune_with_val: [True]
+    learnable_temps: False
+    class_wise_temperature: False
+    global_epochs: [0]
+    global_mixed_probs_coeff: 0
+    freeze_global_embeddings: False
+    max_epochs: 150
+    uncerainty_threshold_percentile: [null]
+    inference_threshold: False
+    mixed_probs_coeff: [1]
+    all_intervened_loss_weight: [1] #[10, 1, 0.1]
+    calibrate_concept_probs: True
+    dynamic_confidence_scaling: True
+    temperature: [1]
+    scale_fn: entropy
+
+    ###############################################################################################
+
+    # IntCEM stuff
+    embedding_activation: null
+    training_intervention_prob: [0.25]
+    intervention_task_discount: [1]
+    use_concept_groups: True
+    int_model_use_bn: False
+    int_model_layers: []
+    max_horizon: 1
+    horizon_rate: 1
+    intervention_weight: [0]
+    grid_variables:
+      - training_intervention_prob
+      - intervention_task_discount
+      - ood_dropout_prob
+      - emb_size
+      - finetune_with_val
+      - concept_loss_weight
+      - pooling_mode
+      - intervention_weight
+      - global_epochs
+      - montecarlo_train_tries
+      - mixed_probs_coeff
+      - all_intervened_loss_weight
+      - temperature
+      - calibration_epochs
+      - uncerainty_threshold_percentile
+      - montecarlo_test_tries
+    grid_search_mode: exhaustive

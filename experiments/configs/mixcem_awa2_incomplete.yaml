@@ -38,6 +38,7 @@ model_selection_groups:
   - [".*(MixCEM_Final).*(_ce_0_).*$", "MixCEM Final No Calibration (Baseline)"]
   - [".*(MixCEM_Final)_.*(_ce_30_).*$", "MixCEM Final (Baseline)"]
   - [".*(MixCEM_Final)_.*$", "MixCEM Final All (Baseline)"]
+  - [".*(MixCEM_Final).*(emc_50_).*$", "MixCEM Final All Sample (Baseline)"]
 
 model_selection_metrics:
   - val_acc_y_random_group_level_True_use_prior_False_int_auc

@@ -37,6 +37,7 @@ model_selection_groups:
   - [".*(MixCEM_Final).*(_ce_0_).*$", "MixCEM Final No Calibration (Baseline)"]
   - [".*(MixCEM_Final)_.*(_ce_30_).*$", "MixCEM Final (Baseline)"]
   - [".*(MixCEM_Final)_.*$", "MixCEM Final All (Baseline)"]
+  - [".*(MixCEM_Final).*(emc_50_).*$", "MixCEM Final All Sample (Baseline)"]
 
 
 model_selection_metrics:
@@ -447,12 +448,12 @@ runs:
       - svd_penalty
     grid_search_mode: exhaustive
 
-  # - architecture: 'ConceptToLabelModel'
-  #   run_name: "ConceptToLabelModel"
-  #   c2y_layers: [128, 64, 32]
-  #   grid_variables: []
-  #   max_epochs: 75
-  #   feature_drop_out: 0.25
+  - architecture: 'ConceptToLabelModel'
+    run_name: "ConceptToLabelModel"
+    c2y_layers: [128, 64, 32]
+    grid_variables: []
+    max_epochs: 75
+    feature_drop_out: 0.25
 
 
   # Final version to make sure everything works as expected (including the change in using MC sampling at test time)

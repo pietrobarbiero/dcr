@@ -60,6 +60,58 @@ def salt_and_pepper_noise_tensor(
 
     return out
 
+def harder_salt_and_pepper_noise_tensor(
+    img,
+    s_vs_p=0.5,
+    amount=0.05,
+    all_channels=False,
+):
+    if len(img.shape) == 4:
+        # Then there is a batch dimension to consider! Let's apply it to all
+        # elements independently and them put them back together
+        return torch.concat(
+            [
+                salt_and_pepper_noise_tensor(
+                    img[idx, :, :, :],
+                    s_vs_p=s_vs_p,
+                    amount=amount,
+                    all_channels=all_channels,
+                ).unsqueeze(0)
+                for idx in range(img.shape[0])
+            ]
+        )
+    assert isinstance(img, torch.Tensor), type(img).__name__
+    dtype = img.dtype
+    max_elem, min_elem = 1.0, 0.0
+    if not img.is_floating_point():
+        img = img.to(torch.float32)/255.0
+
+    out = img + 0.0
+
+    # Salt mode
+    shape_to_use = tuple(img.shape[:-1]) if all_channels else tuple(img.shape)
+    num_corrupted = int(np.ceil(amount * np.prod(tuple(shape_to_use))))
+    total_pixels = np.prod(tuple(shape_to_use))
+    selected_indices = np.random.choice(
+        total_pixels,
+        size=num_corrupted,
+        replace=False,
+    )
+
+    new_values = np.random.choice(
+        [max_elem, min_elem],
+        size=num_corrupted,
+        p=[s_vs_p, 1 - s_vs_p],
+    )
+    if num_corrupted:
+        if all_channels:
+            h_idxs, w_idxs = np.unravel_index(selected_indices, shape_to_use)
+            out[h_idxs, w_idxs, :] = torch.tensor(new_values)
+        else:
+            h_idxs, w_idxs, c_idxs = np.unravel_index(selected_indices, shape_to_use)
+            out[h_idxs, w_idxs, c_idxs] = torch.tensor(new_values)
+    return out
+
 class LambdaDataset(torch.utils.data.Dataset):
     def __init__(self, subset, transform=None):
         self.subset = subset
@@ -101,6 +153,13 @@ def transform_from_config(transform):
 
     if transform_name in ["salt_and_pepper", "s&p", "saltandpepper"]:
         return lambda x: salt_and_pepper_noise_tensor(
+            x,
+            s_vs_p=transform.get('s_vs_p', 0.5),
+            amount=transform.get('amount', 0.01),
+            all_channels=transform.get('all_channels', False),
+        )
+    if transform_name in ["harder_salt_and_pepper", "harder_s&p", "harder_saltandpepper"]:
+        return lambda x: harder_salt_and_pepper_noise_tensor(
             x,
             s_vs_p=transform.get('s_vs_p', 0.5),
             amount=transform.get('amount', 0.01),

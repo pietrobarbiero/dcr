@@ -862,6 +862,7 @@ def main(
     use_auc=False,
     use_dataset_cache=False,
     extra_datasets_filter_in_file=None,
+    reverse_experiments=False,
 ):
     seed_everything(42)
     # parameters for data, model, and training
@@ -910,7 +911,10 @@ def main(
             f"BEGINS AT {now.strftime('%d/%m/%Y at %H:%M:%S')}"
         )
         # And then over all runs in a given trial
-        for current_config in experiment_config['runs']:
+        runs = experiment_config['runs']
+        if reverse_experiments:
+            runs.reverse()
+        for current_config in runs:
             # Construct the config for this particular trial
             trial_config = copy.deepcopy(shared_params)
             trial_config.update(current_config)
@@ -1430,6 +1434,14 @@ def _build_arg_parser():
              "use ROC-AUC as the main performance metric rather than accuracy."
          ),
     )
+    parser.add_argument(
+        '--reverse',
+        action="store_true",
+         default=False,
+         help=(
+             "Reverses the order in which we process experiments (useful for multiprocessing)."
+         ),
+    )
 
     parser.add_argument(
         '--use_dataset_cache',
@@ -1581,4 +1593,5 @@ if __name__ == '__main__':
         use_auc=args.use_auc,
         use_dataset_cache=args.use_dataset_cache,
         extra_datasets_filter_in_file=extra_datasets_filter_in_file,
+        reverse_experiments=args.reverse,
     )

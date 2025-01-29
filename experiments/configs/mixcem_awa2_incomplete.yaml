@@ -610,3 +610,11 @@ runs:
       - uncerainty_threshold_percentile
       - montecarlo_test_tries
     grid_search_mode: exhaustive
+
+
+  - architecture: 'ConceptToLabelModel'
+    run_name: "ConceptToLabelModel"
+    c2y_layers: [128, 64, 32]
+    grid_variables: []
+    max_epochs: 75
+    feature_drop_out: 0.25

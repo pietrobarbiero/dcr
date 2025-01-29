@@ -106,10 +106,10 @@ def harder_salt_and_pepper_noise_tensor(
     if num_corrupted:
         if all_channels:
             h_idxs, w_idxs = np.unravel_index(selected_indices, shape_to_use)
-            out[h_idxs, w_idxs, :] = torch.tensor(new_values)
+            out[h_idxs, w_idxs, :] = torch.FloatTensor(new_values)
         else:
             h_idxs, w_idxs, c_idxs = np.unravel_index(selected_indices, shape_to_use)
-            out[h_idxs, w_idxs, c_idxs] = torch.tensor(new_values)
+            out[h_idxs, w_idxs, c_idxs] = torch.FloatTensor(new_values)
     return out
 
 class LambdaDataset(torch.utils.data.Dataset):

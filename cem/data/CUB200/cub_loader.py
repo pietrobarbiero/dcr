@@ -1433,7 +1433,10 @@ Definitions from CUB (certainties.txt)
 
 Unc map represents a mapping from the discrete score to a ``mental probability''
 '''
-DEFAULT_UNC_MAP = {0: 0.5, 1: 0.5, 2: 0.5, 3:0.75, 4:1.0}
+DEFAULT_UNC_MAP = [
+    {0: 0.5, 1: 0.5, 2: 0.5, 3:0.75, 4:1.0},
+    {0: 0.5, 1: 0.5, 2: 0.5, 3:0.75, 4:1.0},
+]
 def discrete_to_continuous_unc(unc_val, attr_label, unc_map):
     '''
     Yield a continuous prob representing discrete conf val
@@ -1445,12 +1448,7 @@ def discrete_to_continuous_unc(unc_val, attr_label, unc_map):
     '''
     unc_val = unc_val.item()
     attr_label = attr_label.item()
-    return float(unc_map[unc_val])
-    # if attr_label == 1:
-    #     return unc_map[unc_val]
-    # else:
-    #     if unc_val == 0 or unc_val==1: return unc_map[unc_val]
-    #     else: return 1-unc_map[unc_val]
+    return float(unc_map[int(attr_label)][unc_val])
 
 ##########################################################
 ## ORIGINAL SAMPLER/CLASSES FROM CBM PAPER
@@ -1534,6 +1532,7 @@ class CUBDataset(Dataset):
         traveling_birds=False,
         traveling_birds_root_dir=None,
         use_uncertainty_as_competence=False,
+        uncertainty_based_random_labels=False,
         unc_map=DEFAULT_UNC_MAP,
     ):
         """
@@ -1569,6 +1568,7 @@ class CUBDataset(Dataset):
         self.traveling_birds = traveling_birds
         self.traveling_birds_root_dir = traveling_birds_root_dir
         self.use_uncertainty_as_competence = use_uncertainty_as_competence
+        self.uncertainty_based_random_labels = uncertainty_based_random_labels
         self.unc_map = unc_map
         self.is_val = any(["val" in path for path in pkl_file_paths])
         if zero_shot_clip_attrs:
@@ -1686,6 +1686,13 @@ class CUBDataset(Dataset):
                     return one_hot_attr_label, class_label
                 else:
                     return attr_label, class_label
+            if self.uncertainty_based_random_labels:
+                discrete_unc_label = np.array(img_data['attribute_certainty'])[SELECTED_CONCEPTS]
+                instance_attr_label = np.array(img_data['attribute_label'])
+                competencies = []
+                for (discrete_unc_val, hard_concept_val) in zip(discrete_unc_label, instance_attr_label):
+                    competencies.append(discrete_to_continuous_unc(discrete_unc_val, hard_concept_val, self.unc_map))
+                return img, class_label, torch.FloatTensor(np.random.binomial(1, competencies))
             elif self.use_uncertainty_as_competence:
                 discrete_unc_label = np.array(img_data['attribute_certainty'])[SELECTED_CONCEPTS]
                 instance_attr_label = np.array(img_data['attribute_label'])
@@ -1768,6 +1775,8 @@ def load_data(
 
     additional_sample_transform=None,
     use_uncertainty_as_competence=False,
+    uncertainty_based_random_labels=False,
+    unc_map=DEFAULT_UNC_MAP,
     augment=True,
 ):
     """
@@ -1838,6 +1847,8 @@ def load_data(
         traveling_birds_root_dir=traveling_birds_root_dir,
         traveling_birds=traveling_birds,
         use_uncertainty_as_competence=use_uncertainty_as_competence,
+        unc_map=unc_map,
+        uncertainty_based_random_labels=uncertainty_based_random_labels,
     )
     if is_training:
         drop_last = True
@@ -1931,6 +1942,8 @@ def generate_data(
     val_sample_transform=None,
     use_uncertainty_as_competence=False,
     train_augment=True,
+    unc_map=DEFAULT_UNC_MAP,
+    uncertainty_based_random_labels=False,
 ):
     if root_dir is None:
         root_dir = DATASET_DIR
@@ -1957,6 +1970,11 @@ def generate_data(
         'use_uncertainty_as_competence',
         use_uncertainty_as_competence,
     )
+    uncertainty_based_random_labels = config.get(
+        'uncertainty_based_random_labels',
+        uncertainty_based_random_labels,
+    )
+    unc_map = config.get('unc_map', unc_map)
 
     if zero_shot_clip_attrs:
         concept_group_map = UNSUPERVISED_CONCEPT_GROUP_MAP.copy()
@@ -2059,6 +2077,8 @@ def generate_data(
         additional_sample_transform=train_sample_transform,
         use_uncertainty_as_competence=use_uncertainty_as_competence,
         augment=train_augment,
+        unc_map=unc_map,
+        uncertainty_based_random_labels=uncertainty_based_random_labels,
     )
     val_dl = load_data(
         pkl_paths=[val_data_path],
@@ -2081,6 +2101,8 @@ def generate_data(
         additional_sample_transform=val_sample_transform,
         use_uncertainty_as_competence=use_uncertainty_as_competence,
         augment=False,
+        unc_map=unc_map,
+        uncertainty_based_random_labels=uncertainty_based_random_labels,
     )
 
     test_dl = load_data(
@@ -2104,6 +2126,8 @@ def generate_data(
         additional_sample_transform=test_sample_transform,
         use_uncertainty_as_competence=use_uncertainty_as_competence,
         augment=False,
+        unc_map=unc_map,
+        uncertainty_based_random_labels=uncertainty_based_random_labels,
     )
     if not output_dataset_vars:
         return train_dl, val_dl, test_dl, imbalance

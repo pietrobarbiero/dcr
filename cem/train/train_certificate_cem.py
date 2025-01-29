@@ -363,7 +363,11 @@ def train_certificate_cem(
 
             start_time = time.time()
             calibration_epochs = config.get('calibration_epochs')
-            if calibration_epochs and (
+            include_calibration = not (loaded_weights and config.get(
+                'no_calibration_if_found',
+                False,
+            ))
+            if include_calibration and calibration_epochs and (
                 config.get('selection_mode', 'max_class_confidence') in
                 ['max_class_confidence', 'max_concept_confidence']
             ):
@@ -478,14 +482,14 @@ def train_certificate_cem(
                     if config.get('ignore_task_acc_in_calibration', False):
                         prev_task_loss_weight = model.task_loss_weight
                         model.task_loss_weight = 0
-                        prev_intervention_task_loss_weight = model.intervention_task_loss_weight
-                        model.intervention_task_loss_weight = 0
+                        # prev_intervention_task_loss_weight = model.intervention_task_loss_weight
+                        # model.intervention_task_loss_weight = 0
                         prev_all_intervened_loss_weight = model.all_intervened_loss_weight
                         model.all_intervened_loss_weight = 0
-                        prev_intervention_weight = model.intervention_weight
-                        model.intervention_weight = 0
-                        prev_intervention_task_discount = model.intervention_task_discount
-                        model.intervention_task_discount = 1
+                        # prev_intervention_weight = model.intervention_weight
+                        # model.intervention_weight = 0
+                        # prev_intervention_task_discount = model.intervention_task_discount
+                        # model.intervention_task_discount = 1
 
                     calibration_callbacks, calibration_ckpt_call = _make_callbacks(
                         config,
@@ -528,13 +532,13 @@ def train_certificate_cem(
                         ckpt_call=calibration_ckpt_call,
                         trainer=calibration_trainer,
                     )
+                    model.inference_threshold = prev_inference_threshold
                     if config.get('ignore_task_acc_in_calibration', False):
-                        model.inference_threshold = prev_inference_threshold
                         model.task_loss_weight = prev_task_loss_weight
-                        model.intervention_task_loss_weight = prev_intervention_task_loss_weight
+                        # model.intervention_task_loss_weight = prev_intervention_task_loss_weight
                         model.all_intervened_loss_weight = prev_all_intervened_loss_weight
-                        model.intervention_weight = prev_intervention_weight
-                        model.intervention_task_discount = prev_intervention_task_discount
+                        # model.intervention_weight = prev_intervention_weight
+                        # model.intervention_task_discount = prev_intervention_task_discount
 
                 # And restore the state
                 model.hard_selection_value = None

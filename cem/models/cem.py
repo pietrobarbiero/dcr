@@ -10,7 +10,7 @@ import cem.train.utils as utils
 
 
 ################################################################################
-## OUR MODEL
+## Concept Embedding Models
 ################################################################################
 
 
@@ -291,7 +291,7 @@ class ConceptEmbeddingModel(ConceptBottleneckModel):
             )
         )
         bottleneck = bottleneck.view(
-            (-1, self.emb_size * self.n_concepts)
+            (-1, self.n_concepts * self.emb_size)
         )
         return bottleneck
 
@@ -446,3 +446,163 @@ class ConceptEmbeddingModel(ConceptBottleneckModel):
             y_pred=y_pred,
         )
         return tuple([c_sem, bottleneck, y_pred] + tail_results)
+
+
+
+################################################################################
+## Fixed Embedding Version
+################################################################################
+
+
+class FixedEmbConceptEmbeddingModel(ConceptEmbeddingModel):
+    def __init__(
+        self,
+        n_concepts,
+        n_tasks,
+        emb_size=16,
+        training_intervention_prob=0.25,
+        embedding_activation="leakyrelu",
+        shared_prob_gen=True,
+        concept_loss_weight=1,
+        task_loss_weight=1,
+
+        c2y_model=None,
+        c2y_layers=None,
+        c_extractor_arch=utils.wrap_pretrained_model(resnet50),
+        output_latent=False,
+
+        optimizer="adam",
+        momentum=0.9,
+        learning_rate=0.01,
+        weight_decay=4e-05,
+        lr_scheduler_factor=0.1,
+        lr_scheduler_patience=10,
+        weight_loss=None,
+        task_class_weights=None,
+
+        active_intervention_values=None,
+        inactive_intervention_values=None,
+        intervention_policy=None,
+        output_interventions=False,
+        use_concept_groups=False,
+
+        context_gen_out_size=None,
+
+        top_k_accuracy=None,
+
+        # New parameters
+        fixed_embeddings=True,
+        initial_concept_embeddings=None,
+    ):
+        """
+        Same as a CEM but it has a set of learnable global embeddings
+        to use for each concept. Useful if you want the interventions
+        to be done using a global set of embeddings.
+        """
+
+        super(FixedEmbConceptEmbeddingModel, self).__init__(
+            n_concepts=n_concepts,
+            n_tasks=n_tasks,
+            emb_size=emb_size,
+            training_intervention_prob=training_intervention_prob,
+            embedding_activation=embedding_activation,
+            shared_prob_gen=shared_prob_gen,
+            concept_loss_weight=concept_loss_weight,
+            task_loss_weight=task_loss_weight,
+            c2y_model=c2y_model,
+            c2y_layers=c2y_layers,
+            c_extractor_arch=c_extractor_arch,
+            output_latent=output_latent,
+            optimizer=optimizer,
+            momentum=momentum,
+            learning_rate=learning_rate,
+            weight_decay=weight_decay,
+            lr_scheduler_factor=lr_scheduler_factor,
+            lr_scheduler_patience=lr_scheduler_patience,
+            weight_loss=weight_loss,
+            task_class_weights=task_class_weights,
+            active_intervention_values=None, # KEY!!!!
+            inactive_intervention_values=None, # KEY!!!!
+            intervention_policy=intervention_policy,
+            output_interventions=output_interventions,
+            use_concept_groups=use_concept_groups,
+            context_gen_out_size=context_gen_out_size,
+            top_k_accuracy=top_k_accuracy,
+        )
+
+        # Let's generate the global embeddings we will use
+        if (active_intervention_values is not None) and (
+            inactive_intervention_values is not None
+        ):
+            active_intervention_values = torch.tensor(
+                active_intervention_values
+            )
+            inactive_intervention_values = torch.tensor(
+                inactive_intervention_values
+            )
+
+            initial_concept_embeddings = torch.concat(
+                [
+                    active_intervention_values.unsqueeze(1),
+                    inactive_intervention_values.unsqueeze(1),
+                ],
+                dim=1,
+            )
+        if (initial_concept_embeddings is False) or (
+            initial_concept_embeddings is None
+        ):
+            self.concept_embeddings = None
+        else:
+            if isinstance(initial_concept_embeddings, np.ndarray):
+                initial_concept_embeddings = torch.FloatTensor(
+                    initial_concept_embeddings
+                )
+            self.concept_embeddings = torch.nn.Parameter(
+                initial_concept_embeddings,
+                requires_grad=(not fixed_embeddings),
+            )
+
+    def _generate_concept_embeddings(
+        self,
+        x,
+        latent=None,
+        training=False,
+    ):
+        if self.concept_embeddings is None:
+            # Then run the standard CEM pathway
+            return ConceptBottleneckModel._generate_concept_embeddings(
+                self=self,
+                x=x,
+                latent=latent,
+                training=training,
+            )
+        if latent is None:
+            pre_c = self.pre_concept_model(x)
+            contexts = []
+            c_sem = []
+
+            # First predict all the concept probabilities
+            for i, context_gen in enumerate(self.concept_context_generators):
+                if self.shared_prob_gen:
+                    prob_gen = self.concept_prob_generators[0]
+                else:
+                    prob_gen = self.concept_prob_generators[i]
+                context = context_gen(pre_c)
+                prob = prob_gen(context)
+                contexts.append(torch.unsqueeze(context, dim=1))
+                c_sem.append(self.sig(prob))
+            c_sem = torch.cat(c_sem, axis=-1)
+            contexts = torch.cat(contexts, axis=1)
+            latent = contexts, c_sem
+        else:
+            contexts, c_sem = latent
+
+        pos_embeddings = self.concept_embeddings[:, 0, :].unsqueeze(0).expand(
+            x.shape[0],
+            -1,
+        )
+        neg_embeddings = self.concept_embeddings[:, 1, :].unsqueeze(0).expand(
+            x.shape[0],
+            -1,
+        )
+        return c_sem, pos_embeddings, neg_embeddings, {}

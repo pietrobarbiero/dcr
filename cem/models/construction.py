@@ -1524,6 +1524,29 @@ def construct_model(
             "joint_model_pooling": config.get('joint_model_pooling', None),
         }
 
+    elif config["architecture"] in ["FixedEmbConceptEmbeddingModel", "FixedCEM"]:
+        model_cls = models_cem.ConceptEmbeddingModel
+        extra_params = {
+            "emb_size": config["emb_size"],
+            "shared_prob_gen": config.get("shared_prob_gen", True),
+            "intervention_policy": intervention_policy,
+            "training_intervention_prob": config.get(
+                'training_intervention_prob',
+                0.25,
+            ),
+            "embedding_activation": config.get(
+                "embedding_activation",
+                "leakyrelu"
+            ),
+            "c2y_model": c2y_model,
+            "c2y_layers": config.get("c2y_layers", []),
+            "fixed_embeddings": config.get("fixed_embeddings", True),
+            "initial_concept_embeddings": config.get("initial_concept_embeddings", None),
+        }
+        if "embeding_activation" in config:
+            # Legacy support for typo in argument
+            extra_params["embedding_activation"] = config["embeding_activation"]
+
     else:
         raise ValueError(f'Invalid architecture "{config["architecture"]}"')
 
@@ -1708,7 +1731,8 @@ def load_trained_model(
                 (config['architecture'] in ["ConceptBottleneckModel", "CBM"]) and
                 (not config.get('sigmoidal_prob', True))
             ) or
-            (config['architecture'] in ["PosthocConceptBottleneckModel", "PCBM", "PosthocCBM"])
+            (config['architecture'] in ["PosthocConceptBottleneckModel", "PCBM", "PosthocCBM"]) or
+            (config['architecture'] in ["FixedEmbConceptEmbeddingModel", "FixedCEM"])
         )
     ):
         # Then let's look at the empirical distribution of the logits in order
@@ -1729,20 +1753,57 @@ def load_trained_model(
             logger=logger,
             enable_checkpointing=enable_checkpointing,
         )
-        batch_results = trainer.predict(model, train_dl)
-        out_embs = np.concatenate(
-            list(map(lambda x: x[1], batch_results)),
-            axis=0,
-        )
-        active_intervention_values = []
-        inactive_intervention_values = []
-        for idx in range(n_concepts):
-            active_intervention_values.append(
-                np.percentile(out_embs[:, idx], config.get('active_top_percentile', 95))
+
+        if config['architecture'] in [
+            "FixedEmbConceptEmbeddingModel",
+            "FixedCEM",
+        ]:
+            # Then the intervention valyes depend on the actual mean embeddings
+            # of each concept!
+            model.output_embeddings = True
+            batch_results = trainer.predict(model, train_dl)
+            pos_embs = np.concatenate(
+                list(map(lambda x: x[-2], batch_results)),
+                axis=0,
             )
-            inactive_intervention_values.append(
-                np.percentile(out_embs[:, idx], config.get('bottom_top_percentile', 5))
+            neg_embs = np.concatenate(
+                list(map(lambda x: x[-1], batch_results)),
+                axis=0,
             )
+            active_intervention_values = []
+            inactive_intervention_values = []
+            out_embs = np.reshape(out_embs, (out_embs.shape[0], n_concepts, -1))
+            active_intervention_values = np.mean(
+                pos_embs,
+                axis=0,
+            )
+            inactive_intervention_values = np.mean(
+                neg_embs,
+                axis=0,
+            )
+        else:
+
+            # Else this is the unbounded concept activation instance
+            batch_results = trainer.predict(model, train_dl)
+            out_embs = np.concatenate(
+                list(map(lambda x: x[1], batch_results)),
+                axis=0,
+            )
+            active_intervention_values = []
+            inactive_intervention_values = []
+            for idx in range(n_concepts):
+                active_intervention_values.append(
+                    np.percentile(
+                        out_embs[:, idx],
+                        config.get('active_top_percentile', 95),
+                    )
+                )
+                inactive_intervention_values.append(
+                    np.percentile(
+                        out_embs[:, idx],
+                        config.get('bottom_top_percentile', 5),
+                    )
+                )
 
         active_intervention_values = torch.FloatTensor(
             active_intervention_values

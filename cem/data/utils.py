@@ -2,6 +2,7 @@ import numpy as np
 import torch
 import torchvision.transforms as v2
 
+
 ################################################################################
 ## DATASET MANIPULATION
 ################################################################################
@@ -202,7 +203,26 @@ def transform_from_config(transform):
     if transform_name == "gaussianblur":
         return v2.GaussianBlur(
             kernel_size=transform.get('kernel_size', (5, 5)),
-            sigma=transform.get('sigma', (0.1, 2.)),
+            sigma=transform.get('sigma', 2.0),
+        )
+    if transform_name == "randomperspective":
+        return v2.RandomPerspective(
+            distortion_scale=transform.get('distortion_scale', 0.5),
+            p=transform.get('p', 1),
+        )
+    if transform_name == "jpeg":
+        return v2.JPEG(
+            quality=transform.get('quality', 50),
+        )
+    if transform_name == "resize":
+        return v2.Resize(
+            size=transform.get('size', 150),
+        )
+
+    if transform_name == "elastictranform":
+        return v2.ElasticTransform(
+            alpha=transform.get('alpha', 50.0),
+            sigma=transform.get('sigma', 5.0),
         )
     if transform_name == "randomaffine":
         return v2.RandomAffine(

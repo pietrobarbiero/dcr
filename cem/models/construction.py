@@ -1524,8 +1524,8 @@ def construct_model(
             "joint_model_pooling": config.get('joint_model_pooling', None),
         }
 
-    elif config["architecture"] in ["FixedEmbConceptEmbeddingModel", "FixedCEM"]:
-        model_cls = models_cem.ConceptEmbeddingModel
+    elif config["architecture"] in ["FixedEmbConceptEmbeddingModel", "FixedConceptEmbeddingModel", "FixedCEM"]:
+        model_cls = models_cem.FixedEmbConceptEmbeddingModel
         extra_params = {
             "emb_size": config["emb_size"],
             "shared_prob_gen": config.get("shared_prob_gen", True),
@@ -1731,8 +1731,8 @@ def load_trained_model(
                 (config['architecture'] in ["ConceptBottleneckModel", "CBM"]) and
                 (not config.get('sigmoidal_prob', True))
             ) or
-            (config['architecture'] in ["PosthocConceptBottleneckModel", "PCBM", "PosthocCBM"]) or
-            (config['architecture'] in ["FixedEmbConceptEmbeddingModel", "FixedCEM"])
+            (config['architecture'] in ["PosthocConceptBottleneckModel", "PCBM", "PosthocCBM"])
+            # (config['architecture'] in ["FixedEmbConceptEmbeddingModel", "FixedCEM", "FixedEmbConceptEmbeddingModel"])
         )
     ):
         # Then let's look at the empirical distribution of the logits in order
@@ -1756,6 +1756,7 @@ def load_trained_model(
 
         if config['architecture'] in [
             "FixedEmbConceptEmbeddingModel",
+            "FixedConceptEmbeddingModel",
             "FixedCEM",
         ]:
             # Then the intervention valyes depend on the actual mean embeddings

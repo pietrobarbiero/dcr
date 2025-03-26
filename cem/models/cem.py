@@ -531,8 +531,10 @@ class FixedEmbConceptEmbeddingModel(ConceptEmbeddingModel):
         )
 
         # Let's generate the global embeddings we will use
-        if (active_intervention_values is not None) and (
-            inactive_intervention_values is not None
+        if (
+            (initial_concept_embeddings is None) and
+            (active_intervention_values is not None) and
+            (inactive_intervention_values is not None)
         ):
             active_intervention_values = torch.tensor(
                 active_intervention_values
@@ -548,19 +550,23 @@ class FixedEmbConceptEmbeddingModel(ConceptEmbeddingModel):
                 ],
                 dim=1,
             )
+        self._set_embeddings = True
         if (initial_concept_embeddings is False) or (
             initial_concept_embeddings is None
         ):
-            self.concept_embeddings = None
+            initial_concept_embeddings = torch.normal(
+                torch.zeros(self.n_concepts, 2, emb_size),
+                torch.ones(self.n_concepts, 2, emb_size),
+            )
         else:
             if isinstance(initial_concept_embeddings, np.ndarray):
                 initial_concept_embeddings = torch.FloatTensor(
                     initial_concept_embeddings
                 )
-            self.concept_embeddings = torch.nn.Parameter(
-                initial_concept_embeddings,
-                requires_grad=(not fixed_embeddings),
-            )
+        self.concept_embeddings = torch.nn.Parameter(
+            initial_concept_embeddings,
+            requires_grad=(not fixed_embeddings),
+        )
 
     def _generate_concept_embeddings(
         self,
@@ -568,9 +574,9 @@ class FixedEmbConceptEmbeddingModel(ConceptEmbeddingModel):
         latent=None,
         training=False,
     ):
-        if self.concept_embeddings is None:
+        if not self._set_embeddings:
             # Then run the standard CEM pathway
-            return ConceptBottleneckModel._generate_concept_embeddings(
+            return ConceptEmbeddingModel._generate_concept_embeddings(
                 self=self,
                 x=x,
                 latent=latent,
@@ -600,9 +606,11 @@ class FixedEmbConceptEmbeddingModel(ConceptEmbeddingModel):
         pos_embeddings = self.concept_embeddings[:, 0, :].unsqueeze(0).expand(
             x.shape[0],
             -1,
+            -1,
         )
         neg_embeddings = self.concept_embeddings[:, 1, :].unsqueeze(0).expand(
             x.shape[0],
+            -1,
             -1,
         )
         return c_sem, pos_embeddings, neg_embeddings, {}

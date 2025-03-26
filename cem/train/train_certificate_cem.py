@@ -7,9 +7,7 @@ import pytorch_lightning as pl
 import time
 import torch
 
-from sklearn.mixture import GaussianMixture
 from pytorch_lightning import seed_everything
-from scipy.stats import beta as beta_fn
 
 import cem.train.utils as utils
 import cem.utils.data as data_utils

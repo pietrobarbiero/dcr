@@ -7,18 +7,15 @@ import time
 import torch
 
 from pytorch_lightning import seed_everything
-from pytorch_lightning.callbacks import ModelCheckpoint
-from pytorch_lightning.callbacks.early_stopping import EarlyStopping
-from pytorch_lightning.loggers import WandbLogger
 
 import cem.train.evaluate as evaluate
 import cem.train.utils as utils
-import cem.utils.data as data_utils
 
 from cem.models.construction import construct_model
+from cem.models.glancenet import update_osr_thresholds
 from cem.train.training import _make_callbacks, _check_interruption, _restore_checkpoint
 
-def train_fixed_cem(
+def train_glancenet(
     input_shape,
     n_concepts,
     n_tasks,
@@ -65,9 +62,9 @@ def train_fixed_cem(
 
     # create model
     model = construct_model(
-        n_concepts,
-        n_tasks,
-        config,
+        n_concepts=n_concepts,
+        n_tasks=n_tasks,
+        config=config,
         imbalance=imbalance,
         task_class_weights=task_class_weights,
     )
@@ -81,22 +78,6 @@ def train_fixed_cem(
         sum(p.numel() for p in model.parameters() if not p.requires_grad),
         "]",
     )
-    initialized_concept_embs = False
-    trained_already = False
-    weights_path = None
-    if config.get("weights_path"):
-        weights_path = config.get("weights_path")
-        if not os.path.exists(weights_path):
-            weights_path = weights_path + f"_fold_{split + 1}.pt"
-    if weights_path is not None:
-        if os.path.exists(weights_path):
-            # Then we simply load the model and proceed
-            print("\tFound pretrained model to load the initial weights from!")
-            model.load_state_dict(
-                torch.load(weights_path),
-                strict=False,
-            )
-            trained_already = True
 
     if (project_name) and result_dir and (
         not os.path.exists(os.path.join(result_dir, f'{full_run_name}.pt'))
@@ -134,18 +115,7 @@ def train_fixed_cem(
         if (not rerun) and os.path.exists(model_saved_path):
             # Then we simply load the model and proceed
             print("\tFound cached model... loading it")
-            initialized_concept_embs = True
             model.load_state_dict(torch.load(model_saved_path))
-            if os.path.exists(
-                model_saved_path.replace(".pt", "_training_times.npy")
-            ):
-                [training_time, num_epochs] = np.load(
-                    model_saved_path.replace(".pt", "_training_times.npy"),
-                )
-            else:
-                training_time, num_epochs = 0, 0
-        elif trained_already:
-            print("Model has been already trained, so we will not do more training.")
             if os.path.exists(
                 model_saved_path.replace(".pt", "_training_times.npy")
             ):
@@ -214,102 +184,25 @@ def train_fixed_cem(
                 trainer=fit_trainer,
             )
 
-        trainer = pl.Trainer(
-            accelerator=accelerator,
-            devices=devices,
-            logger=logger,
-            enable_checkpointing=enable_checkpointing,
-        )
-        if not initialized_concept_embs:
-            # Now time to compute the static concept weights we will use in this
-            model._set_embeddings = False
-            print("\tInitializing fixed concept embeddings based on averages")
-            model.output_embeddings = True
-            if config.get("ground_truth_emb_averages", False):
-                # Then let's make sure we evlauate things on the same order
-                x_train, y_train, c_train = data_utils.daloader_to_memory(
-                    train_dl,
-                    as_torch=True,
-                    num_workers=config.get('num_load_workers', config.get('num_workers', 1)),
-                )
-                unshuffle_dl = torch.utils.data.DataLoader(
-                    dataset=torch.utils.data.TensorDataset(x_train, y_train, c_train),
-                    batch_size=train_dl.batch_size,
-                    num_workers=train_dl.num_workers,
-                    shuffle=False,
-                )
-                batch_results = trainer.predict(model, unshuffle_dl)
-            else:
-                batch_results = trainer.predict(model, train_dl)
-            pos_embs = np.concatenate(
-                list(map(lambda x: x[-2], batch_results)),
-                axis=0,
+            # Now time to compute the OSR thresholds
+            model._osr_variables_set = False
+            update_osr_thresholds(
+                model=model,
+                dataloader=train_dl,
+                device=model.device,
+                rec_percentile=config.get('rec_percentile', 95),
+                proto_percentile=config.get('proto_percentile', 95),
             )
-            neg_embs = np.concatenate(
-                list(map(lambda x: x[-1], batch_results)),
-                axis=0,
-            )
-
-            if config.get("ground_truth_emb_averages", False):
-                active_intervention_values = []
-                inactive_intervention_values = []
-                for concept_idx in range(n_concepts):
-                    active_intervention_values.append(
-                        np.mean(
-                            pos_embs[c_train[:, concept_idx] == 1, concept_idx:concept_idx+1, :],
-                            axis=0,
-                        )
-                    )
-                    inactive_intervention_values.append(
-                        np.mean(
-                            neg_embs[c_train[:, concept_idx] == 0, concept_idx:concept_idx+1, :],
-                            axis=0,
-                        )
-                    )
-                active_intervention_values = np.concatenate(
-                    active_intervention_values,
-                    axis=0,
+            model._osr_variables_set = True
+            if save_model and (result_dir is not None):
+                torch.save(
+                    model.state_dict(),
+                    model_saved_path,
                 )
-                inactive_intervention_values = np.concatenate(
-                    inactive_intervention_values,
-                    axis=0,
+                np.save(
+                    model_saved_path.replace(".pt", "_training_times.npy"),
+                    np.array([training_time, num_epochs]),
                 )
-            else:
-                active_intervention_values = np.mean(
-                    pos_embs,
-                    axis=0,
-                )
-                inactive_intervention_values = np.mean(
-                    neg_embs,
-                    axis=0,
-                )
-            model.output_embeddings = False
-            model._set_embeddings = True # Make sure these are set!
-            with torch.no_grad():
-                model.concept_embeddings.copy_(torch.tensor(
-                    np.concatenate(
-                        [
-                            np.expand_dims(active_intervention_values, axis=1),
-                            np.expand_dims(inactive_intervention_values, axis=1),
-                        ],
-                        axis=1,
-                    )
-                ))
-        else:
-            print(
-                "Concept embeddings have already been initialized! So no need "
-                "to do this again."
-            )
-
-        if save_model and (result_dir is not None):
-            torch.save(
-                model.state_dict(),
-                model_saved_path,
-            )
-            np.save(
-                model_saved_path.replace(".pt", "_training_times.npy"),
-                np.array([training_time, num_epochs]),
-            )
 
         if not os.path.exists(os.path.join(
             result_dir,
@@ -325,6 +218,11 @@ def train_fixed_cem(
                 result_dir,
                 f'{run_name}_experiment_config.joblib'
             ))
+        trainer = pl.Trainer(
+            accelerator=accelerator,
+            devices=devices,
+            logger=logger,
+        )
         eval_results = evaluate.evaluate_cbm(
             model=model,
             trainer=trainer,

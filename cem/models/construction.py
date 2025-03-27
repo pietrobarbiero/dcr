@@ -15,6 +15,7 @@ import cem.models.certificate_cem as certificate_cem
 import cem.models.concept_to_label as models_c2l
 import cem.models.defer_cem as defer_cem
 import cem.models.direction_cem as direction_cem
+import cem.models.glancenet as models_glancenet
 import cem.models.global_approx_cem as models_global_approx
 import cem.models.global_bank_cem as models_global_mixcem
 import cem.models.hybrid_cem as models_hcem
@@ -1177,8 +1178,8 @@ def construct_model(
     ):
         model_cls = models_cbm.ConceptBottleneckModel
         extra_params = {
-            "bool": config["bool"],
-            "extra_dims": config["extra_dims"],
+            "bool": config.get("bool", False),
+            "extra_dims": config.get("extra_dims", 0),
             "sigmoidal_extra_capacity": config.get(
                 "sigmoidal_extra_capacity",
                 True,
@@ -1191,6 +1192,37 @@ def construct_model(
             "x2c_model": x2c_model,
             "c2y_model": c2y_model,
             "c2y_layers": config.get("c2y_layers", []),
+        }
+
+    elif (
+        config["architecture"] in ["GlanceNet"]
+    ):
+        model_cls = models_glancenet.GlanceNet
+        if config.get("decoder_output_activation", None) is None:
+            decoder_output_activation = None
+        elif config.get("decoder_output_activation", None) == "sigmoid":
+            decoder_output_activation = torch.nn.Sigmoid()
+        else:
+            raise ValueError(
+                f'Unsupported decoder_output_activation: "'
+                f'{decoder_output_activation}"'
+            )
+        extra_params = {
+            "input_shape": config.get('input_shape'),
+            "decoder_layers": config.get('decoder_layers', [512, 256, 128, 64, 3]),
+            "decoder_output_activation": decoder_output_activation,
+            "hidden_dim": config.get('hidden_dim', 64),
+            "extra_dims": config.get("extra_dims", 0),
+            "beta": config.get('beta', 1),
+            "recon_weight": config.get('recon_weight', 1),
+            "intervention_policy": intervention_policy,
+            "active_intervention_values": active_intervention_values,
+            "inactive_intervention_values": inactive_intervention_values,
+            "x2c_model": x2c_model,
+            "c2y_model": c2y_model,
+            "c2y_layers": config.get("c2y_layers", []),
+            "conditional_prior": config.get("conditional_prior", True),
+            "prior_loss_weight": config.get("prior_loss_weight", 1),
         }
 
     elif (
@@ -1542,6 +1574,7 @@ def construct_model(
             "c2y_layers": config.get("c2y_layers", []),
             "fixed_embeddings": config.get("fixed_embeddings", True),
             "initial_concept_embeddings": config.get("initial_concept_embeddings", None),
+            "fixed_embeddings_always": config.get('fixed_embeddings_always', True),
         }
         if "embeding_activation" in config:
             # Legacy support for typo in argument
@@ -1580,12 +1613,12 @@ def construct_model(
             if (task_class_weights is not None)
             else None
         ),
-        concept_loss_weight=config['concept_loss_weight'],
+        concept_loss_weight=config.get('concept_loss_weight', 0.01),
         task_loss_weight=task_loss_weight,
-        learning_rate=config['learning_rate'],
+        learning_rate=config.get('learning_rate', 1e-3),
         weight_decay=config.get('weight_decay', 0),
         c_extractor_arch=utils.wrap_pretrained_model(c_extractor_arch),
-        optimizer=config['optimizer'],
+        optimizer=config.get('optimizer', 'sgd'),
         lr_scheduler_factor=config.get('lr_scheduler_factor', 0.1),
         lr_scheduler_patience=config.get('lr_scheduler_patience', 10),
         top_k_accuracy=config.get('top_k_accuracy'),

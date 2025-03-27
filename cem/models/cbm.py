@@ -638,6 +638,7 @@ class ConceptBottleneckModel(pl.LightningModule):
                 y,
             )
             task_loss_scalar = task_loss.detach()
+            # print("task_loss_scalar =", task_loss_scalar)
         else:
             task_loss = 0
             task_loss_scalar = 0
@@ -649,6 +650,7 @@ class ConceptBottleneckModel(pl.LightningModule):
             # values are fully given
             concept_loss = self.loss_concept(c_sem, c)
             concept_loss_scalar = concept_loss.detach()
+            # print("concept_loss_scalar =", concept_loss_scalar)
             loss = self.concept_loss_weight * concept_loss + task_loss + \
                 self._extra_losses(
                     x=x,

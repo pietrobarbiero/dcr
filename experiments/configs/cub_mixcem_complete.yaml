@@ -13,6 +13,9 @@ model_selection_groups:
   - ["^(Hybrid-CBM_).*(_Baseline_).*$", "Hybrid-CBM (Baseline)"]
   - ["^(CEM_Baseline_).*$", "CEM (Baseline)"]
   - ["^(FixedCEM_).*$", "FixedCEM (Baseline)"]
+  - ["^(FixedGTCEM_).*$", "FixedGTCEM (Baseline)"]
+  - ["^(FixedOnlyCEM_).*$", "FixedOnlyCEM (Baseline)"]
+  - ["^(FixedOnlyGTCEM_).*$", "FixedOnlyGTCEM (Baseline)"]
   - ["^(IntCEM_).*(_Baseline).*$", "IntCEM (Baseline)"]
   - ["^(ProbCBM_).*$", "ProbCBM (Baseline)"]
   - ["^(PCBM_).*$", "Posthoc CBM (Baseline)"]
@@ -129,7 +132,7 @@ shared_params:
     additional_test_sets:
       - name: "OOD_sap_0.01"
         update_previous: True
-        skip_list: [".*(MixCEM_Final).*"]
+        skip_list: [".*(MixCEM_Final).*", ".*(Fixed).*(CEM).*"]
         dataset_config:
          test_transformation_config:
            post_generation: False
@@ -139,7 +142,7 @@ shared_params:
 
       - name: "OOD_sap_0.05"
         update_previous: True
-        skip_list: [".*(MixCEM_Final).*"]
+        skip_list: [".*(MixCEM_Final).*", ".*(Fixed).*(CEM).*"]
         dataset_config:
          test_transformation_config:
            post_generation: False
@@ -158,7 +161,7 @@ shared_params:
 
       - name: "OOD_sap_0.25"
         update_previous: True
-        # skip_list: [".*(MixCEM_Final).*"]
+        # skip_list: [".*(MixCEM_Final).*", ".*(Fixed).*(CEM).*"]
         dataset_config:
           test_transformation_config:
             post_generation: False
@@ -168,7 +171,7 @@ shared_params:
 
       - name: "OOD_sap_0.5"
         update_previous: True
-        # skip_list: [".*(MixCEM_Final).*"]
+        # skip_list: [".*(MixCEM_Final).*", ".*(Fixed).*(CEM).*"]
         dataset_config:
           test_transformation_config:
             post_generation: False
@@ -178,7 +181,7 @@ shared_params:
 
       - name: "OOD_sap_0.75"
         update_previous: True
-        skip_list: [".*(MixCEM_Final).*"]
+        skip_list: [".*(MixCEM_Final).*", ".*(Fixed).*(CEM).*"]
         dataset_config:
           test_transformation_config:
             post_generation: False
@@ -188,7 +191,7 @@ shared_params:
 
       - name: "OOD_sap_0.9"
         update_previous: True
-        skip_list: [".*(MixCEM_Final).*"]
+        skip_list: [".*(MixCEM_Final).*", ".*(Fixed).*(CEM).*"]
         dataset_config:
           test_transformation_config:
             post_generation: False
@@ -198,7 +201,7 @@ shared_params:
 
       - name: "OOD_sap_0.99"
         update_previous: True
-        skip_list: [".*(MixCEM_Final).*"]
+        skip_list: [".*(MixCEM_Final).*", ".*(Fixed).*(CEM).*"]
         dataset_config:
           test_transformation_config:
             post_generation: False
@@ -208,7 +211,7 @@ shared_params:
 
       - name: "OOD"
         update_previous: True
-        skip_list: [".*(MixCEM_Final).*"]
+        skip_list: [".*(MixCEM_Final).*", ".*(Fixed).*(CEM).*"]
         dataset_config:
           test_transformation_config:
             name: random_noise
@@ -277,6 +280,40 @@ runs:
     embedding_activation: "leakyrelu"
     weights_path: '{results_dir}/CEM_Baseline_cwl_{concept_loss_weight}'
     concept_loss_weight: [1] # Best performing weights for CEMs
+    fixed_embeddings_always: True
+    ground_truth_emb_averages: False
+
+  - architecture: 'FixedConceptEmbeddingModel'
+    run_name: "FixedGTCEM_cwl_{concept_loss_weight}"
+    sigmoidal_prob: True
+    training_intervention_prob: 0.25
+    embedding_activation: "leakyrelu"
+    weights_path: '{results_dir}/CEM_Baseline_cwl_{concept_loss_weight}'
+    concept_loss_weight: [1] # Best performing weights for CEMs
+    fixed_embeddings_always: True
+    ground_truth_emb_averages: True # Difference!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+
+  - architecture: 'FixedConceptEmbeddingModel'
+    run_name: "FixedOnlyCEM_cwl_{concept_loss_weight}"
+    sigmoidal_prob: True
+    training_intervention_prob: 0.25
+    embedding_activation: "leakyrelu"
+    weights_path: '{results_dir}/CEM_Baseline_cwl_{concept_loss_weight}'
+    concept_loss_weight: [1] # Best performing weights for CEMs
+    fixed_embeddings_always: False  # Difference!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ground_truth_emb_averages: False
+
+
+  - architecture: 'FixedConceptEmbeddingModel'
+    run_name: "FixedOnlyGTCEM_cwl_{concept_loss_weight}"
+    sigmoidal_prob: True
+    training_intervention_prob: 0.25
+    embedding_activation: "leakyrelu"
+    weights_path: '{results_dir}/CEM_Baseline_cwl_{concept_loss_weight}'
+    concept_loss_weight: [1] # Best performing weights for CEMs
+    fixed_embeddings_always: False  # Difference!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ground_truth_emb_averages: True # Difference!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
   - architecture: 'ConceptBottleneckModel'
     run_name: "DNN_extra_dims_{extra_dims}"

@@ -98,6 +98,7 @@ import cem.train.train_certificate_cem as train_certificate_cem
 import cem.train.train_defer_cem as train_defer_cem
 import cem.train.train_fixed_cem as train_fixed_cem
 import cem.train.train_global_approx as train_global_approx
+import cem.train.train_glancenet as train_glancenet
 import cem.train.train_global_bank as train_global_bank
 import cem.train.train_mixcem as train_mixcem
 import cem.train.train_pcbm as train_pcbm
@@ -674,6 +675,11 @@ def _multiprocess_run_trial(
         'GlobalApproxCEM',
     ]:
         train_fn = train_global_approx.train_global_approx_cem
+
+    elif config['architecture'] in [
+        'GlanceNet',
+    ]:
+        train_fn = train_glancenet.train_glancenet
 
     elif config['architecture'] in [
         'CertificateConceptEmbeddingModel',

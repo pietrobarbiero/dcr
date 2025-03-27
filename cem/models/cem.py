@@ -493,6 +493,7 @@ class FixedEmbConceptEmbeddingModel(ConceptEmbeddingModel):
         # New parameters
         fixed_embeddings=True,
         initial_concept_embeddings=None,
+        fixed_embeddings_always=True,
     ):
         """
         Same as a CEM but it has a set of learnable global embeddings
@@ -550,6 +551,7 @@ class FixedEmbConceptEmbeddingModel(ConceptEmbeddingModel):
                 ],
                 dim=1,
             )
+        self.fixed_embeddings_always = fixed_embeddings_always
         self._set_embeddings = True
         if (initial_concept_embeddings is False) or (
             initial_concept_embeddings is None
@@ -602,15 +604,92 @@ class FixedEmbConceptEmbeddingModel(ConceptEmbeddingModel):
             latent = contexts, c_sem
         else:
             contexts, c_sem = latent
-
-        pos_embeddings = self.concept_embeddings[:, 0, :].unsqueeze(0).expand(
-            x.shape[0],
-            -1,
-            -1,
-        )
-        neg_embeddings = self.concept_embeddings[:, 1, :].unsqueeze(0).expand(
-            x.shape[0],
-            -1,
-            -1,
-        )
+        if self.fixed_embeddings_always:
+            pos_embeddings = self.concept_embeddings[:, 0, :].unsqueeze(0).expand(
+                x.shape[0],
+                -1,
+                -1,
+            )
+            neg_embeddings = self.concept_embeddings[:, 1, :].unsqueeze(0).expand(
+                x.shape[0],
+                -1,
+                -1,
+            )
+        else:
+            # Else we only use fixed embeddings for interventions
+            pos_embeddings = contexts[:, :, :self.emb_size]
+            neg_embeddings = contexts[:, :, self.emb_size:]
         return c_sem, pos_embeddings, neg_embeddings, {}
+
+
+    def _after_interventions(
+        self,
+        prob,
+        pos_embeddings,
+        neg_embeddings,
+        intervention_idxs=None,
+        c_true=None,
+        train=False,
+        competencies=None,
+        **kwargs
+    ):
+        if self.fixed_embeddings_always:
+            # Then simply use the CEM pathway
+            return ConceptEmbeddingModel._after_interventions(
+                self=self,
+                prob=prob,
+                pos_embeddings=pos_embeddings,
+                neg_embeddings=neg_embeddings,
+                intervention_idxs=intervention_idxs,
+                c_true=c_true,
+                train=train,
+                competencies=competencies,
+                **kwargs
+            )
+        if train and (self.training_intervention_prob != 0) and (
+            (c_true is not None) and
+            (intervention_idxs is None)
+        ):
+            # Then we will probabilistically intervene in some concepts
+            mask = torch.bernoulli(
+                self.ones * self.training_intervention_prob,
+            )
+            intervention_idxs = torch.tile(
+                mask,
+                (c_true.shape[0], 1),
+            )
+        if (c_true is None) or (intervention_idxs is None):
+            # Then time to mix!
+            bottleneck = (
+                pos_embeddings * torch.unsqueeze(prob, dim=-1) +
+                neg_embeddings * (1 - torch.unsqueeze(prob, dim=-1))
+            )
+            return prob, intervention_idxs, bottleneck
+        intervention_idxs = intervention_idxs.type(torch.FloatTensor)
+        intervention_idxs = intervention_idxs.to(prob.device)
+        output = prob * (1 - intervention_idxs) + intervention_idxs * c_true
+        # Use the fixed embeddings for the intervened concepts
+        global_pos_embs = self.concept_embeddings[:, 0, :].unsqueeze(0).expand(
+            intervention_idxs.shape[0],
+            -1,
+            -1,
+        )
+        global_neg_embs = self.concept_embeddings[:, 1, :].unsqueeze(0).expand(
+            intervention_idxs.shape[0],
+            -1,
+            -1,
+        )
+        pos_embeddings = pos_embeddings * (1 - intervention_idxs.unsqueeze(-1)) + (
+            intervention_idxs.unsqueeze(-1) * global_pos_embs
+        )
+        neg_embeddings = neg_embeddings * (1 - intervention_idxs.unsqueeze(-1)) + (
+            intervention_idxs.unsqueeze(-1) * global_neg_embs
+        )
+        # Then time to mix!
+        bottleneck = self._construct_c2y_input(
+            pos_embeddings=pos_embeddings,
+            neg_embeddings=neg_embeddings,
+            probs=output,
+            **kwargs,
+        )
+        return output, intervention_idxs, bottleneck

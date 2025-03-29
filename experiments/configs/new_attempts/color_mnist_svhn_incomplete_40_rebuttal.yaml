@@ -1,7 +1,7 @@
 trials: 3
 model_selection_trials: 1
 
-results_dir: /anfs/bigdisc/me466/mixcem_results/color_mnist_svhn_incomplete_rebuttal/
+results_dir: /anfs/bigdisc/me466/mixcem_results/color_mnist_svhn_incomplete_40_rebuttal/
 
 model_selection_groups:
   - ["^(CBM_Sigmoid).*$", "Joint CBM (Baseline)"]
@@ -94,18 +94,18 @@ shared_params:
     root_dir: data/
     num_workers: 8
     batch_size: 2048
-    num_operands: 5 #10 #10
-    selected_digits: [0, 1, 2, 3, 4] #[0, 1, 2, 3]
+    num_operands: 11 #10 #10
+    selected_digits: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] #[0, 1, 2, 3]
     count_labels: False
     # range_labels: null #[5, 10, 15, 20, 25, 30, 35, 40] #[5, 10, 15, 20, 25]
-    range_labels: [10] #[20] #[5, 10, 15, 20, 25]
+    range_labels: [25] #[20] #[5, 10, 15, 20, 25]
     low_noise_level: 0 #1
     noise_level: 0 #0.25
     test_low_noise_level: 0 #1
     test_noise_level: 0 #0.25
     train_dataset_size: 10000 #20000
     test_dataset_size: 5000
-    sampling_percent: 0.8
+    sampling_percent: 0.4
     sampling_groups: True
     test_subsampling: 1
     weight_loss: False
@@ -113,33 +113,7 @@ shared_params:
     # # CHANGES!!!!!!!!!!!!!!!
     colors: ["gray"]
     concat_dim: c
-
     color_by_label: False
-    # colors: ["random_1", "random_2", "random_3", "random_4", "random_5", "random_6", "random_7", "random_8", "random_9", "random_10"]
-    # digit_color_distribution:
-    #   0: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-    #   1: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-    #   2: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-    #   3: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-    #   4: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-    #   5: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-    #   6: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-    #   7: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-    #   8: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-    #   9: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-
-    # test_digit_color_distribution:
-    #   0: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-    #   1: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-    #   2: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-    #   3: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-    #   4: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-    #   5: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-    #   6: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-    #   7: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-    #   8: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-    #   9: [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
-
 
 
 runs:
@@ -241,22 +215,35 @@ runs:
       - class_hidden_dim
       - hidden_dim
     grid_search_mode: exhaustive
+    intervention_config:
+      competence_levels: [1]
+      intervention_freq: 1
+      intervention_batch_size: 1024 #2048 CHANGE!!!!!!!!!!!!
+      use_auc: True
+      val_intervention_policies:
+        - policy: "random"
+          group_level: True
+          use_prior: False
+      intervention_policies:
+        - policy: "random"
+          group_level: True
+          use_prior: False
     dataset_config:
       dataset: color_mnist_add
       root_dir: data/
       num_workers: 8
       batch_size: 512 # 2048 CHANGE!!!!!!!!
-      num_operands: 5
-      selected_digits: [0, 1, 2, 3, 4]
+      num_operands: 11
+      selected_digits: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
       count_labels: False
-      range_labels: [10]
+      range_labels: [25]
       low_noise_level: 0
       noise_level: 0
       test_low_noise_level: 0
       test_noise_level: 0
       train_dataset_size: 10000
       test_dataset_size: 5000
-      sampling_percent: 0.8
+      sampling_percent: 0.4
       sampling_groups: True
       test_subsampling: 1
       weight_loss: False

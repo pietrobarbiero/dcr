@@ -13,11 +13,12 @@ model_selection_groups:
   - ["^(ProbCBM).*$", "ProbCBM (Baseline)"]
   - ["^(PCBM).*$", "Posthoc CBM (Baseline)"]
   - ["^(HybridPCBM).*$", "Hybrid Posthoc CBM (Baseline)"]
+  - [".*(MixCEM_Final_t_).*(emc_50_).*$", "MixCEM Final All Sample (Baseline)"]
 
 
 model_selection_metrics:
-  - val_acc_y_random_group_level_True_use_prior_False_int_auc
-  - val_acc
+  - val_auc_y_random_group_level_True_use_prior_False_int_auc
+  - val_auc
 
 shared_params:
   # Intervention Parameters
@@ -65,7 +66,7 @@ shared_params:
   emb_size: 8
   verbose: True
   extra_dims: 0
-  concept_loss_weight: [10] #, 1]
+  concept_loss_weight: [10, 1]
   learning_rate: 0.01
   c_extractor_arch: color_mnist_extractor
 

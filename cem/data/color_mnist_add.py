@@ -8,7 +8,54 @@ import sklearn.model_selection
 import torch
 import torchvision
 
+from torch.utils.data import DataLoader, Subset, ConcatDataset
+
 from cem.data.utils import LambdaDataset
+
+
+def mixed_dataset(dataloader_a, dataloader_b, p, seed=42):
+    """
+    Create a new dataloader with p% samples from dataloader_a and (100-p)% from dataloader_b.
+
+    Args:
+        dataloader_a (DataLoader): First dataloader.
+        dataloader_b (DataLoader): Second dataloader.
+        p (float): Percentage of samples to take from dataloader_a (0 <= p <= 100).
+        batch_size (int): Batch size for the new dataloader.
+        shuffle (bool): Whether to shuffle the mixed dataset.
+        seed (int): Random seed for reproducibility.
+
+    Returns:
+        DataLoader: Combined dataloader.
+    """
+    if p <= 1:
+        p = 100 * p
+    assert 0 <= p <= 100, "p should be between 0 and 100"
+
+    # Get datasets from dataloaders
+    dataset_a = dataloader_a
+    dataset_b = dataloader_b
+
+    # Calculate number of samples
+    num_samples_a = int(len(dataset_a) * (p / 100))
+    num_samples_b = int(len(dataset_b) * ((100 - p) / 100))
+
+    # Set random seed
+    rng = random.Random(seed)
+
+    # Randomly select indices
+    indices_a = rng.sample(range(len(dataset_a)), num_samples_a)
+    indices_b = rng.sample(range(len(dataset_b)), num_samples_b)
+
+    # Create subsets
+    subset_a = Subset(dataset_a, indices_a)
+    subset_b = Subset(dataset_b, indices_b)
+
+    # Concatenate subsets
+    mixed_dataset = ConcatDataset([subset_a, subset_b])
+
+    # Create and return new dataloader
+    return mixed_dataset
 
 
 def _color_digit(
@@ -20,6 +67,21 @@ def _color_digit(
     seed=42,
     normalize_samples=True,
 ):
+    corresponding_sample = np.transpose(x, (0, 3, 1, 2))
+    if normalize_samples:
+        corresponding_sample = corresponding_sample.copy() / 255.0
+    if corresponding_sample.shape[1] == 3:
+        # Then this digit has been already colored
+        if (colors is None) or (colors == []):
+            # Then make it into grayscale
+            corresponding_sample = torchvision.transforms.Grayscale()(
+                corresponding_sample
+            )
+        return corresponding_sample, -1
+    if (colors is None) or (colors == []):
+        # Then we keep it as a gray scale image!
+        return corresponding_sample, -1
+
     if (digit_color_distribution is not None) and (
         color_distr_label in digit_color_distribution
     ):
@@ -33,10 +95,8 @@ def _color_digit(
     )
     group = selected_color_idx
     color = colors[selected_color_idx]
-    corresponding_sample = np.transpose(x, (0, 3, 1, 2))
     rest_sample = np.zeros_like(corresponding_sample)
-    if normalize_samples:
-        corresponding_sample = corresponding_sample.copy() / 255.0
+
 
     # Now time to generate the color using RGB maps!
     if color == "red":
@@ -152,8 +212,12 @@ def produce_addition_set(
         for idx, digit in enumerate(y):
             if digit in allowed_digits:
                 filter_idxs.append(idx)
-        total_operand_samples.append(X[filter_idxs, :, :, :])
-        total_operand_labels.append(y[filter_idxs])
+        total_operand_samples.append(
+            [X[i] for i in filter_idxs]
+        )
+        total_operand_labels.append(np.array(
+            [y[i] for i in filter_idxs]
+        ))
 
     sum_train_samples = []
     sum_train_concepts = []
@@ -173,9 +237,9 @@ def produce_addition_set(
             total_operand_samples,
             total_operand_labels,
         ):
-            img_idx = rng.choice(total_samples.shape[0])
+            img_idx = rng.choice(len(total_samples))
             selected.append(total_labels[img_idx])
-            img = total_samples[img_idx: img_idx + 1, :, :, :].copy()
+            img = total_samples[img_idx].copy()
             if len(operand_digits) > 2:
                 if even_concepts:
                     concept_vals = np.array([[
@@ -240,6 +304,8 @@ def produce_addition_set(
             sum_train_samples.append(np.concatenate(operands, axis=2))
         elif concat_dim == 'x':
             sum_train_samples.append(np.concatenate(operands, axis=3))
+        elif concat_dim == 'c':
+            sum_train_samples.append(np.concatenate(operands, axis=1))
         else:
             raise ValueError(f'Unsupported concat dim {concat_dim}')
         sum_train_concepts.append(np.concatenate(concepts, axis=-1))
@@ -297,6 +363,8 @@ def load_color_mnist_addition(
     test_digit_color_distribution=None,
     spurious_strength=0,
     color_by_label=False,
+    svhn_percentage=0,
+    concat_dim='y',
 
     train_sample_transform=None,
     test_sample_transform=None,
@@ -313,9 +381,14 @@ def load_color_mnist_addition(
                     for i in range(len(colors))
                 ]
     else:
+        all_digits = set()
+        for digit_set in selected_digits:
+            for x in digit_set:
+                all_digits.add(x)
+
         real_distr_map = {
             digit: [1/len(colors) for _ in colors]
-            for digit in selected_digits
+            for digit in sorted(all_digits)
         }
     digit_color_distribution = real_distr_map
     if test_digit_color_distribution is None:
@@ -356,6 +429,20 @@ def load_color_mnist_addition(
         train=False,
         download=True,
     )
+    if svhn_percentage:
+        mnist_test = ds_test
+        svhn_test = torchvision.datasets.SVHN(
+            cache_dir,
+            split='test',
+            download=True,
+            transform=torchvision.transforms.Resize((28, 28)),
+        )
+        ds_test = mixed_dataset(
+            svhn_test,
+            mnist_test,
+            svhn_percentage,
+            seed=seed,
+        )
 
     # Put all the images into a single np array for easy
     # manipulation
@@ -363,15 +450,17 @@ def load_color_mnist_addition(
     y_test = []
 
     for x, y in ds_test:
-        x_test.append(np.expand_dims(
-            np.expand_dims(x, axis=0),
-            axis=-1,
-        ))
+        x = np.array(x)
+        if x.shape[0] != 1:
+            x = np.expand_dims(x, 0)
+        if len(x.shape) == 3:
+            x = np.expand_dims(x, -1)
+        x_test.append(x)
         y_test.append(np.expand_dims(
             np.expand_dims(y, axis=0),
             axis=-1,
         ))
-    x_test = np.concatenate(x_test, axis=0)
+    # x_test = np.concatenate(x_test, axis=0)
     y_test = np.concatenate(y_test, axis=0)
 
     # Wrap them up in dataloaders
@@ -383,7 +472,7 @@ def load_color_mnist_addition(
         selected_digits=selected_digits,
         sample_concepts=sample_concepts,
         img_format=img_format,
-        concat_dim='y',
+        concat_dim=concat_dim,
         even_concepts=even_concepts,
         even_labels=even_labels,
         count_labels=count_labels,
@@ -399,8 +488,11 @@ def load_color_mnist_addition(
         color_by_label=color_by_label,
     )
     x_test = torch.FloatTensor(x_test)
-    if (range_labels is not None) and (len(range_labels) > 1):
-        y_test = torch.LongTensor(y_test)
+    if (range_labels is not None):
+        if len(range_labels) == 1:
+            y_test = torch.FloatTensor(y_test)
+        else:
+            y_test = torch.LongTensor(y_test)
     elif even_labels or (threshold_labels is not None) or (
         count_labels and (len(selected_digits) == 2)
     ):
@@ -417,7 +509,7 @@ def load_color_mnist_addition(
     )
     test_data = LambdaDataset(
         test_data,
-        trasnform=test_sample_transform,
+        transform=test_sample_transform,
     )
     test_dl = torch.utils.data.DataLoader(
         test_data,
@@ -435,22 +527,38 @@ def load_color_mnist_addition(
         train=True,
         download=True,
     )
+    if svhn_percentage:
+        mnist_train = ds_train
+        svhn_train = torchvision.datasets.SVHN(
+            cache_dir,
+            split='train',
+            download=True,
+            transform=torchvision.transforms.Resize((28, 28)),
+        )
+        ds_train = mixed_dataset(
+            svhn_train,
+            mnist_train,
+            svhn_percentage,
+            seed=seed,
+        )
 
 
     x_train = []
     y_train = []
 
     for x, y in ds_train:
-        x_train.append(np.expand_dims(
-            np.expand_dims(x, axis=0),
-            axis=-1,
-        ))
+        x = np.array(x)
+        if x.shape[0] != 1:
+            x = np.expand_dims(x, 0)
+        if len(x.shape) == 3:
+            x = np.expand_dims(x, -1)
+        x_train.append(x)
         y_train.append(np.expand_dims(
             np.expand_dims(y, axis=0),
             axis=-1,
         ))
 
-    x_train = np.concatenate(x_train, axis=0)
+    # x_train = np.concatenate(x_train, axis=0)
     y_train = np.concatenate(y_train, axis=0)
 
 
@@ -469,7 +577,7 @@ def load_color_mnist_addition(
             selected_digits=selected_digits,
             sample_concepts=sample_concepts,
             img_format=img_format,
-            concat_dim='y',
+            concat_dim=concat_dim,
             even_concepts=even_concepts,
             even_labels=even_labels,
             count_labels=count_labels,
@@ -485,8 +593,11 @@ def load_color_mnist_addition(
             color_by_label=color_by_label,
         )
         x_val = torch.FloatTensor(x_val)
-        if (range_labels is not None) and (len(range_labels) > 1):
-            y_val = torch.LongTensor(y_val)
+        if (range_labels is not None):
+            if len(range_labels) == 1:
+                y_val = torch.FloatTensor(y_val)
+            else:
+                y_val = torch.LongTensor(y_val)
         elif even_labels or (threshold_labels is not None) or (
             count_labels and (len(selected_digits) == 2)
         ):
@@ -498,7 +609,7 @@ def load_color_mnist_addition(
         val_data = torch.utils.data.TensorDataset(x_val, y_val, c_val, g_val)
         val_data = LambdaDataset(
             val_data,
-            trasnform=val_sample_transform,
+            transform=val_sample_transform,
         )
         val_dl = torch.utils.data.DataLoader(
             val_data,
@@ -516,7 +627,7 @@ def load_color_mnist_addition(
         selected_digits=selected_digits,
         sample_concepts=sample_concepts,
         img_format=img_format,
-        concat_dim='y',
+        concat_dim=concat_dim,
         even_concepts=even_concepts,
         even_labels=even_labels,
         count_labels=count_labels,
@@ -532,8 +643,11 @@ def load_color_mnist_addition(
         color_by_label=color_by_label,
     )
     x_train = torch.FloatTensor(x_train)
-    if (range_labels is not None) and (len(range_labels) > 1):
-        y_train = torch.LongTensor(y_train)
+    if (range_labels is not None):
+        if len(range_labels) == 1:
+            y_train = torch.FloatTensor(y_train)
+        else:
+            y_train = torch.LongTensor(y_train)
     elif even_labels or (threshold_labels is not None) or (
         count_labels and (len(selected_digits) == 2)
     ):
@@ -550,7 +664,7 @@ def load_color_mnist_addition(
     )
     train_data = LambdaDataset(
         train_data,
-        trasnform=train_sample_transform,
+        transform=train_sample_transform,
     )
     train_dl = torch.utils.data.DataLoader(
         train_data,
@@ -609,6 +723,8 @@ def generate_data(
         n_tasks = len(range_labels) + 1
     elif count_labels:
         n_tasks = num_operands + 1
+    if n_tasks == 2:
+        n_tasks = 1
 
     sampling_percent = config.get("sampling_percent", 1)
     sampling_groups = config.get("sampling_groups", False)
@@ -638,7 +754,7 @@ def generate_data(
             new_n_concepts = int(np.ceil(num_concepts * sampling_percent))
             selected_concepts_file = os.path.join(
                 root_dir,
-                f"selected_concepts_sampling_{sampling_percent}_operands_{num_operands}.npy",
+                f"selected_concepts_sampling_{sampling_percent}_operands_{num_operands}_n_digits_{len(selected_digits)}.npy",
             )
             if (not rerun) and os.path.exists(selected_concepts_file):
                 selected_concepts = np.load(selected_concepts_file)
@@ -718,7 +834,9 @@ def generate_data(
         color_by_label=config.get('color_by_label', False),
         train_sample_transform=train_sample_transform,
         test_sample_transform=test_sample_transform,
-        val_sample_transform=val_sample_transform
+        val_sample_transform=val_sample_transform,
+        svhn_percentage=config.get('svhn_percentage', 0),
+        concat_dim=config.get('concat_dim', 'y'),
     )
 
     if config.get('weight_loss', False):

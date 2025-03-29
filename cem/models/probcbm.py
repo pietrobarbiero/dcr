@@ -704,6 +704,8 @@ class ProbCBM(ProbConceptModel, ConceptBottleneckModel):
 
         top_k_accuracy=None,
     ):
+        # We need to explicitly have two tasks at least!
+        n_tasks = 2 if n_tasks == 1 else n_tasks
         pl.LightningModule.__init__(self)
         ProbConceptModel.__init__(
             self,
@@ -902,7 +904,7 @@ class ProbCBM(ProbConceptModel, ConceptBottleneckModel):
                         reduction='mean',
                     )
                 else:
-                    loss_class = F.nll_loss(pred_class.log(), y, reduction='mean')
+                    loss_class = F.nll_loss(pred_class.log(), y.long(), reduction='mean')
             loss_iter_dict['class'] = loss_class
 
             if stage != 'concept':

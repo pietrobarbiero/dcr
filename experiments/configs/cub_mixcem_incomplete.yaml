@@ -5,73 +5,24 @@ results_dir: /anfs/bigdisc/me466/mixcem_results/cub_incomplete/
 
 model_selection_groups:
   - ["^(DNN).*$", "DNN (Baseline)"]
-  - ["^(CBM_Sigmoid_Baseline_).*$", "Joint CBM (Baseline)"]
-  - ["^(CBM_Logit_Baseline_).*$", "Joint Logit CBM (Baseline)"]
+  - ["^(CBM_Sigmoid).*$", "Joint CBM (Baseline)"]
+  - ["^(CBM_Logit).*$", "Joint Logit CBM (Baseline)"]
   - ["^(CBM_Seq).*$", "Sequential CBM (Baseline)"]
   - ["^(CBM_Ind).*$", "Independent CBM (Baseline)"]
-  - ["^(Hybrid-CBM_).*(_Baseline_).*$", "Hybrid-CBM (Baseline)"]
-  - ["^(CEM_Baseline_).*$", "CEM (Baseline)"]
-  - ["^(FixedCEM_).*$", "FixedCEM (Baseline)"]
-  - ["^(FixedGTCEM_).*$", "FixedGTCEM (Baseline)"]
-  - ["^(FixedOnlyCEM_).*$", "FixedOnlyCEM (Baseline)"]
-  - ["^(FixedOnlyGTCEM_).*$", "FixedOnlyGTCEM (Baseline)"]
+  - ["^(Hybrid-CBM_).*$", "Hybrid-CBM (Baseline)"]
+  - ["^(CEM_).*$", "CEM (Baseline)"]
   - ["^(IntCEM_).*(_Baseline).*$", "IntCEM (Baseline)"]
   - ["^(MixCEM_).*(_Baseline).*$", "MixCEM (Baseline)"]
   - ["^(ProbCBM_).*$", "ProbCBM (Baseline)"]
   - ["^(PCBM_).*$", "Posthoc CBM (Baseline)"]
-  - ["^(HybridPCBM_).*$", "Hybrid Posthoc CBM (Baseline)"]
-  - ["^(BankMixCEM_).*$", "BankMixCEM (Baseline)"]
-  - ["^(CertificateCEM).*", "CertificateCEM (Baseline)"]
-  - ["^(MixIntCEM).*", "MixIntCEM (Baseline)"]
-  - ["^(FinalMixIntCEM).*", "LabelMixIntCEM (Baseline)"]
-  - ["^(ConceptMixIntCEM).*(_ce_0_).*$", "ConceptMixIntCEM No Calibration (Baseline)"]
-  - ["^(ConceptMixIntCEM_0).*(_ce_30_).*$", "ConceptMixIntCEM No Pretaining (Baseline)"]
-  - ["^(ConceptMixIntCEM_5).*(_ce_30_).*$", "ConceptMixIntCEM Pretrained (Baseline)"]
-  - ["^(ConceptMixCEM).*(_ce_0_).*$", "ConceptMixCEM No Calibration (Baseline)"]
-  - ["^(ConceptMixCEM_0).*(_ce_30_).*$", "ConceptMixCEM No Pretaining (Baseline)"]
-  - ["^(ConceptMixCEM_5).*(_ce_30_).*$", "ConceptMixCEM Pretrained (Baseline)"]
-  - ["^(CMCMixIntCEM).*(_ce_0_).*$", "CMCMixIntCEM No Calibration (Baseline)"]
-  - ["^(CMCMixIntCEM).*(_ce_30_).*$", "CMCMixIntCEM (Baseline)"]
-  - ["^(CMCMixCEM).*(_ce_0_).*$", "CMCMixCEM No Calibration (Baseline)"]
-  - ["^(CMCMixCEM).*(_ce_30_).*$", "CMCMixCEM (Baseline)"]
 
-
-  - ["^(Entropy_CMCMixIntCEM).*((r_1_)|(r_0.1_)).*(_ce_0_).*((g_ood_0.1_)|(g_ood_0.5_)).*$", "Entropy CMCMixIntCEM No Calibration (Baseline)"]
-  - ["^(Entropy_CMCMixIntCEM).*((r_1_)|(r_0.1_)).*(_ce_30_).*((g_ood_0.1_)|(g_ood_0.5_)).*$", "Entropy CMCMixIntCEM (Baseline)"]
-  - ["^(Entropy_CMCMixCEM).*((r_1_)|(r_0.1_)).*(_ce_0_).*((g_ood_0.1_)|(g_ood_0.5_)).*$", "Entropy CMCMixCEM No Calibration (Baseline)"]
-  - ["^(Entropy_CMCMixCEM).*((r_1_)|(r_0.1_)).*(_ce_30_).*((g_ood_0.1_)|(g_ood_0.5_)).*$", "Entropy CMCMixCEM (Baseline)"]
-
-  - ["^(Entropy_CMCMixIntCEM).*(r_0_).*(_ce_0_).*$", "Entropy CMCMixIntCEM (r=0) No Calibration (Baseline)"]
-  - ["^(Entropy_CMCMixIntCEM).*(r_0_).*(_ce_30_).*$", "Entropy CMCMixIntCEM (r=0) (Baseline)"]
-  - ["^(Entropy_CMCMixCEM).*(r_0_).*(_ce_0_).*$", "Entropy CMCMixCEM (r=0) No Calibration (Baseline)"]
-  - ["^(Entropy_CMCMixCEM).*(r_0_).*(_ce_30_).*$", "Entropy CMCMixCEM (r=0) (Baseline)"]
-
-  - ["^(Entropy_CMCMixIntCEM).*(_ce_0_).*(g_ood_0_).*$", "Entropy CMCMixIntCEM (drop=0) No Calibration (Baseline)"]
-  - ["^(Entropy_CMCMixIntCEM).*(_ce_30_).*(g_ood_0_).*$", "Entropy CMCMixIntCEM (drop=0) (Baseline)"]
-  - ["^(Entropy_CMCMixCEM).*(_ce_0_).*(g_ood_0_).*$", "Entropy CMCMixCEM (drop=0) No Calibration (Baseline)"]
-  - ["^(Entropy_CMCMixCEM).*(_ce_30_).*(g_ood_0_).*$", "Entropy CMCMixCEM (drop=0) (Baseline)"]
+  - ["^(FixedCEM_).*$", "FixedCEM (Baseline)"]
+  - ["^(FixedGTCEM_).*$", "FixedGTCEM (Baseline)"]
+  - ["^(FixedOnlyCEM_).*$", "FixedOnlyCEM (Baseline)"]
+  - ["^(FixedOnlyGTCEM_).*$", "FixedOnlyGTCEM (Baseline)"]
 
   - ["^(ConceptToLabelModel).*$", "Bayes MLP (Baseline)"]
-  - ["^(GlanceNet).*$", "GlanceNet (Baseline)"]
-
-
-  - [".*(MixCEM_Final_t_).*(_ce_0_).*$", "MixCEM Final No Calibration (Baseline)"]
-  - [".*(MixCEM_Final_t_).*(_ce_30_).*$", "MixCEM Final (Baseline)"]
-  - [".*(MixCEM_Final_t_).*$", "MixCEM Final All (Baseline)"]
   - [".*(MixCEM_Final_t_).*(emc_50_).*$", "MixCEM Final All Sample (Baseline)"]
-  - [".*(MixCEM_Final_t_).*(emc_50_).*(_ce_0_).*$", "MixCEM Final Sample No Calibration (Baseline)"]
-  - [".*(MixCEM_Final_t_).*(emc_50_).*(_ce_30_).*$", "MixCEM Final Sample (Baseline)"]
-  - [".*(MixCEM_Final_t_).*(emc_0_).*$", "MixCEM Final All No Sample (Baseline)"]
-  - [".*(MixCEM_Final_t_).*(emc_0_).*(_ce_0_).*$", "MixCEM Final No Sample No Calibration (Baseline)"]
-  - [".*(MixCEM_Final_t_).*(emc_0_).*(_ce_30_).*$", "MixCEM Final No Sample (Baseline)"]
-
-  - [".*(MixCEM_Final_no_randint).*(emc_0_).*(_ce_0_).*$", "MixCEM No RandInt No Calibration (Baseline)"]
-  - [".*(MixCEM_Final_no_randint).*(emc_0_).*(_ce_30_).*$", "MixCEM No RandInt (Baseline)"]
-  - [".*(MixCEM_Final_no_randint).*(emc_50_).*(_ce_0_).*$", "MixCEM No RandInt Sample No Calibration (Baseline)"]
-  - [".*(MixCEM_Final_no_randint).*(emc_50_).*(_ce_30_).*$", "MixCEM No RandInt Sample (Baseline)"]
-
-  - [".*(MixCEM_Final_no_task_cal_).*$", "MixCEM No Task Cal All (Baseline)"]
-  - [".*(MixCEM_Final_no_task_cal_).*(emc_50_).*$", "MixCEM No Task Cal All Sample (Baseline)"]
 
 model_selection_metrics:
   - val_acc_y_random_group_level_True_use_prior_False_int_auc
@@ -287,12 +238,12 @@ runs:
     run_name: "GlanceNet_extra_{extra_dims}_cond_{conditional_prior}_beta_{beta}_recon_weight_{recon_weight}_task_weight_{task_loss_weight}_prior_{prior_loss_weight}_cwl_{concept_loss_weight}"
     concept_loss_weight: [1]
     task_loss_weight: [1]
-    beta: [0.01]
-    recon_weight: [0.01]
+    beta: [0.001, 0.01]
+    recon_weight: [0.001, 0.01]
     prior_loss_weight: 0.01
     decoder_output_activation: null #sigmoid
     hidden_dim: 32
-    decoder_layers: [128, 128, 64, 64, 32, 32, 16, 3] #[512, 256, 128, 64, 3]
+    decoder_layers: [128, 64, 32, 16, 3] #[512, 256, 128, 64, 3]
     learning_rate: 0.1 #0.01 # CHANGE!!!!!!!
     extra_dims: [10, 100, 0]
     conditional_prior: True # CHANGE!!!!!!!!!!!!!!!!!

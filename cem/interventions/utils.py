@@ -1674,7 +1674,7 @@ def test_interventions(
             acquisition_costs=acquisition_costs,
             result_dir=result_dir,
             concept_map=concept_map,
-            intervened_groups=intervened_groups,
+            intervention_freq=intervention_freq,
             used_policies=used_policies,
             intervention_batch_size=intervention_batch_size,
             competence_levels=competence_levels,
@@ -1690,6 +1690,8 @@ def test_interventions(
             task_class_weights=task_class_weights,
             dl_name=dl_name,
             fast_intervention=fast_intervention,
+            intervention_config=intervention_config,
+            use_sample_competence=use_sample_competence,
         )
         intervention_config['use_auc'] = True
     return results

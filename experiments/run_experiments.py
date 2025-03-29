@@ -343,15 +343,20 @@ def _generate_dataset_and_update_config(
             )
     if experiment_config['c_extractor_arch'] == "color_mnist_extractor":
         num_operands = dataset_config.get('num_operands', 32)
+        in_channels = 3 if (dataset_config.get('concat_dim', 'y') != 'c') else (
+                num_operands * (
+                1 if len(dataset_config.get('colors', ['gray'])) == 0 else 3
+            )
+        )
         experiment_config["c_extractor_arch"] = \
             experiment_utils.get_mnist_extractor_arch(
                 input_shape=(
                     dataset_config.get('batch_size', 512),
-                    3,
-                    28*num_operands,
-                    28,
+                    in_channels,
+                    28*num_operands if (dataset_config.get('concat_dim', 'y') == 'y') else 28,
+                    28*num_operands if (dataset_config.get('concat_dim', 'y') == 'x') else 28,
                 ),
-                in_channels=3,
+                in_channels=in_channels,
             )
     elif experiment_config['c_extractor_arch'] == 'synth_extractor':
         input_features = get_synthetic_num_features(ds_name)

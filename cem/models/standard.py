@@ -16,7 +16,7 @@ def unfreeze_model_weights(model):
     for param in model.parameters():
         param.requires_grad = True
 
-def get_mnist_extractor_arch(input_shape, in_channels):
+def get_mnist_extractor_arch(input_shape, in_channels, out_activation=None):
     def c_extractor_arch(output_dim):
         intermediate_maps = 16
         output_dim = output_dim or 128
@@ -30,7 +30,7 @@ def get_mnist_extractor_arch(input_shape, in_channels):
         second_dim_out = ((second_dim_out - (2-1) - 1) // 2) + 1
         second_dim_out = ((second_dim_out - (3-1) - 1) // 3) + 1
         out_shape = (first_dim_out, second_dim_out)
-        return torch.nn.Sequential(*[
+        layers = [
             torch.nn.Conv2d(
                 in_channels=in_channels,
                 out_channels=intermediate_maps,
@@ -72,7 +72,10 @@ def get_mnist_extractor_arch(input_shape, in_channels):
                 np.prod(out_shape) * intermediate_maps,
                 output_dim,
             ),
-        ])
+        ]
+        if out_activation == "sigmoid":
+            layers.append(torch.nn.Sigmoid())
+        return torch.nn.Sequential(*layers)
     return c_extractor_arch
 
 
@@ -522,7 +525,8 @@ def construct_standard_model(
     elif architecture == 'color_mnist_extractor':
         model = get_mnist_extractor_arch(
             input_shape=input_shape,
-            in_channels=3,
+            in_channels=input_shape[-3],
+            out_activation=kwargs.get('out_activation', None),
         )(kwargs['output_dim'])
         pretrained = False
     elif architecture.lower().replace(" ", "") == "mlp":

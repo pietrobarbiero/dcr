@@ -12,13 +12,12 @@ def gauss_noise_tensor(img, sigma):
     assert isinstance(img, torch.Tensor), type(img).__name__
     dtype = img.dtype
     if not img.is_floating_point():
-        img = img.to(torch.float32)
+        img = img.to(torch.float32)/255.0
 
     out = img + sigma * torch.randn_like(img)
 
     if out.dtype != dtype:
         out = out.to(dtype)
-
     return out
 
 def salt_and_pepper_noise_tensor(

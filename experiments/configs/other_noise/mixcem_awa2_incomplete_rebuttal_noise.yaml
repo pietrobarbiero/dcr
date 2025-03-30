@@ -15,6 +15,7 @@ model_selection_groups:
   - ["^(MixCEM_).*(_Baseline).*$", "MixCEM (Baseline)"]
   - ["^(ProbCBM_).*$", "ProbCBM (Baseline)"]
   - ["^(PCBM_).*$", "Posthoc CBM (Baseline)"]
+  - ["^(HybridPCBM_).*$", "Posthoc Hybrid CBM (Baseline)"]
 
   - ["^(ConceptToLabelModel).*$", "Bayes MLP (Baseline)"]
   - [".*(MixCEM_Final_t_).*(emc_50_).*$", "MixCEM Final All Sample (Baseline)"]

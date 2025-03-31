@@ -18,7 +18,7 @@ model_selection_groups:
 
 model_selection_metrics:
   - val_auc_y_random_group_level_True_use_prior_False_int_auc
-  - val_auc
+  # - val_auc
 
 shared_params:
   # Intervention Parameters
@@ -267,7 +267,27 @@ runs:
     horizon_rate: 1.005
     gradient_clip_val: 100
     emb_size: [16]
-    concept_loss_weight: [1]
+    concept_loss_weight: [10, 1]
+    grid_variables:
+        - concept_loss_weight
+        - intervention_task_discount
+        - intervention_weight
+        - emb_size
+    grid_search_mode: exhaustive
+
+  - architecture: "IntAwareConceptEmbeddingModel"
+    run_name: "IntCEM_no_gc_emb_size_{emb_size}_intervention_weight_{intervention_weight}_intervention_task_discount_{intervention_task_discount}_cwl_{concept_loss_weight}"
+    training_intervention_prob: 0.25
+    intervention_weight: [0.1, 1]
+    intervention_task_discount: [1.1, 1.5]
+    use_concept_groups: True
+    int_model_use_bn: True
+    int_model_layers: [128, 128, 64, 64]
+    embedding_activation: "leakyrelu"
+    max_horizon: 6
+    horizon_rate: 1.005
+    emb_size: [16, 32]
+    concept_loss_weight: [5, 1]
     grid_variables:
         - concept_loss_weight
         - intervention_task_discount

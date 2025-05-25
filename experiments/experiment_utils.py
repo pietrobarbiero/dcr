@@ -388,10 +388,10 @@ def filter_results(results, run_name, cut=False):
     return output
 
 def evaluate_expressions(config, parent_config=None, soft=False):
-     parent_config = parent_config or config
-     for key, val in config.items():
-         if isinstance(val, (str,)):
-             if len(val) >= 4 and (
+    parent_config = parent_config or config
+    for key, val in config.items():
+        if isinstance(val, (str,)):
+            if len(val) >= 4 and (
                  val[0:2] == "{{" and val[-2:] == "}}"
              ):
                 # Then do a simple substitution here
@@ -405,9 +405,9 @@ def evaluate_expressions(config, parent_config=None, soft=False):
                     else:
                         # otherwise we just simply raise it again!
                         raise e
-             else:
-                 config[key] = val.format(**parent_config)
-         elif isinstance(val, dict):
+            else:
+                config[key] = val.format(**parent_config)
+        elif isinstance(val, dict):
              # Then we progress recursively
              evaluate_expressions(val, parent_config=parent_config)
 

@@ -355,6 +355,7 @@ def evaluate_representation_metrics(
         as_torch=True,
         num_workers=config.get('num_load_workers', config.get('num_workers', 1)),
     )
+    c_test_np = None
 
     # Now include the competence that we will assume
     # for all concepts
@@ -417,6 +418,8 @@ def evaluate_representation_metrics(
             oracle_matrix = np.load(
                 os.path.join(result_dir, f'oracle_matrix.npy')
             )
+        if c_test_np is None:
+            c_test_np = c_test.detach().cpu().numpy()
         ois, loaded = utils.execute_and_save(
             fun=utils.load_call,
             kwargs=dict(
@@ -427,10 +430,10 @@ def evaluate_representation_metrics(
                 run_name=run_name,
                 kwargs=dict(
                     c_soft=np.transpose(c_pred, (0, 2, 1)),
-                    c_true=c_test,
+                    c_true=c_test_np,
                     predictor_train_kwags={
                         'epochs': config.get("ois_epochs", 50),
-                        'batch_size': min(2048, c_test.shape[0]),
+                        'batch_size': min(2048, c_test_np.shape[0]),
                         'verbose': 0,
                     },
                     test_size=0.2,
@@ -529,6 +532,8 @@ def evaluate_representation_metrics(
         # Niche impurity score now
         nis_key = f'test_nis'
         logging.info(f"Computing NIS score...")
+        if c_test_np is None:
+            c_test_np = c_test.detach().cpu().numpy()
         nis, loaded = utils.execute_and_save(
             fun=utils.load_call,
             kwargs=dict(
@@ -539,7 +544,7 @@ def evaluate_representation_metrics(
                 run_name=run_name,
                 kwargs=dict(
                     c_soft=np.transpose(c_pred, (0, 2, 1)),
-                    c_true=c_test,
+                    c_true=c_test_np,
                     test_size=0.2,
                 ),
             ),

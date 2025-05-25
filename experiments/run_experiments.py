@@ -1378,6 +1378,15 @@ def _build_arg_parser():
         ),
     )
     parser.add_argument(
+        "--only_previously_selected",
+        action="store_true",
+        default=False,
+        help=(
+            "it runs the models that were only previously selected by the "
+            "model selection ran on a previous iteration of this experiment"
+        ),
+    )
+    parser.add_argument(
         "--model_selection_metrics",
         action='append',
         metavar=('metric_name'),
@@ -1561,10 +1570,27 @@ if __name__ == '__main__':
     if args.model_selection_metrics:
         model_selection_metrics = args.model_selection_metrics
 
-    if args.filter_in_file is not None:
+    result_dir = (
+        args.output_dir if args.output_dir
+        else loaded_config.get('results_dir', 'results')
+    )
+
+    given_filter_in_file = args.filter_in_file
+    if args.only_previously_selected and model_selection_metrics:
+        if given_filter_in_file is None:
+            given_filter_in_file = []
+        for model_selection_metric in model_selection_metrics:
+            given_filter_in_file.append(
+                os.path.join(
+                    result_dir,
+                    f'selected_models_{model_selection_metric}.joblib'
+                )
+            )
+
+    if given_filter_in_file is not None:
         if args.filter_in is None:
             args.filter_in = []
-        for file_path in args.filter_in_file:
+        for file_path in given_filter_in_file:
             if not os.path.exists(file_path):
                 raise ValueError(
                     f'Path for filter-in file {file_path} is not a valid path'
@@ -1572,6 +1598,7 @@ if __name__ == '__main__':
             loaded_selection = joblib.load(file_path)
             for _, method_name in loaded_selection.items():
                 args.filter_in.append(method_name)
+
     extra_datasets_filter_in_file = None
     if args.extra_datasets_filter_in_file is not None:
         extra_datasets_filter_in_file = []
@@ -1588,10 +1615,7 @@ if __name__ == '__main__':
                 extra_datasets_filter_in_file.append(method_name)
     main(
         rerun=args.rerun,
-        result_dir=(
-            args.output_dir if args.output_dir
-            else loaded_config['results_dir']
-        ),
+        result_dir=result_dir,
         project_name=args.project_name,
         num_workers=args.num_workers,
         global_params=args.param,

@@ -311,6 +311,8 @@ class CooP(InterventionPolicy):
                         updated_latent = tuple(
                             [x[samples_not_using_concept] for x in latent]
                         )
+                else:
+                    updated_latent = latent
                 x_used = x[samples_not_using_concept, :]
                 prev_interventions_used = \
                     prev_interventions[samples_not_using_concept, :]

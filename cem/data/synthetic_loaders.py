@@ -107,7 +107,7 @@ class SyntheticGenerator(object):
             train_data = torch.utils.data.TensorDataset(x, y, c)
             train_data = LambdaDataset(
                 train_data,
-                trasnform=train_sample_transform,
+                transform=train_sample_transform,
             )
             train_dl = torch.utils.data.DataLoader(
                 train_data,
@@ -118,7 +118,7 @@ class SyntheticGenerator(object):
             test_data = torch.utils.data.TensorDataset(x_test, y_test, c_test)
             test_data = LambdaDataset(
                 test_data,
-                trasnform=test_sample_transform,
+                transform=test_sample_transform,
             )
             test_dl = torch.utils.data.DataLoader(
                 test_data,
@@ -129,7 +129,7 @@ class SyntheticGenerator(object):
             val_data = torch.utils.data.TensorDataset(x_val, y_val, c_val)
             val_data = LambdaDataset(
                 val_data,
-                trasnform=val_sample_transform,
+                transform=val_sample_transform,
             )
             val_dl = torch.utils.data.DataLoader(
                 val_data,

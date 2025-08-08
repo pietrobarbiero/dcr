@@ -93,7 +93,32 @@ runs:
     extra_dims: 0
     sigmoidal_extra_capacity: False
     sigmoidal_prob: True
-    concept_loss_weight: [1] # [1, 0.1, 10]
+    concept_loss_weight: [1]
+    grid_variables:
+    - dataset_config.sampling_percent
+    - concept_loss_weight
+    grid_search_mode: exhaustive
+
+  - architecture: 'ConceptBottleneckModel'
+    run_name: "CBM_Sigmoid_sampling_{dataset_config[sampling_percent]}_cwl_{concept_loss_weight}"
+    training_intervention_prob: 0
+    embedding_activation: "leakyrelu"
+    bool: False
+    extra_dims: 0
+    sigmoidal_extra_capacity: False
+    sigmoidal_prob: True
+    concept_loss_weight: [1, 0.1, 10]
+    dataset_config:
+      dataset: "cub"
+      num_workers: 8
+      batch_size: 128 #64
+
+      # DATASET VARIABLES
+      root_dir: /homes/me466/data/CUB200/
+      sampling_percent: [0.5, 1] #[0.1, 0.25, 0.5, 0.75, 0.9, 1]
+      sampling_groups: False # True # DIFFERENCE!!!!
+      test_subsampling: 1
+      weight_loss: True
     grid_variables:
     - dataset_config.sampling_percent
     - concept_loss_weight
@@ -141,6 +166,22 @@ runs:
     embedding_activation: "leakyrelu"
     emb_size: 16
 
+  - architecture: 'IndependentConceptBottleneckModel'
+    run_name: "CBM_Ind_sampling_{dataset_config[sampling_percent]}"
+    embedding_activation: "leakyrelu"
+    bool: False
+    extra_dims: 0
+    sigmoidal_extra_capacity: False
+    sigmoidal_prob: True
+
+  - architecture: 'SequentialConceptBottleneckModel'
+    run_name: "CBM_Seq_sampling_{dataset_config[sampling_percent]}"
+    embedding_activation: "leakyrelu"
+    bool: False
+    extra_dims: 0
+    sigmoidal_extra_capacity: False
+    sigmoidal_prob: True
+
   # Different intervention policies
   - architecture: 'ConceptEmbeddingModel'
     run_name: "CEM_sampling_{dataset_config[sampling_percent]}_cwl_{concept_loss_weight}"
@@ -152,7 +193,7 @@ runs:
     intervention_config:
       competence_levels: [1]
       intervention_freq: 1
-      intervention_batch_size: 1024 #512
+      intervention_batch_size: 1024 #2048 #8096 #1024 #512
       intervention_policies:
         - policy: "random"
           group_level: False
@@ -169,12 +210,15 @@ runs:
         - policy: "global_val_improvement"
           group_level: True
           use_prior: False
+        - policy: "uncertainty"
+          group_level: True
+          use_prior: False
         - policy: "coop"
           group_level: True
           use_prior: False
-        - policy: "behavioural_cloning"
-          group_level: True
-          use_prior: False
+        # - policy: "behavioural_cloning"
+        #   group_level: True
+        #   use_prior: False
 
       val_intervention_policies:
         - policy: "random"

@@ -120,9 +120,10 @@ runs:
   - architecture: 'ConceptEmbeddingModel'
     run_name: "CEM_emb_size_{emb_size}_cwl_{concept_loss_weight}"
     training_intervention_prob: 0.25
-    emb_size: [16]
+    emb_size: [16, 32]
     embedding_activation: "leakyrelu"
     sigmoidal_prob: True
+    concept_loss_weight: [10, 5, 1]
     grid_variables:
       - concept_loss_weight
       - emb_size
@@ -134,11 +135,11 @@ runs:
     global_model_path: "g_MixCEM_Final_t_{temperature}_r_{all_intervened_loss_weight}_{pooling_mode}_{uncerainty_threshold_percentile}_{global_epochs}_mpc_{mixed_probs_coeff}_tmc_1_emc_0_cwc_{class_wise_temperature}_ce_{calibration_epochs}_g_ood_{ood_dropout_prob}_emb_{emb_size}_{finetune_with_val}_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_cwl_{concept_loss_weight}"
 
     emb_size: [16]
-    concept_loss_weight: [10, 1]
+    concept_loss_weight: [1] #[10, 1]
     shared_emb_generator: True
     montecarlo_train_tries: [1]
     montecarlo_test_tries: [50]
-    ood_dropout_prob: [0.5, 0.1, 0.9] #, 0.5, 0.1]
+    ood_dropout_prob: [0.5] #[0.5, 0.1, 0.9] #, 0.5, 0.1]
     pooling_mode: ['concat']
     calibration_epochs: [30]
     finetune_with_val: [True]
@@ -151,7 +152,7 @@ runs:
     uncerainty_threshold_percentile: [null]
     inference_threshold: False
     mixed_probs_coeff: [1]
-    all_intervened_loss_weight: [10, 1, 0.1] #[1]
+    all_intervened_loss_weight: [1] #[10, 1, 0.1] #[1]
     calibrate_concept_probs: True
     dynamic_confidence_scaling: True
     temperature: [1]
@@ -254,40 +255,41 @@ runs:
 
       color_by_label: False
 
-  - architecture: "IntAwareConceptEmbeddingModel"
-    run_name: "IntCEM_emb_size_{emb_size}_intervention_weight_{intervention_weight}_intervention_task_discount_{intervention_task_discount}_cwl_{concept_loss_weight}"
-    training_intervention_prob: 0.25
-    intervention_weight: [0.1, 1]
-    intervention_task_discount: [1.1, 1.5]
-    use_concept_groups: True
-    int_model_use_bn: True
-    int_model_layers: [128, 128, 64, 64]
-    embedding_activation: "leakyrelu"
-    max_horizon: 6
-    horizon_rate: 1.005
-    gradient_clip_val: 100
-    emb_size: [16]
-    concept_loss_weight: [10, 1]
-    grid_variables:
-        - concept_loss_weight
-        - intervention_task_discount
-        - intervention_weight
-        - emb_size
-    grid_search_mode: exhaustive
+  # - architecture: "IntAwareConceptEmbeddingModel"
+  #   run_name: "IntCEM_emb_size_{emb_size}_intervention_weight_{intervention_weight}_intervention_task_discount_{intervention_task_discount}_cwl_{concept_loss_weight}"
+  #   training_intervention_prob: 0.25
+  #   intervention_weight: [0.1, 1]
+  #   intervention_task_discount: [1.1, 1.5]
+  #   use_concept_groups: True
+  #   int_model_use_bn: True
+  #   int_model_layers: [128, 128, 64, 64]
+  #   embedding_activation: "leakyrelu"
+  #   max_horizon: 6
+  #   horizon_rate: 1.005
+  #   gradient_clip_val: 100
+  #   emb_size: [16]
+  #   concept_loss_weight: [10, 1]
+  #   grid_variables:
+  #       - concept_loss_weight
+  #       - intervention_task_discount
+  #       - intervention_weight
+  #       - emb_size
+  #   grid_search_mode: exhaustive
 
+  # IntCEM_no_gc_emb_size_16_intervention_weight_1_intervention_task_discount_1.1_cwl_5
   - architecture: "IntAwareConceptEmbeddingModel"
     run_name: "IntCEM_no_gc_emb_size_{emb_size}_intervention_weight_{intervention_weight}_intervention_task_discount_{intervention_task_discount}_cwl_{concept_loss_weight}"
     training_intervention_prob: 0.25
-    intervention_weight: [0.1, 1]
-    intervention_task_discount: [1.1, 1.5]
+    intervention_weight: [1] #[0.1, 1]
+    intervention_task_discount: [1.1] #[1.1, 1.5]
     use_concept_groups: True
     int_model_use_bn: True
     int_model_layers: [128, 128, 64, 64]
     embedding_activation: "leakyrelu"
     max_horizon: 6
     horizon_rate: 1.005
-    emb_size: [16, 32]
-    concept_loss_weight: [5, 1]
+    emb_size: [16] #[16, 32]
+    concept_loss_weight: [5] #[5, 1]
     grid_variables:
         - concept_loss_weight
         - intervention_task_discount

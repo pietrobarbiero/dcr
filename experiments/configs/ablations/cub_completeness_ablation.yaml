@@ -43,7 +43,7 @@ shared_params:
   intervention_config:
     competence_levels: [1]
     intervention_freq: 1
-    intervention_batch_size: 1024 #512
+    intervention_batch_size: 512 #1024 #512
     intervention_policies:
       - policy: "random"
         group_level: False # True # DIFFERENCE!!!!

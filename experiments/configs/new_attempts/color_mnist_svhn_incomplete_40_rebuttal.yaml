@@ -18,7 +18,6 @@ model_selection_groups:
 
 model_selection_metrics:
   - val_auc_y_random_group_level_True_use_prior_False_int_auc
-  # - val_auc
 
 shared_params:
   # Intervention Parameters
@@ -94,16 +93,15 @@ shared_params:
     root_dir: data/
     num_workers: 8
     batch_size: 2048
-    num_operands: 11 #10 #10
-    selected_digits: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9] #[0, 1, 2, 3]
+    num_operands: 11
+    selected_digits: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
     count_labels: False
-    # range_labels: null #[5, 10, 15, 20, 25, 30, 35, 40] #[5, 10, 15, 20, 25]
-    range_labels: [25] #[20] #[5, 10, 15, 20, 25]
-    low_noise_level: 0 #1
-    noise_level: 0 #0.25
-    test_low_noise_level: 0 #1
-    test_noise_level: 0 #0.25
-    train_dataset_size: 10000 #20000
+    range_labels: [25]
+    low_noise_level: 0
+    noise_level: 0
+    test_low_noise_level: 0
+    test_noise_level: 0
+    train_dataset_size: 10000
     test_dataset_size: 5000
     sampling_percent: 0.4
     sampling_groups: True

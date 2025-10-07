@@ -18,6 +18,7 @@ def daloader_to_memory(
     output_groups=False,
     only_labels=False,
     fast_loader=None,
+    prefetch_factor=2,
 ):
     if hasattr(dl.dataset, 'tensors'):
         x_data, y_data, c_data = dl.dataset.tensors[:3]
@@ -38,6 +39,7 @@ def daloader_to_memory(
                 dl.dataset,
                 batch_size=_largest_divisor(len(dl.dataset), max_val=max_val),
                 num_workers=num_workers,
+                prefetch_factor=prefetch_factor,
             )
         y_data, c_data, g_data = [], [], []
         if not only_labels:

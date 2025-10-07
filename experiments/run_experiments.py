@@ -1,13 +1,16 @@
 """
-$ python run_experiments.py --help
 usage: run_experiments.py [-h] [--config config.yaml] [--project_name name]
                           [--output_dir path] [--rerun] [--num_workers N] [-d]
-                          [--force_cpu] [-p param_name=value param_name=value]
-                          [--activation_freq N] [--filter_out regex]
-                          [--filter_in regex] [--model_selection_metrics metric_name]
+                          [--force_cpu] [-p param_name value]
+                          [--filter_out regex] [--filter_in regex]
+                          [--filter_in_file model_selection_file.joblib]
+                          [--extra_datasets_filter_in_file model_selection_file.joblib]
+                          [--only_previously_selected] [--model_selection_metrics metric_name]
                           [--summary_table_metrics metric_name pretty_name metric_name pretty_name]
                           [-m group_pattern_regex group_name group_pattern_regex group_name]
-                          [--single_frequency_epochs N] [--fast_run]
+                          [--fast_run] [--no_new_runs] [--use_auc]
+                          [--reverse] [--use_dataset_cache]
+                          [--out_selected_config out_config.yaml]
 
 Runs the set of experiments of CBM-like models in the provided configuration file.
 
@@ -28,18 +31,26 @@ optional arguments:
                         workers than cores in the machine.
   -d, --debug           starts debug mode in our program.
   --force_cpu           forces CPU training.
-  -p param_name=value param_name=value, --param param_name=value param_name=value
+  -p param_name value, --param param_name value
                         Allows the passing of a config param that will overwrite
                         anything passed as part of the config file itself.
-  --activation_freq N   how frequently, in terms of epochs, should we store the
-                        embedding activations for our validation set. By default
-                        we will not store any activations.
   --filter_out regex    skips runs whose names match the regexes provided via
                         this argument. These regexes must follow Python's regex
                         syntax.
   --filter_in regex     includes only runs whose names match the regexes provided
                         with this argument. These regexes must follow Python's
                         regex syntax.
+  --filter_in_file model_selection_file.joblib
+                        includes only runs whose names are in the joblib file
+                        outputed from a previous model selection run.
+  --extra_datasets_filter_in_file model_selection_file.joblib
+                        includes for extra dataset evaluation only runs whose
+                        names are in the joblib file outputed from a previous
+                        model selection run.
+  --only_previously_selected
+                        it runs the models that were only previously selected by
+                        the model selection ran on a previous iteration of this
+                        experiment
   --model_selection_metrics metric_name
                         metrics to be used to make a summary table by selecting
                         models based on some (validation) metric. If provided,
@@ -48,21 +59,31 @@ optional arguments:
   --summary_table_metrics metric_name pretty_name metric_name pretty_name
                         List of metrics to be included as part of the final
                         summary table of this run.
-  -m group_pattern_regex group_name group_pattern_regex group_name, --model_selection_groups group_pattern_regex group_name group_pattern_regex group_name
+  -m group_pattern_regex group_name group_pattern_regex group_name,
+    --model_selection_groups group_pattern_regex group_name group_pattern_regex group_name
                         Performs model selection based on the requested model
                         selection metrics by grouping methods that match the
                         Python regex `group_pattern_regex` into a single group
                         with name `group_name`.
-  --single_frequency_epochs N
-                        how frequently, in terms of epochs, should we store the
-                        embedding activations for our validation set. By default
-                        we will not store any activations.
   --fast_run            does not perform a check on expected result keys on
                         previously found results. Only use if you are certain
                         old results are not stale and are complete!
+  --no_new_runs         does excecute any new runs whose results were not
+                        previously computed/cached.
+  --use_auc             use ROC-AUC as the main performance metric rather than
+                        accuracy.
+  --reverse             Reverses the order in which we process experiments
+                        (useful for multiprocessing).
+  --use_dataset_cache   we will avoid re-generating dataset loaders if they have
+                        already been generated for previous runs.
+  --out_selected_config out_config.yaml
+                        outputs a config that will kick-start the same
+                        experiments with only the selected models after running
+                        the entire model selection process.
 """
 import argparse
 import copy
+import gc
 import hashlib
 import joblib
 import json
@@ -92,16 +113,12 @@ import cem.data.mnist_add as mnist_data_module
 import cem.data.siim_arc_loader as siim_arc_data_module
 import cem.data.traffic_loader as traffic_data_module
 import cem.data.waterbirds_loader as waterbirds_data_module
-import cem.train.train_adversarial_cbm as train_adversarial_cbm
 import cem.train.train_blackbox as train_blackbox
-import cem.train.train_certificate_cem as train_certificate_cem
-import cem.train.train_defer_cem as train_defer_cem
 import cem.train.train_fixed_cem as train_fixed_cem
-import cem.train.train_global_approx as train_global_approx
 import cem.train.train_glancenet as train_glancenet
-import cem.train.train_global_bank as train_global_bank
 import cem.train.train_mixcem as train_mixcem
 import cem.train.train_pcbm as train_pcbm
+import cem.train.train_prob_cbm as train_prob_cbm
 import cem.train.training as training
 import cem.train.utils as utils
 
@@ -123,6 +140,15 @@ DATASET_CACHE = {}
 ################################################################################
 ## HELPER FUNCTIONS
 ################################################################################
+
+def update_statistics(
+    aggregate_results,
+    test_results,
+    prefix='',
+):
+    for key, val in test_results.items():
+        aggregate_results[prefix + key] = val
+
 
 def hash_function(func):
     if func is None:
@@ -604,8 +630,6 @@ def _multiprocess_run_trial(
     project_name,
     current_rerun,
     old_results,
-    single_frequency_epochs,
-    activation_freq,
     use_dataset_cache=False,
     extra_datasets_filter_in_file=None,
 ):
@@ -642,44 +666,7 @@ def _multiprocess_run_trial(
         "ProbabilisticCBM",
         "ProbabilisticConceptBottleneckModel",
     ]:
-        train_fn = training.train_prob_cbm
-
-    elif config["architecture"] in [
-        "NewMixingConceptEmbeddingModel",  # TODO: CHANGE THIS IF THIS WORKS!!!!!!!!!!!!!!
-        "ProjectionConceptEmbeddingModel",
-    ]:
-        train_fn = train_mixcem.train_mixcem
-
-    elif config["architecture"] in [
-        "ACBM",
-        "AdversarialCBM",
-        "AdversarialConceptBottleneckModel",
-    ]:
-        train_fn = train_adversarial_cbm.train_adversarial_cbm
-
-    elif config["architecture"] in [
-        "FixedEmbConceptEmbeddingModel",
-        "FixedConceptEmbeddingModel",
-        "FixedCEM",
-    ]:
-        train_fn = train_fixed_cem.train_fixed_cem
-
-    elif config["architecture"] == "DeferConceptEmbeddingModel":
-        train_fn = train_defer_cem.train_defer_cem
-
-    elif config['architecture'] in [
-        'GlobalBankConceptEmbeddingModel',
-        'BankMixCEM',
-        'GlobalBankCEM',
-        'GlobalBankMixCEM',
-    ]:
-        train_fn = train_global_bank.train_global_bank_cem
-
-    elif config['architecture'] in [
-        'GlobalApproxConceptEmbeddingModel',
-        'GlobalApproxCEM',
-    ]:
-        train_fn = train_global_approx.train_global_approx_cem
+        train_fn = train_prob_cbm.train_prob_cbm
 
     elif config['architecture'] in [
         'GlanceNet',
@@ -687,11 +674,11 @@ def _multiprocess_run_trial(
         train_fn = train_glancenet.train_glancenet
 
     elif config['architecture'] in [
-        'CertificateConceptEmbeddingModel',
-        'CertificateCEM',
-        'MCIntCEM',
+        'MixtureOfConceptEmbeddingsModel',
+        'MixCEM',
+        'MCIntCEM', # Legacy
     ]:
-        train_fn = train_certificate_cem.train_certificate_cem
+        train_fn = train_mixcem.train_mixcem
 
     elif config["architecture"] in [
         "PosthocCBM",
@@ -700,6 +687,13 @@ def _multiprocess_run_trial(
         "Post-hocConceptBottleneckModel",
     ]:
         train_fn = train_pcbm.train_pcbm
+
+    elif config["architecture"] in [
+        "FixedEmbConceptEmbeddingModel",
+        "FixedConceptEmbeddingModel",
+        "FixedCEM",
+    ]:
+        train_fn = train_fixed_cem.train_fixed_cem
 
     elif config["architecture"] in [
         "BBModel",
@@ -733,124 +727,121 @@ def _multiprocess_run_trial(
             'gradient_clip_val',
             0,
         ),
-        single_frequency_epochs=single_frequency_epochs,
-        activation_freq=activation_freq,
     )
-    training.update_statistics(
+    update_statistics(
         aggregate_results=trial_results,
-        run_config=config,
-        model=model,
         test_results=model_results,
-        run_name=run_name,
-        prefix="",
     )
     test_datasets = [
         (val_dl, "val"),
         (test_dl, "test"),
     ]
-    eval_results = evaluate_models.evaluate_model(
-        model,
-        config,
-        test_datasets,
-        train_dl,
-        val_dl=val_dl,
-        run_name=run_name,
-        task_class_weights=task_class_weights,
-        imbalance=imbalance,
-        acquisition_costs=acquisition_costs,
-        result_dir=result_dir,
-        concept_map=concept_map,
-        accelerator=accelerator,
-        devices=devices,
-        split=split,
-        rerun=current_rerun,
-        old_results=old_results,
-    )
-    training.update_statistics(
-        aggregate_results=trial_results,
-        run_config=config,
-        model=model,
-        test_results=eval_results,
-        run_name=run_name,
-        prefix="",
-    )
+    # Change the model to eval mode
+    was_training = model.training
+    model.eval()
+    # Add the no grad guard to save memory and speed things up
+    with torch.no_grad():
+        eval_results = evaluate_models.evaluate_model(
+            model,
+            config,
+            test_datasets,
+            train_dl,
+            val_dl=val_dl,
+            run_name=run_name,
+            task_class_weights=task_class_weights,
+            imbalance=imbalance,
+            acquisition_costs=acquisition_costs,
+            result_dir=result_dir,
+            concept_map=concept_map,
+            accelerator=accelerator,
+            devices=devices,
+            split=split,
+            rerun=current_rerun,
+            old_results=old_results,
+        )
+        update_statistics(
+            aggregate_results=trial_results,
+            test_results=eval_results,
+        )
 
-    eval_config = config.get('eval_config', {})
-    run_additional = True
-    if extra_datasets_filter_in_file is not None:
-        run_additional = False
-        for reg in extra_datasets_filter_in_file:
-            if re.search(reg, f'{run_name}_split_{split}'):
-                logging.info(
-                    f'Including additional dataset runs for '
-                    f'{f"{run_name}_split_{split}"} as it '
-                    f'matched filter-out regex {reg}'
-                )
-                run_additional = True
-                break
-    config_copy = copy.deepcopy(config)
-    if run_additional:
-        for new_test_dl_configs in eval_config.get('additional_test_sets', []):
-            skip = False
-            for skip_regex in new_test_dl_configs.get('skip_list', []):
-                if re.search(skip_regex, f'{run_name}_split_{split}'):
+        eval_config = config.get('eval_config', {})
+        run_additional = True
+        if extra_datasets_filter_in_file is not None:
+            run_additional = False
+            for reg in extra_datasets_filter_in_file:
+                if re.search(reg, f'{run_name}_split_{split}'):
                     logging.info(
-                        f"Skipping evaluation of dataset "
-                        f"{new_test_dl_configs['name'] + '_test'} as it "
-                        f"matched skip regex {skip_regex}"
+                        f'Including additional dataset runs for '
+                        f'{f"{run_name}_split_{split}"} as it '
+                        f'matched filter-out regex {reg}'
                     )
-                    skip = True
+                    run_additional = True
                     break
-            if skip:
-                continue
+        config_copy = copy.deepcopy(config)
+        if run_additional:
+            for new_test_dl_configs in eval_config.get(
+                'additional_test_sets',
+                [],
+            ):
+                skip = False
+                for skip_regex in new_test_dl_configs.get('skip_list', []):
+                    if re.search(skip_regex, f'{run_name}_split_{split}'):
+                        logging.info(
+                            f"Skipping evaluation of dataset "
+                            f"{new_test_dl_configs['name'] + '_test'} as it "
+                            f"matched skip regex {skip_regex}"
+                        )
+                        skip = True
+                        break
+                if skip:
+                    continue
 
-            config_copy = copy.deepcopy(config)
-            if new_test_dl_configs.get('update_previous', False):
-                config_copy['dataset_config'].update(
-                    new_test_dl_configs['dataset_config']
+                config_copy = copy.deepcopy(config)
+                if new_test_dl_configs.get('update_previous', False):
+                    config_copy['dataset_config'].update(
+                        new_test_dl_configs['dataset_config']
+                    )
+                else:
+                    config_copy['dataset_config'] = (
+                        new_test_dl_configs['dataset_config']
+                    )
+                (
+                    _,
+                    _,
+                    new_test_dl,
+                    new_imbalance,
+                    new_concept_map,
+                    new_task_class_weights,
+                    new_acquisition_costs
+                ) = _generate_dataset_and_update_config(
+                    config_copy,
+                    use_dataset_cache=use_dataset_cache,
                 )
-            else:
-                config_copy['dataset_config'] = (
-                    new_test_dl_configs['dataset_config']
+                eval_results = evaluate_models.evaluate_model(
+                    model,
+                    config_copy,
+                    [(new_test_dl, (new_test_dl_configs['name'] + "_test"))],
+                    train_dl,
+                    val_dl=val_dl,
+                    run_name=run_name,
+                    task_class_weights=new_task_class_weights,
+                    imbalance=new_imbalance,
+                    acquisition_costs=new_acquisition_costs,
+                    result_dir=result_dir,
+                    concept_map=new_concept_map,
+                    accelerator=accelerator,
+                    devices=devices,
+                    split=split,
+                    rerun=current_rerun,
+                    old_results=old_results,
                 )
-            (
-                _,
-                _,
-                new_test_dl,
-                new_imbalance,
-                new_concept_map,
-                new_task_class_weights,
-                new_acquisition_costs
-            ) = _generate_dataset_and_update_config(
-                config_copy,
-                use_dataset_cache=use_dataset_cache,
-            )
-            eval_results = evaluate_models.evaluate_model(
-                model,
-                config_copy,
-                [(new_test_dl, (new_test_dl_configs['name'] + "_test"))],
-                train_dl,
-                val_dl=val_dl,
-                run_name=run_name,
-                task_class_weights=new_task_class_weights,
-                imbalance=new_imbalance,
-                acquisition_costs=new_acquisition_costs,
-                result_dir=result_dir,
-                concept_map=new_concept_map,
-                accelerator=accelerator,
-                devices=devices,
-                split=split,
-                rerun=current_rerun,
-                old_results=old_results,
-            )
-            training.update_statistics(
-                aggregate_results=trial_results,
-                run_config=config,
-                model=model,
-                test_results=eval_results,
-                run_name=run_name,
-                prefix="",
-            )
+                update_statistics(
+                    aggregate_results=trial_results,
+                    test_results=eval_results,
+                )
+    # And restore training mode if the model was previously training
+    if was_training:
+        model.train()
     return config_copy
 
 
@@ -870,8 +861,6 @@ def main(
     devices="auto",
     summary_table_metrics=None,
     sort_key="Task Accuracy",
-    single_frequency_epochs=0,
-    activation_freq=0,
     filter_out_regex=None,
     filter_in_regex=None,
     model_selection_metrics=None,
@@ -1075,8 +1064,6 @@ def main(
                             project_name=project_name,
                             current_rerun=current_rerun,
                             old_results=old_results,
-                            single_frequency_epochs=single_frequency_epochs,
-                            activation_freq=activation_freq,
                             use_dataset_cache=use_dataset_cache,
                             extra_datasets_filter_in_file=extra_datasets_filter_in_file,
                         ),
@@ -1102,17 +1089,12 @@ def main(
                         project_name=project_name,
                         current_rerun=current_rerun,
                         old_results=old_results,
-                        single_frequency_epochs=single_frequency_epochs,
-                        activation_freq=activation_freq,
                         use_dataset_cache=use_dataset_cache,
                         extra_datasets_filter_in_file=extra_datasets_filter_in_file,
                     )
-                training.update_statistics(
+                update_statistics(
                     aggregate_results=results[f'{split}'][run_name],
-                    run_config=run_config,
                     test_results=trial_results,
-                    run_name=run_name,
-                    prefix="",
                 )
 
                 logging.debug(
@@ -1125,6 +1107,11 @@ def main(
                         results[f'{split}'][run_name],
                         f,
                     )
+
+                # Clean-up memory to setup everything for the next experiment
+                gc.collect()
+                torch.cuda.empty_cache()
+                torch.cuda.ipc_collect()
 
 
             # Save this run's results
@@ -1275,7 +1262,6 @@ def _build_arg_parser():
             "directory where we will dump our experiment's results."
         ),
         metavar="path",
-
     )
     parser.add_argument(
         '--rerun',
@@ -1325,17 +1311,6 @@ def _build_arg_parser():
             'anything passed as part of the config file itself.'
         ),
         default=[],
-    )
-    parser.add_argument(
-        '--activation_freq',
-        default=0,
-        help=(
-            'how frequently, in terms of epochs, should we store the '
-            'embedding activations for our validation set. By default we will '
-            'not store any activations.'
-        ),
-        metavar='N',
-        type=int,
     )
     parser.add_argument(
         "--filter_out",
@@ -1425,17 +1400,6 @@ def _build_arg_parser():
     )
 
     parser.add_argument(
-        '--single_frequency_epochs',
-        default=0,
-        help=(
-            'how frequently, in terms of epochs, should we store the '
-            'embedding activations for our validation set. By default we will '
-            'not store any activations.'
-        ),
-        metavar='N',
-        type=int,
-    )
-    parser.add_argument(
          "--fast_run",
          action="store_true",
          default=False,
@@ -1479,6 +1443,17 @@ def _build_arg_parser():
             "we will avoid re-generating dataset loaders if they have already "
             "been generated for previous runs."
          ),
+    )
+    parser.add_argument(
+        '--out_selected_config',
+        default=None,
+        help=(
+            'outputs a config that will kick-start the same experiments with '
+            'only the selected models after running the entire model selection '
+            'process.'
+        ),
+        metavar='out_config.yaml',
+        type=str,
     )
     return parser
 
@@ -1624,8 +1599,6 @@ if __name__ == '__main__':
             else "cpu"
         ),
         experiment_config=loaded_config,
-        activation_freq=args.activation_freq,
-        single_frequency_epochs=args.single_frequency_epochs,
         filter_out_regex=args.filter_out,
         filter_in_regex=args.filter_in,
         model_selection_metrics=model_selection_metrics,

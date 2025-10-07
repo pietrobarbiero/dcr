@@ -38,7 +38,8 @@ class ConceptToLabelModel(pl.LightningModule):
         **kwargs,
     ):
         """
-        TODO
+        Simple wrapper model that simply learns a classifier mapping concepts
+        to the downstream task label.
         """
         super().__init__()
         self.output_latent = output_latent

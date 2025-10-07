@@ -1,5 +1,3 @@
-
-import copy
 import joblib
 import numpy as np
 import os
@@ -14,7 +12,8 @@ import cem.models.standard as standard_models
 import cem.train.evaluate as evaluate
 import cem.train.utils as utils
 
-from cem.train.training import _make_callbacks, _check_interruption, _restore_checkpoint
+from cem.train.training import _make_callbacks, _check_interruption, \
+    _restore_checkpoint
 
 
 ################################################################################
@@ -28,8 +27,8 @@ def train_blackbox(
     n_tasks,
     config,
     train_dl,
-    val_dl,
-    run_name,
+    val_dl=None,
+    run_name=None,
     result_dir=None,
     split=None,
     imbalance=None,
@@ -39,8 +38,6 @@ def train_blackbox(
     project_name='',
     seed=None,
     save_model=True,
-    activation_freq=0,
-    single_frequency_epochs=0,
     gradient_clip_val=0,
     old_results=None,
     enable_checkpointing=False,
@@ -51,12 +48,11 @@ def train_blackbox(
         True if config.get('early_stopping_best_model', False)
         else enable_checkpointing
     )
-    assert activation_freq == 0, (
-        'BlackBox training currently does not support activation dumping during '
-        'training.'
-    )
     if seed is not None:
         seed_everything(seed)
+
+    if run_name is None:
+        run_name = "DNN"
 
     if split is not None:
         full_run_name = (
@@ -154,7 +150,10 @@ def train_blackbox(
                 callbacks=bbox_callbacks,
                 **trainer_args,
             )
-            bbox_trainer.fit(bbox, train_dl, val_dl)
+            if val_dl is not None:
+                bbox_trainer.fit(bbox, train_dl, val_dl)
+            else:
+                bbox_trainer.fit(bbox, train_dl, val_dl)
             _check_interruption(bbox)
             _restore_checkpoint(
                 model=bbox,

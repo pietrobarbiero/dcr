@@ -49,7 +49,11 @@ class PCBM(ConceptBottleneckModel):
         top_k_accuracy=None,
     ):
         """
-        TODO
+        Implementation of a Post-hoc CBM by Yuksekgonul et al. (https://arxiv.org/abs/2205.15480).
+        For this implementation, we tried to stick as closely as possible to the
+        original implementation of the authors (found here: https://github.com/mertyg/post-hoc-cbm),
+        changing things only so that the model fits the interfaces used in our
+        experimentation pipeline.
         """
         pl.LightningModule.__init__(self)
         self.n_concepts = n_concepts

@@ -33,110 +33,113 @@ def evaluate_cbm(
     test_dl=None,
     dl_name="test",
 ):
-    eval_results = {}
-    if test_dl is None:
-        return eval_results
-    # model.freeze()
-    include_c_aucs = config.get('include_c_aucs', False)
-    def _inner_call():
-        batch_results = trainer.predict(model, test_dl)
-        y_true, c_true = data_utils.daloader_to_memory(
-            test_dl,
-            as_torch=True,
-            only_labels=True,
-            num_workers=config.get('num_load_workers', config.get('num_workers', 1)),
-        )
-        c_pred = torch.cat(
-            list(map(lambda x: x[0].detach().cpu(), batch_results)),
-            dim=0,
-        )
-        y_pred = torch.cat(
-            list(map(lambda x: x[2].detach().cpu(), batch_results)),
-            axis=0,
-        )
-        c_metrics, (y_accuracy, y_auc, y_f1) = \
-            accs.compute_accuracy(
-                c_pred=c_pred,
-                y_pred=y_pred,
-                c_true=c_true,
-                y_true=y_true,
-                include_c_aucs=include_c_aucs,
+    was_training = model.training
+    model.eval()
+    with torch.no_grad():
+        eval_results = {}
+        if test_dl is None:
+            return eval_results
+        include_c_aucs = config.get('include_c_aucs', False)
+        def _inner_call():
+            batch_results = trainer.predict(model, test_dl)
+            y_true, c_true = data_utils.daloader_to_memory(
+                test_dl,
+                as_torch=True,
+                only_labels=True,
+                num_workers=config.get('num_load_workers', config.get('num_workers', 1)),
             )
+            c_pred = torch.cat(
+                list(map(lambda x: x[0].detach().cpu(), batch_results)),
+                dim=0,
+            )
+            y_pred = torch.cat(
+                list(map(lambda x: x[2].detach().cpu(), batch_results)),
+                axis=0,
+            )
+            c_metrics, (y_accuracy, y_auc, y_f1) = \
+                accs.compute_accuracy(
+                    c_pred=c_pred,
+                    y_pred=y_pred,
+                    c_true=c_true,
+                    y_true=y_true,
+                    include_c_aucs=include_c_aucs,
+                )
+
+            if include_c_aucs:
+                (c_accuracy, c_auc, c_f1, c_aucs_vector) = c_metrics
+                output = [
+                    c_accuracy,
+                    y_accuracy,
+                    c_auc,
+                    y_auc,
+                    c_f1,
+                    y_f1,
+                    c_aucs_vector,
+                ]
+            else:
+                (c_accuracy, c_auc, c_f1) = c_metrics
+                output = [
+                    c_accuracy,
+                    y_accuracy,
+                    c_auc,
+                    y_auc,
+                    c_f1,
+                    y_f1,
+                ]
+            top_k_vals = []
+            for key, val in eval_results.items():
+                if f"test_y_top" in key:
+                    top_k = int(
+                        key[len(f"test_y_top_"):-len("_accuracy")]
+                    )
+                    top_k_vals.append((top_k, val))
+            output += list(map(
+                lambda x: x[1],
+                sorted(top_k_vals, key=lambda x: x[0]),
+            ))
+            return output
 
         if include_c_aucs:
-            (c_accuracy, c_auc, c_f1, c_aucs_vector) = c_metrics
-            output = [
-                c_accuracy,
-                y_accuracy,
-                c_auc,
-                y_auc,
-                c_f1,
-                y_f1,
-                c_aucs_vector,
+            keys = [
+                f"{dl_name}_acc_c",
+                f"{dl_name}_acc_y",
+                f"{dl_name}_auc_c",
+                f"{dl_name}_auc_y",
+                f"{dl_name}_f1_c",
+                f"{dl_name}_aucs_c",
             ]
         else:
-            (c_accuracy, c_auc, c_f1) = c_metrics
-            output = [
-                c_accuracy,
-                y_accuracy,
-                c_auc,
-                y_auc,
-                c_f1,
-                y_f1,
+            keys = [
+                f"{dl_name}_acc_c",
+                f"{dl_name}_acc_y",
+                f"{dl_name}_auc_c",
+                f"{dl_name}_auc_y",
+                f"{dl_name}_f1_c",
+                f"{dl_name}_f1_y",
             ]
-        top_k_vals = []
-        for key, val in eval_results.items():
-            if f"test_y_top" in key:
-                top_k = int(
-                    key[len(f"test_y_top_"):-len("_accuracy")]
-                )
-                top_k_vals.append((top_k, val))
-        output += list(map(
-            lambda x: x[1],
-            sorted(top_k_vals, key=lambda x: x[0]),
-        ))
-        return output
+        if 'top_k_accuracy' in config:
+            top_k_args = config['top_k_accuracy']
+            if top_k_args is None:
+                top_k_args = []
+            if not isinstance(top_k_args, list):
+                top_k_args = [top_k_args]
+            for top_k in sorted(top_k_args):
+                keys.append(f'{dl_name}_top_{top_k}_acc_y')
 
-    if include_c_aucs:
-        keys = [
-            f"{dl_name}_acc_c",
-            f"{dl_name}_acc_y",
-            f"{dl_name}_auc_c",
-            f"{dl_name}_auc_y",
-            f"{dl_name}_f1_c",
-            f"{dl_name}_aucs_c",
-        ]
-    else:
-        keys = [
-            f"{dl_name}_acc_c",
-            f"{dl_name}_acc_y",
-            f"{dl_name}_auc_c",
-            f"{dl_name}_auc_y",
-            f"{dl_name}_f1_c",
-            f"{dl_name}_f1_y",
-        ]
-    if 'top_k_accuracy' in config:
-        top_k_args = config['top_k_accuracy']
-        if top_k_args is None:
-            top_k_args = []
-        if not isinstance(top_k_args, list):
-            top_k_args = [top_k_args]
-        for top_k in sorted(top_k_args):
-            keys.append(f'{dl_name}_top_{top_k}_acc_y')
-
-    values, _ = utils.load_call(
-        function=_inner_call,
-        keys=keys,
-        run_name=run_name,
-        old_results=old_results,
-        rerun=rerun,
-        kwargs={},
-    )
-    eval_results.update({
-        key: val
-        for (key, val) in zip(keys, values)
-    })
-    # model.unfreeze()
+        values, _ = utils.load_call(
+            function=_inner_call,
+            keys=keys,
+            run_name=run_name,
+            old_results=old_results,
+            rerun=rerun,
+            kwargs={},
+        )
+        eval_results.update({
+            key: val
+            for (key, val) in zip(keys, values)
+        })
+    if was_training:
+        model.train()
     return eval_results
 
 

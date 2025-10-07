@@ -2,7 +2,6 @@ import copy
 import numpy as np
 import torch
 import torchvision
-import torchvision.transforms as v2
 from torchvision.models.feature_extraction import create_feature_extractor
 from pytorch_lightning import seed_everything
 import collections

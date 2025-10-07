@@ -1,0 +1,298 @@
+trials: 3
+model_selection_trials: 1
+results_dir: /anfs/bigdisc/me466/mixcem_results/cifar10/
+
+num_load_workers: 0
+
+model_selection_groups:
+  - ["^(DNN).*$", "DNN (Baseline)"]
+  - ["^(CBM_Sigmoid_).*$", "Joint CBM (Baseline)"]
+  - ["^(CBM_Logit_).*$", "Joint Logit CBM (Baseline)"]
+  - ["^(CBM_Seq).*$", "Sequential CBM (Baseline)"]
+  - ["^(CBM_Ind).*$", "Independent CBM (Baseline)"]
+  - ["^(Hybrid-CBM_).*$", "Hybrid-CBM (Baseline)"]
+  - ["^(CEM_Baseline_).*$", "CEM (Baseline)"]
+  - ["^(IntCEM_).*(_Baseline).*$", "IntCEM (Baseline)"]
+  - ["^(ProbCBM_).*$", "ProbCBM (Baseline)"]
+  - ["^(PCBM_).*$", "Posthoc CBM (Baseline)"]
+  - ["^(HybridPCBM_).*$", "Posthoc Hybrid CBM (Baseline)"]
+  - ["^(ConceptToLabelModel).*$", "Bayes MLP (Baseline)"]
+
+  - [".*(MixCEM_).*(_ce_0).*$", "MixCEM Final No Calibration (Baseline)"]
+  - [".*(MixCEM_).*(_ce_30).*$", "MixCEM Final (Baseline)"]
+  - [".*(MixCEM_).*$", "MixCEM Final All (Baseline)"]
+
+model_selection_metrics:
+  - val_acc_y_random_group_level_True_use_prior_False_int_auc
+  - val_acc_y
+  - val_mixcem_sel_acc
+
+shared_params:
+  # Dataset Configuration
+  dataset_config:
+    dataset: "cifar10"
+    num_workers: 8
+    batch_size: 512
+
+    binarization_mode: percentile_threshold
+    regenerate: True
+    threshold: 50
+
+    # DATASET VARIABLES
+    root_dir: /anfs/bigdisc/me466/cifar10
+    sampling_percent: 1
+    sampling_groups: True
+    test_subsampling: 1
+    weight_loss: True
+
+  # Intervention Parameters
+  intervention_config:
+    competence_levels: [1]
+    intervention_freq: 11
+    intervention_batch_size: 512
+    val_intervention_policies:
+      - policy: "random"
+        group_level: True
+        use_prior: False
+    intervention_policies:
+      - policy: "random"
+        group_level: True
+        use_prior: False
+
+  # Representation metrics
+  # Change to False if you want representation metrics to be included in the
+  # evaluation (may significantly increase experiment times)
+  skip_repr_evaluation: True
+
+  max_epochs: 50
+  top_k_accuracy: null
+  save_model: True
+  patience: 15
+  emb_size: 16
+  extra_dims: 0
+  concept_loss_weight: [10, 1]
+  learning_rate: 0.01
+  weight_decay: 0.000001
+  weight_loss: True
+  c_extractor_arch: resnet18
+  optimizer: sgd
+  bool: False
+  early_stopping_monitor: val_loss
+  early_stopping_mode: min
+  early_stopping_delta: 0.0
+  momentum: 0.9
+  sigmoidal_prob: False
+  training_intervention_prob: 0
+  grid_variables:
+    - concept_loss_weight
+  grid_search_mode: exhaustive
+
+  # Evaluation configuration
+  eval_config:
+    additional_metrics:
+      - name: mixcem_sel
+        include_list: ['.*(MixCEM_).*']
+    additional_test_sets:
+      - name: "OOD_sap_0.1"
+        update_previous: True
+        dataset_config:
+          test_transformation_config:
+            post_generation: False
+            name: salt_and_pepper
+            amount: 0.1
+            s_vs_p: 0.5
+
+runs:
+  - architecture: 'ConceptBottleneckModel'
+    run_name: "CBM_Sigmoid_Baseline_cwl_{concept_loss_weight}"
+    training_intervention_prob: 0
+    embedding_activation: "leakyrelu"
+    bool: False
+    extra_dims: 0
+    sigmoidal_extra_capacity: False
+    sigmoidal_prob: True
+
+  - architecture: 'ConceptEmbeddingModel'
+    run_name: "CEM_Baseline_cwl_{concept_loss_weight}"
+    sigmoidal_prob: True
+    training_intervention_prob: 0.25
+    embedding_activation: "leakyrelu"
+
+  - architecture: 'ConceptToLabelModel'
+    run_name: "ConceptToLabelModel"
+    c2y_layers: [256, 128, 64, 32]
+    grid_variables: []
+    max_epochs: 75
+    feature_drop_out: 0.25
+
+  - architecture: 'ConceptBottleneckModel'
+    run_name: "DNN_extra_dims_{extra_dims}"
+    extra_dims: [0, 50, 100, 200]
+    training_intervention_prob: 0
+    embedding_activation: "leakyrelu"
+    sigmoidal_prob: True
+    concept_loss_weight: 0
+    grid_variables:
+      - extra_dims
+    grid_search_mode: exhaustive
+
+  - architecture: 'ConceptBottleneckModel'
+    run_name: "CBM_Logit_Baseline_cwl_{concept_loss_weight}"
+    embedding_activation: "leakyrelu"
+    bool: False
+    extra_dims: 0
+    sigmoidal_extra_capacity: False
+    sigmoidal_prob: False
+
+  - architecture: 'SequentialConceptBottleneckModel'
+    run_name: "CBM_Seq"
+    embedding_activation: "leakyrelu"
+    bool: False
+    extra_dims: 0
+    concept_loss_weight: [1]
+    sigmoidal_extra_capacity: False
+    sigmoidal_prob: True
+
+  - architecture: 'IndependentConceptBottleneckModel'
+    run_name: "CBM_Ind"
+    embedding_activation: "leakyrelu"
+    bool: False
+    extra_dims: 0
+    concept_loss_weight: [1]
+    sigmoidal_extra_capacity: False
+    sigmoidal_prob: True
+
+  - architecture: 'ConceptBottleneckModel'
+    run_name: "Hybrid-CBM_Sigmoid_extra_dims_{extra_dims}_Baseline_cwl_{concept_loss_weight}"
+    extra_dims: [50, 100, 200]
+    training_intervention_prob: 0
+    embedding_activation: "leakyrelu"
+    sigmoidal_prob: True
+    grid_variables:
+      - concept_loss_weight
+      - extra_dims
+    grid_search_mode: exhaustive
+
+  - architecture: 'ProbabilisticConceptBottleneckModel'
+    run_name: "ProbCBM_lr_{learning_rate}_class_hidden_dim_{class_hidden_dim}_hidden_dim_{hidden_dim}_n_samples_inference_{n_samples_inference}_max_concept_epochs_{max_concept_epochs}_max_task_epochs_{max_task_epochs}"
+    n_samples_inference: 50
+    use_neg_concept: True
+    pred_class: True
+    init_negative_scale: 5
+    init_shift: 5
+    pretrained: True
+    hidden_dim: [16, 32]
+    class_hidden_dim: [64] #If you have enough resources, use [64, 128]
+    intervention_prob: 0.5
+    gradient_clip_val: 2.0
+    max_concept_epochs: [50]
+    warmup_epochs: 5
+    max_task_epochs: 50
+    vib_beta: 0.00005
+    concept_loss_weight: 1
+    learning_rate: 0.01
+    lr_ratio: 10
+    weight_decay: 0.000001 #0
+    weight_loss: True
+    grid_variables:
+      - class_hidden_dim
+      - hidden_dim
+      - max_concept_epochs
+    grid_search_mode: exhaustive
+
+  - architecture: "IntAwareConceptEmbeddingModel"
+    run_name: "IntCEM_emb_size_{emb_size}_intervention_weight_{intervention_weight}_intervention_task_discount_{intervention_task_discount}_Baseline_cwl_{concept_loss_weight}"
+    training_intervention_prob: 0.25
+    intervention_weight: [0.1, 1, 5]
+    intervention_task_discount: [1.1, 1.5]
+    use_concept_groups: True
+    int_model_use_bn: True
+    int_model_layers: [128, 128, 64, 64]
+    embedding_activation: "leakyrelu"
+    max_horizon: 6
+    horizon_rate: 1.005
+    gradient_clip_val: 100
+    emb_size: [16] #, 32]
+    grid_variables:
+        - concept_loss_weight
+        - intervention_task_discount
+        - intervention_weight
+        - emb_size
+    grid_search_mode: exhaustive
+
+  - architecture: 'PosthocConceptBottleneckModel'
+    run_name: "PCBM_reg_{reg_strength}_l1_{l1_ratio}_penalty_{svd_penalty}"
+    residual: False
+    reg_strength: [0.000001, 0.001, 0.1]
+    l1_ratio: [0.99]
+    freeze_pretrained_model: True
+    freeze_concept_embeddings: True
+    emb_size: null
+
+    svd_penalty: [1]
+    active_top_percentile: 95
+    active_bottom_percentile: 5
+    blackbox_model_config:
+      name: resnet18
+      imagenet_pretrained: True
+      add_linear_layers: [19]  # Add an intermediate layer with the same size as the number of concepts so that the evaluation is fair
+    blackbox_training_epochs: 50
+    max_residual_epochs: 50
+    max_epochs: 50
+    # We use the same blackbox model and CAVs for all folds as otherwise things get too computationally expensive (and the assumption here is we are given always a pre-trained model)
+    blackbox_path: 'PCBM_BlackBox_Model_{blackbox_model_config[name]}_pre_{blackbox_model_config[imagenet_pretrained]}_layers_{blackbox_model_config[add_linear_layers]}'
+    cav_path: '{results_dir}/PCBM_CAVs_{blackbox_model_config[name]}_pre_{blackbox_model_config[imagenet_pretrained]}_layers_{blackbox_model_config[add_linear_layers]}.npy'
+    intercept_path: '{results_dir}/PCBM_Intercepts_{blackbox_model_config[name]}_pre_{blackbox_model_config[imagenet_pretrained]}_layers_{blackbox_model_config[add_linear_layers]}.npy'
+    grid_variables:
+      - reg_strength
+      - l1_ratio
+      - svd_penalty
+    grid_search_mode: exhaustive
+
+  - architecture: 'PosthocConceptBottleneckModel'
+    run_name: "HybridPCBM_reg_{reg_strength}_l1_{l1_ratio}_penalty_{svd_penalty}"
+    residual: True  # TURN ON THE RESIDUAL MODEL!
+    reg_strength: [0.000001, 0.001, 0.1]
+    l1_ratio: [0.99]
+    freeze_pretrained_model: True
+    freeze_concept_embeddings: True
+    emb_size: null
+
+    svd_penalty: [1]
+    blackbox_model_config:
+      name: resnet18
+      imagenet_pretrained: True
+      add_linear_layers: [19]  # Add an intermediate layer with the same size as the number of concepts so that the evaluation is fair
+    blackbox_training_epochs: 50
+    max_residual_epochs: 50
+    max_epochs: 50
+    # We use the same blackbox model and CAVs for all folds as otherwise things get too computationally expensive (and the assumption here is we are given always a pre-trained model)
+    blackbox_path: 'PCBM_BlackBox_Model_{blackbox_model_config[name]}_pre_{blackbox_model_config[imagenet_pretrained]}_layers_{blackbox_model_config[add_linear_layers]}'
+    cav_path: '{results_dir}/PCBM_CAVs_{blackbox_model_config[name]}_pre_{blackbox_model_config[imagenet_pretrained]}_layers_{blackbox_model_config[add_linear_layers]}.npy'
+    intercept_path: '{results_dir}/PCBM_Intercepts_{blackbox_model_config[name]}_pre_{blackbox_model_config[imagenet_pretrained]}_layers_{blackbox_model_config[add_linear_layers]}.npy'
+
+    grid_variables:
+      - reg_strength
+      - l1_ratio
+      - svd_penalty
+    grid_search_mode: exhaustive
+
+
+  - architecture: 'MixCEM'
+    run_name: "MixCEM_r_{all_intervened_loss_weight}_g_ood_{ood_dropout_prob}_cwl_{concept_loss_weight}_ce_{calibration_epochs}"
+    load_path_name: "MixCEM_r_{all_intervened_loss_weight}_g_ood_{ood_dropout_prob}_cwl_{concept_loss_weight}_ce_0"
+
+    all_intervened_loss_weight: [0.1, 1]
+    emb_size: 16
+    ood_dropout_prob: [0.1, 0.5, 0.9]
+    concept_loss_weight: [1]
+    calibration_epochs: [0, 30]
+    max_epochs: 150
+    training_intervention_prob: 0.25
+
+    grid_variables:
+      - concept_loss_weight
+      - ood_dropout_prob
+      - all_intervened_loss_weight
+      - calibration_epochs
+    grid_search_mode: exhaustive

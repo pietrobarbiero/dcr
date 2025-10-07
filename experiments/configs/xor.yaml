@@ -1,5 +1,5 @@
-trials: 3
-results_dir: /anfs/bigdisc/me466/mixcem_results/xor/
+trials: 5
+results_dir: results/xor/
 
 shared_params:
   # Dataset Configuration
@@ -24,7 +24,7 @@ shared_params:
   # Representation metrics
   # Change to False if you want representation metrics to be included in the
   # evaluation (may significantly increase experiment times)
-  skip_repr_evaluation: False #True CHANGE!!!!!!!!!!!!
+  skip_repr_evaluation: True
   run_ois: False
   run_repr_avg_pred: False
   run_nis: False

@@ -1,6 +1,5 @@
 
 import copy
-import joblib
 import numpy as np
 import os
 import pytorch_lightning as pl
@@ -54,10 +53,9 @@ def train_pcbm(
     n_tasks,
     config,
     train_dl,
-    val_dl,
-    run_name,
+    val_dl=None,
+    run_name=None,
     result_dir=None,
-    test_dl=None,
     split=None,
     imbalance=None,
     task_class_weights=None,
@@ -66,8 +64,6 @@ def train_pcbm(
     project_name='',
     seed=None,
     save_model=True,
-    activation_freq=0,
-    single_frequency_epochs=0,
     gradient_clip_val=0,
     old_results=None,
     enable_checkpointing=False,
@@ -79,12 +75,11 @@ def train_pcbm(
         True if config.get('early_stopping_best_model', False)
         else enable_checkpointing
     )
-    assert activation_freq == 0, (
-        'PCBM training currently does not support activation dumping during '
-        'training.'
-    )
     if seed is not None:
         seed_everything(seed)
+
+    if run_name is None:
+        run_name = "PCBM"
 
     if split is not None:
         full_run_name = (
@@ -218,7 +213,10 @@ def train_pcbm(
                     callbacks=bbox_callbacks,
                     **trainer_args,
                 )
-                bbox_trainer.fit(bbox, train_dl, val_dl)
+                if val_dl is not None:
+                    bbox_trainer.fit(bbox, train_dl, val_dl)
+                else:
+                    bbox_trainer.fit(bbox, train_dl)
                 _check_interruption(bbox_trainer)
                 _restore_checkpoint(
                     model=bbox,
@@ -414,7 +412,10 @@ def train_pcbm(
                 callbacks=pcbm_callbacks,
                 **trainer_args,
             )
-            pcbm_trainer.fit(pcbm, train_dl, val_dl)
+            if val_dl is not None:
+                pcbm_trainer.fit(pcbm, train_dl, val_dl)
+            else:
+                pcbm_trainer.fit(pcbm, train_dl)
             _check_interruption(pcbm_trainer)
             _restore_checkpoint(
                 model=pcbm,
@@ -457,7 +458,10 @@ def train_pcbm(
                     callbacks=residual_callbacks,
                     **trainer_args,
                 )
-                residual_trainer.fit(pcbm, train_dl, val_dl)
+                if val_dl is not None:
+                    residual_trainer.fit(pcbm, train_dl, val_dl)
+                else:
+                    residual_trainer.fit(pcbm, train_dl)
                 _check_interruption(residual_trainer)
                 _restore_checkpoint(
                     model=pcbm,

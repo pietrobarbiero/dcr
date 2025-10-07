@@ -16,13 +16,13 @@ from cem.models.glancenet import update_osr_thresholds
 from cem.train.training import _make_callbacks, _check_interruption, _restore_checkpoint
 
 def train_glancenet(
-    input_shape,
     n_concepts,
     n_tasks,
     config,
     train_dl,
-    val_dl,
-    run_name,
+    val_dl=None,
+    input_shape=None,
+    run_name=None,
     result_dir=None,
     split=None,
     imbalance=None,
@@ -32,8 +32,6 @@ def train_glancenet(
     project_name='',
     seed=None,
     save_model=True,
-    activation_freq=0,
-    single_frequency_epochs=0,
     gradient_clip_val=0,
     old_results=None,
     enable_checkpointing=False,
@@ -46,6 +44,9 @@ def train_glancenet(
     )
     if seed is not None:
         seed_everything(seed)
+
+    if run_name is None:
+        run_name = "GlanceNet"
 
     if split is not None:
         full_run_name = (
@@ -153,7 +154,10 @@ def train_glancenet(
                     enable_checkpointing=enable_checkpointing,
                     gradient_clip_val=gradient_clip_val,
                 )
-                warmup_trainer.fit(model, train_dl, val_dl)
+                if val_dl is not None:
+                    warmup_trainer.fit(model, train_dl, val_dl)
+                else:
+                    warmup_trainer.fit(model, train_dl)
                 _check_interruption(warmup_trainer)
                 _restore_checkpoint(
                     model=model,
@@ -173,7 +177,10 @@ def train_glancenet(
             print(
                 f"\tTraining end-to-end model for {config['max_epochs']} epochs"
             )
-            fit_trainer.fit(model, train_dl, val_dl)
+            if val_dl is not None:
+                fit_trainer.fit(model, train_dl, val_dl)
+            else:
+                fit_trainer.fit(model, train_dl)
             _check_interruption(fit_trainer)
             training_time += time.time() - start_time
             num_epochs += fit_trainer.current_epoch

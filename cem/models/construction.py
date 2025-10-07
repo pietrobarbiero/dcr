@@ -1,31 +1,19 @@
 import copy
 import numpy as np
 import os
-import joblib
 import pytorch_lightning as pl
 import torch
 
 from torchvision.models import resnet18, resnet34, resnet50, densenet121
 
-import cem.models.adversarial_cbm as adversarial_cbm
-import cem.models.backtracking as backtrack
 import cem.models.cbm as models_cbm
 import cem.models.cem as models_cem
-import cem.models.certificate_cem as certificate_cem
 import cem.models.concept_to_label as models_c2l
-import cem.models.defer_cem as defer_cem
-import cem.models.direction_cem as direction_cem
 import cem.models.glancenet as models_glancenet
-import cem.models.global_approx_cem as models_global_approx
-import cem.models.global_bank_cem as models_global_mixcem
-import cem.models.hybrid_cem as models_hcem
 import cem.models.intcbm as models_intcbm
-import cem.models.mc_intcem as mc_intcem
-import cem.models.mixcem as models_mixcem
+import cem.models.mixcem as mixcem
 import cem.models.posthoc_cbm as models_pcbm
-import cem.models.prob_cem as prob_cem
 import cem.models.probcbm as models_probcbm
-import cem.models.separator_cem as separator_cem
 import cem.models.standard as standard_models
 import cem.train.utils as utils
 
@@ -83,235 +71,6 @@ def construct_model(
         if "embeding_activation" in config:
             # Legacy support for typo in argument
             extra_params["embedding_activation"] = config["embeding_activation"]
-
-    elif (
-        config["architecture"] in ["HybridConceptEmbeddingModel", "H-CEM"]
-    ):
-        model_cls = models_hcem.HybridConceptEmbeddingModel
-        extra_params = {
-            "emb_size": config["emb_size"],
-            "constant_emb_proportion": config.get(
-                "constant_emb_proportion",
-                0.5,
-            ),
-            "shared_prob_gen": config.get("shared_prob_gen", True),
-            "intervention_policy": intervention_policy,
-            "training_intervention_prob": config.get(
-                'training_intervention_prob',
-                0.25,
-            ),
-            "const_embedding_activation": config.get(
-                "const_embedding_activation",
-                "leakyrelu"
-            ),
-            "dyn_embedding_activation": config.get(
-                "dyn_embedding_activation",
-                "leakyrelu"
-            ),
-            "c2y_model": c2y_model,
-            "c2y_layers": config.get("c2y_layers", []),
-            "contrastive_anchors": config.get(
-                "contrastive_anchors",
-                False,
-            ),
-        }
-
-    elif (
-        config["architecture"] in ["MultiConceptEmbeddingModel", "Multi-CEM"]
-    ):
-        model_cls = models_hcem.MultiConceptEmbeddingModel
-        extra_params = {
-            "emb_size": config["emb_size"],
-            "n_discovered_embs": config.get(
-                "n_discovered_embs",
-                4,
-            ),
-            "contrastive_loss_weight": config.get(
-                "contrastive_loss_weight",
-                0.0,
-            ),
-            "mix_ground_truth_embs": config.get(
-                "mix_ground_truth_embs",
-                True,
-            ),
-            "intervention_policy": intervention_policy,
-            "training_intervention_prob": config.get(
-                'training_intervention_prob',
-                0.25,
-            ),
-            "embedding_activation": config.get(
-                "embedding_activation",
-                "leakyrelu"
-            ),
-            "c2y_model": c2y_model,
-            "c2y_layers": config.get("c2y_layers", []),
-        }
-    elif config['architecture'] in [
-        'GlobalBankConceptEmbeddingModel',
-        'BankMixCEM',
-        'GlobalBankCEM',
-        'GlobalBankMixCEM',
-    ]:
-        model_cls = models_global_mixcem.GlobalBankConceptEmbeddingModel
-        extra_params = {
-            'rollout_init_steps': config.get('rollout_init_steps', 0),
-            'int_model_layers': config.get('int_model_layers', None),
-            'int_model_use_bn': config.get('int_model_use_bn', True),
-            'num_rollouts': config.get('num_rollouts', 1),
-            'intervention_discount': config.get('intervention_discount', 1),
-            'include_only_last_trajectory_loss': config.get('include_only_last_trajectory_loss', True),
-            'intervention_task_loss_weight': config.get('intervention_task_loss_weight', 1),
-            'intervention_weight': config.get('intervention_weight', 5),
-            'concept_map': config.get('concept_map', None),
-            'max_horizon': config.get('max_horizon', 6),
-            'initial_horizon': config.get('initial_horizon', 2),
-            'horizon_rate': config.get('horizon_rate', 1.005),
-            "intervention_task_discount": config.get(
-                "intervention_task_discount",
-                1,
-            ),
-
-            "emb_size": config["emb_size"],
-            "shared_emb_generator": config.get(
-                "shared_emb_generator",
-                True,
-            ),
-            "intervention_policy": intervention_policy,
-            "training_intervention_prob": config.get(
-                'training_intervention_prob',
-                0.25,
-            ),
-            "embedding_activation": config.get(
-                "embedding_activation",
-                None,
-            ),
-            "c2y_model": c2y_model,
-            "c2y_layers": config.get("c2y_layers", []),
-
-
-
-            "n_concept_variants": config.get(
-                "n_concept_variants",
-                5,
-            ),
-            "temperature": config.get(
-                "temperature",
-                1,
-            ),
-            "selection_mode": config.get(
-                'selection_mode',
-                'attention',
-            ),
-            "soft_select": config.get(
-                'soft_select',
-                True,
-            ),
-            "learnable_prob": config.get(
-                'learnable_prob',
-                False,
-            ),
-            "remap_context": config.get(
-                'remap_context',
-                False,
-            ),
-            "add_dynamic_embedding": config.get(
-                'add_dynamic_embedding',
-                False,
-            ),
-            "dynamic_emb_concept_loss_weight": config.get(
-                'dynamic_emb_concept_loss_weight',
-                0
-            ),
-            "distance_selection": config.get(
-                'distance_selection',
-                'hard',
-            ),
-            "fixed_embeddings": config.get('fixed_embeddings', False),
-            "initial_concept_embeddings": config.get(
-                'initial_concept_embeddings',
-                None,
-            ),
-            "fixed_scale": config.get('fixed_scale', None),
-            "bottleneck_pooling": config.get('bottleneck_pooling', 'concat'),
-        }
-
-    elif config["architecture"] in [
-        "ResidualMixingConceptEmbeddingModel",
-        "ResidualMixCEM",
-        "MixingConceptEmbeddingModel",
-        "MixCEM",
-    ]:
-        if "Residual" in config["architecture"]:
-            model_cls = models_hcem.ResidualMixingConceptEmbeddingModel
-        else:
-            model_cls = models_hcem.MixingConceptEmbeddingModel
-        extra_params = {
-            "emb_size": config["emb_size"],
-            "n_discovered_concepts": config.get(
-                "n_discovered_concepts",
-                4,
-            ),
-            "contrastive_loss_weight": config.get(
-                "contrastive_loss_weight",
-                0.0,
-            ),
-            "shared_emb_generator": config.get(
-                "shared_emb_generator",
-                False,
-            ),
-            "normalize_embs": config.get(
-                "normalize_embs",
-                False,
-            ),
-            "sample_probs": config.get(
-                "sample_probs",
-                False,
-            ),
-            "cond_discovery": config.get(
-                "cond_discovery",
-                False,
-            ),
-            "intermediate_task_concept_loss": config.get(
-                "intermediate_task_concept_loss",
-                0.0,
-            ),
-            "intervention_task_discount": config.get(
-                "intervention_task_discount",
-                1,
-            ),
-            "mix_ground_truth_embs": config.get(
-                "mix_ground_truth_embs",
-                True,
-            ),
-            "discovered_probs_entropy": config.get(
-                "discovered_probs_entropy",
-                0,
-            ),
-            "intervention_policy": intervention_policy,
-            "training_intervention_prob": config.get(
-                'training_intervention_prob',
-                0.25,
-            ),
-            "dyn_training_intervention_prob": config.get(
-                "dyn_training_intervention_prob",
-                0,
-            ),
-            "embedding_activation": config.get(
-                "embedding_activation",
-                "leakyrelu"
-            ),
-            "c2y_model": c2y_model,
-            "c2y_layers": config.get("c2y_layers", []),
-
-            "fixed_embeddings": config.get('fixed_embeddings', False),
-            "initial_concept_embeddings": config.get(
-                'initial_concept_embeddings',
-                None,
-            ),
-            "use_cosine_similarity": config.get('use_cosine_similarity', False),
-            "use_linear_emb_layer": config.get('use_linear_emb_layer', False),
-            "fixed_scale": config.get('fixed_scale', None),
-        }
 
     elif config["architecture"] in [
         "ProbCBM",
@@ -480,602 +239,137 @@ def construct_model(
         }
 
     elif config['architecture'] in [
-        'SeparatorConceptEmbeddingModel',
-        'SeparatorCEM',
+        'MixtureOfConceptEmbeddingsModel',
+        'MixCEM',
+        'MCIntCEM', # Legacy
     ]:
         task_loss_weight = config.get('task_loss_weight', 1)
-        model_cls = separator_cem.SeparatorConceptEmbeddingModel
-        extra_params = {
-            "emb_size": config["emb_size"],
-            "intervention_policy": intervention_policy,
-            "training_intervention_prob": config.get(
+        model_cls = mixcem.MixCEM
+        extra_params = dict(
+            emb_size=config["emb_size"],
+            intervention_policy=intervention_policy,
+            training_intervention_prob=config.get(
                 'training_intervention_prob',
                 0.25,
             ),
-            "embedding_activation": config.get(
+            embedding_activation=config.get(
                 "embedding_activation",
                 "leakyrelu",
             ),
-            "c2y_model": c2y_model,
-            "c2y_layers": config.get("c2y_layers", []),
+            c2y_model=c2y_model,
+            c2y_layers=config.get("c2y_layers", []),
 
-            "intervention_weight": config.get("intervention_weight", 5),
-            "horizon_rate": config.get("horizon_rate", 1.005),
-            "concept_map": config.get("concept_map", None),
-            "max_horizon": config.get("max_horizon", 6),
-            "include_only_last_trajectory_loss": config.get(
-                "include_only_last_trajectory_loss",
-                True,
-            ),
-            "intervention_task_loss_weight": config.get(
-                "intervention_task_loss_weight",
+            # Experimental/debugging arguments
+            intervention_discount=config.get(
+                'intervention_discount',
                 1,
             ),
-            "initial_horizon": config.get("initial_horizon", 2),
-            "use_concept_groups": config.get("use_concept_groups", False),
-            "intervention_task_discount": config.get(
-                "intervention_task_discount",
-                config.get("intervention_task_discount", 1.1),
+            include_only_last_trajectory_loss=config.get(
+                'include_only_last_trajectory_loss',
+                True,
             ),
-            "rollout_init_steps": config.get('rollout_init_steps', 0),
-            "int_model_layers": config.get("int_model_layers", None),
-            "int_model_use_bn": config.get("int_model_use_bn", False),
-            "num_rollouts": config.get("num_rollouts", 1),
+            intervention_task_loss_weight=config.get(
+                'intervention_task_loss_weight',
+                1,
+            ),
 
-
-            # New parameters
-            "temperature": config.get('temperature', 1),
-            "n_concept_variants": config.get('n_concept_variants', 5),
-            "initial_concept_embeddings": config.get(
+            ##################################
+            # New MixCEM-specific arguments
+            #################################
+            ood_dropout_prob=config.get(
+                'ood_dropout_prob',
+                0.5,
+            ),
+            all_intervened_loss_weight=config.get(
+                'all_intervened_loss_weight',
+                1,
+            ),
+            initial_concept_embeddings=config.get(
                 'initial_concept_embeddings',
                 None,
             ),
-            "fixed_embeddings": config.get('fixed_embeddings', False),
-            "attention_fn": config.get('attention_fn', 'softmax'),
-            "margin_loss_weight": config.get(
-                'margin_loss_weight',
-                0,
-            ),
-            "ood_dropout_prob": config.get(
-                "ood_dropout_prob",
-                0,
-            ),
-            "separator_warmup_steps": config.get(
-                'separator_warmup_steps',
-                0,
-            ),
-            "box_temperature": config.get(
-                'box_temperature',
-                10,
-            ),
-            "bounds_loss_weight": config.get(
-                'bounds_loss_weight',
-                10,
-            ),
-            "init_bound_val": config.get(
-                'init_bound_val',
-                5,
-            ),
-            "pooling_mode": config.get(
-                'pooling_mode',
-                'concat',
-            ),
-            "sep_loss_weight": config.get(
-                'sep_loss_weight',
-                0,
-            ),
-            "selection_mode": config.get(
-                'selection_mode',
-                'prob_box',
-            ),
-            "projection_dim": config.get(
-                'projection_dim',
-                None,
-            ),
-            "separator_mode": config.get(
-                'separator_mode',
-                "individual",
-            ),
-        }
-
-
-
-    elif config['architecture'] in [
-        'ProbConceptEmbeddingModel',
-        'ProbCEM',
-    ]:
-        task_loss_weight = config.get('task_loss_weight', 1)
-        model_cls = prob_cem.ProbConceptEmbeddingModel
-        extra_params = {
-            "emb_size": config["emb_size"],
-            "intervention_policy": intervention_policy,
-            "training_intervention_prob": config.get(
-                'training_intervention_prob',
-                0.25,
-            ),
-            "embedding_activation": config.get(
-                "embedding_activation",
-                "leakyrelu",
-            ),
-            "c2y_model": c2y_model,
-            "c2y_layers": config.get("c2y_layers", []),
-
-            "intervention_weight": config.get("intervention_weight", 5),
-            "horizon_rate": config.get("horizon_rate", 1.005),
-            "concept_map": config.get("concept_map", None),
-            "max_horizon": config.get("max_horizon", 6),
-            "include_only_last_trajectory_loss": config.get(
-                "include_only_last_trajectory_loss",
-                True,
-            ),
-            "intervention_task_loss_weight": config.get(
-                "intervention_task_loss_weight",
-                1,
-            ),
-            "initial_horizon": config.get("initial_horizon", 2),
-            "use_concept_groups": config.get("use_concept_groups", False),
-            "intervention_task_discount": config.get(
-                "intervention_task_discount",
-                config.get("intervention_task_discount", 1.1),
-            ),
-            "rollout_init_steps": config.get('rollout_init_steps', 0),
-            "int_model_layers": config.get("int_model_layers", None),
-            "int_model_use_bn": config.get("int_model_use_bn", False),
-            "num_rollouts": config.get("num_rollouts", 1),
-
-
-            # New parameters
-            "temperature": config.get(
-                'temperature',
-                1,
-            ),
-            "n_concept_variants": config.get(
-                'n_concept_variants',
-                5,
-            ),
-            "initial_concept_embeddings": config.get(
-                'initial_concept_embeddings',
-                None,
-            ),
-            "fixed_embeddings": config.get(
+            fixed_embeddings=config.get(
                 'fixed_embeddings',
                 False,
             ),
-            "initial_log_variances": config.get(
-                'initial_log_variances',
-                None,
-            ),
-            "fixed_variances": config.get(
-                'fixed_variances',
-                False,
-            ),
-            "attention_fn": config.get(
-                'attention_fn',
-                'softmax',
-            ),
-            "ood_dropout_prob": config.get(
-                'ood_dropout_prob',
-                0,
-            ),
-            "pooling_mode": config.get(
-                'pooling_mode',
-                'concat',
-            ),
-            "selection_mode": config.get(
-                'selection_mode',
-                'z_score',
-            ),
-            "kl_loss_weight": config.get(
-                'kl_loss_weight',
-                0,
-            ),
-            "box_temparature": config.get(
-                'box_temparature',
+            temperature=config.get(
+                'temperature',
                 1,
             ),
-            "threshold": config.get(
-                'threshold',
-                None,
-            ),
-            "learnable_concept_embs": config.get(
-                'learnable_concept_embs',
-                True,
-            ),
-            "shared_attn_module": config.get(
-                'shared_attn_module',
-                False,
-            ),
-            "global_above_thresh": config.get(
-                'global_above_thresh',
-                True,
-            ),
-        }
-
-
-
-    elif config['architecture'] in [
-        'CertificateConceptEmbeddingModel',
-        'CertificateCEM',
-    ]:
-        task_loss_weight = config.get('task_loss_weight', 1)
-        model_cls = certificate_cem.CertificateConceptEmbeddingModel
-        extra_params = {
-            "emb_size": config["emb_size"],
-            "intervention_policy": intervention_policy,
-            "training_intervention_prob": config.get(
-                'training_intervention_prob',
-                0.25,
-            ),
-            "embedding_activation": config.get(
-                "embedding_activation",
-                "leakyrelu",
-            ),
-            "c2y_model": c2y_model,
-            "c2y_layers": config.get("c2y_layers", []),
-
-            "intervention_weight": config.get("intervention_weight", 5),
-            "horizon_rate": config.get("horizon_rate", 1.005),
-            "concept_map": config.get("concept_map", None),
-            "max_horizon": config.get("max_horizon", 6),
-            "include_only_last_trajectory_loss": config.get(
-                "include_only_last_trajectory_loss",
-                True,
-            ),
-            "intervention_task_loss_weight": config.get(
-                "intervention_task_loss_weight",
-                1,
-            ),
-            "initial_horizon": config.get("initial_horizon", 2),
-            "use_concept_groups": config.get("use_concept_groups", False),
-            "intervention_task_discount": config.get(
-                "intervention_task_discount",
-                config.get("intervention_task_discount", 1.1),
-            ),
-            "rollout_init_steps": config.get('rollout_init_steps', 0),
-            "int_model_layers": config.get("int_model_layers", None),
-            "int_model_use_bn": config.get("int_model_use_bn", False),
-            "num_rollouts": config.get("num_rollouts", 1),
-
-            # New parameters
-            "temperature": config.get('temperature', 1),
-            "initial_concept_embeddings": config.get(
-                'initial_concept_embeddings',
-                None,
-            ),
-            "fixed_embeddings": config.get('fixed_embeddings', False),
-            "ood_dropout_prob": config.get('ood_dropout_prob', 0),
-            "pooling_mode": config.get('pooling_mode', 'concat'),
-            "certificate_loss_weight": config.get('certificate_loss_weight', 0),
-            "selection_mode": config.get("selection_mode", "individual"),
-            "hard_eval_selection": config.get("hard_eval_selection", None),
-            "selection_sample": config.get("selection_sample", False),
-            "eval_majority_vote": config.get('eval_majority_vote', False),
-            "mixed_probs": config.get('mixed_probs', False),
-            "contrastive_reg": config.get('contrastive_reg', 0),
-            "global_ood_prob": config.get('global_ood_prob', 0),
-            "init_dyn_temps": config.get('init_dyn_temps', 1.5),
-            "init_global_temps": config.get('init_global_temps', 0.5),
-            "global_temp_reg": config.get('global_temp_reg', 0),
-            "max_temperature": config.get("max_temperature", 1),
-            "inference_dyn_prob": config.get('inference_dyn_prob', False),
-            "learnable_temps": config.get("learnable_temps", False),
-            "positive_calibration": config.get("positive_calibration", False),
-            "class_wise_temperature": config.get('class_wise_temperature', True),
-            "entire_global_prob": config.get('entire_global_prob', 0),
-            "counter_limit": config.get('counter_limit', 0),
-            "print_eval_only": config.get('print_eval_only', True),
-            "hard_selection_value": config.get('hard_selection_value', None),
-            "threshold_probs": config.get('threshold_probs', None),
-            "global_prediction_reg": config.get('global_prediction_reg', 0),
-            "hard_train_selection": config.get('hard_train_selection', None),
-            "train_prob_thresh": config.get('train_prob_thresh', None),
-            "random_selection_prob": config.get('random_selection_prob', 0),
-            "update_with_interventions": config.get('update_with_interventions', False),
-            "relative_max": config.get('relative_max', False),
-            "montecarlo_tries": config.get('montecarlo_tries', 20),
-            "global_dropout_only": config.get('global_dropout_only', False),
-            "output_uncertainty": config.get('output_uncertainty', False),
-
-            "ood_separator_loss_weight": config.get('ood_separator_loss_weight', 0),
-            "noise_level": config.get('noise_level', 0.5),
-            "shared_noise_separator": config.get('shared_noise_separator', True),
-        }
-
-
-
-    elif config['architecture'] in [
-        'MonteCarloIntCEM',
-        'MCIntCEM',
-    ]:
-        task_loss_weight = config.get('task_loss_weight', 1)
-        model_cls = mc_intcem.MonteCarloIntCEM
-        extra_params = {
-            "emb_size": config["emb_size"],
-            "intervention_policy": intervention_policy,
-            "training_intervention_prob": config.get(
-                'training_intervention_prob',
-                0.25,
-            ),
-            "embedding_activation": config.get(
-                "embedding_activation",
-                "leakyrelu",
-            ),
-            "c2y_model": c2y_model,
-            "c2y_layers": config.get("c2y_layers", []),
-
-            "intervention_weight": config.get("intervention_weight", 5),
-            "horizon_rate": config.get("horizon_rate", 1.005),
-            "concept_map": config.get("concept_map", None),
-            "max_horizon": config.get("max_horizon", 6),
-            "include_only_last_trajectory_loss": config.get(
-                "include_only_last_trajectory_loss",
-                True,
-            ),
-            "intervention_task_loss_weight": config.get(
-                "intervention_task_loss_weight",
-                1,
-            ),
-            "initial_horizon": config.get("initial_horizon", 2),
-            "use_concept_groups": config.get("use_concept_groups", False),
-            "intervention_task_discount": config.get(
-                "intervention_task_discount",
-                config.get("intervention_task_discount", 1.1),
-            ),
-            "rollout_init_steps": config.get('rollout_init_steps', 0),
-            "int_model_layers": config.get("int_model_layers", None),
-            "int_model_use_bn": config.get("int_model_use_bn", False),
-            "num_rollouts": config.get("num_rollouts", 1),
-
-            # New parameters
-            "initial_concept_embeddings": config.get('initial_concept_embeddings', None),
-            "fixed_embeddings": config.get('fixed_embeddings', False),
-            "ood_dropout_prob": config.get('ood_dropout_prob', 0),
-            "pooling_mode": config.get('pooling_mode', 'concat'),
-            "learnable_temps": config.get('learnable_temps', False),
-            "mixed_probs_coeff": config.get('mixed_probs_coeff', 0.5),
-            "anneal_rate": config.get('anneal_rate', 1),
-            "min_rate": config.get('min_rate', 0),
-            "all_intervened_loss_weight": config.get('all_intervened_loss_weight', 0),
-            "dynamic_confidence_scaling": config.get('dynamic_confidence_scaling', False),
-            "use_only_mean_probs": config.get('use_only_mean_probs', True),
-            "calibrate_concept_probs": config.get('calibrate_concept_probs', False),
-            "dyn_prob_with_global": config.get('dyn_prob_with_global', True),
-            "temperature": config.get('temperature', 1),
-            "scale_fn": config.get('scale_fn', 'original'),
-
-            # Debugging
-            "print_eval_only": config.get('print_eval_only', True),
-            "counter_limit": config.get('counter_limit', 0),
 
             # Monte carlo stuff
-            "deterministic": config.get('deterministic', False),
-            "montecarlo_train_tries": config.get('montecarlo_train_tries', 20),
-            "montecarlo_test_tries": config.get('montecarlo_test_tries', 20),
-            "output_uncertainty": config.get('output_uncertainty', False),
-            "inference_threshold": config.get('inference_threshold', True),
-        }
-
-
-    elif config['architecture'] in [
-        'GlobalApproxConceptEmbeddingModel',
-        'GlobalApproxCEM',
-    ]:
-        task_loss_weight = config.get('task_loss_weight', 1)
-        model_cls = models_global_approx.GlobalApproxConceptEmbeddingModel
-        extra_params = {
-            "emb_size": config["emb_size"],
-            "intervention_policy": intervention_policy,
-            "training_intervention_prob": config.get(
-                'training_intervention_prob',
-                0.25,
-            ),
-            "embedding_activation": config.get(
-                "embedding_activation",
-                "leakyrelu",
-            ),
-            "c2y_model": c2y_model,
-            "c2y_layers": config.get("c2y_layers", []),
-
-            "intervention_weight": config.get("intervention_weight", 5),
-            "horizon_rate": config.get("horizon_rate", 1.005),
-            "concept_map": config.get("concept_map", None),
-            "max_horizon": config.get("max_horizon", 6),
-            "include_only_last_trajectory_loss": config.get(
-                "include_only_last_trajectory_loss",
-                True,
-            ),
-            "intervention_task_loss_weight": config.get(
-                "intervention_task_loss_weight",
-                1,
-            ),
-            "initial_horizon": config.get("initial_horizon", 2),
-            "use_concept_groups": config.get("use_concept_groups", False),
-            "intervention_task_discount": config.get(
-                "intervention_task_discount",
-                config.get("intervention_task_discount", 1.1),
-            ),
-            "rollout_init_steps": config.get('rollout_init_steps', 0),
-            "int_model_layers": config.get("int_model_layers", None),
-            "int_model_use_bn": config.get("int_model_use_bn", False),
-            "num_rollouts": config.get("num_rollouts", 1),
-
-
-            # New parameters
-            "temperature": config.get('temperature', 1),
-            "n_concept_variants": config.get('n_concept_variants', 5),
-            "initial_concept_embeddings": config.get(
-                'initial_concept_embeddings',
-                None,
-            ),
-            "fixed_embeddings": config.get('fixed_embeddings', False),
-            "mode": config.get('mode', 'ood_same'),
-            "l2_dist_loss_weight": config.get('l2_dist_loss_weight', 0),
-            "compression_mode": config.get('compression_mode', 'learnt'),
-            "attention_fn": config.get('attention_fn', 'sigmoid'),
-            "use_dynamic_for_probs": config.get(
-                'use_dynamic_for_probs',
+            deterministic=config.get(
+                'deterministic',
                 False,
             ),
-            "log_thresholds": config.get(
-                "log_thresholds",
-                True,
-            ),
-            "distance_l2_loss": config.get(
-                'distance_l2_loss',
-                0,
-            ),
-
-            # OOD stuff
-            "thresh_l2_loss": config.get(
-                'thresh_l2_loss',
-                0,
-            ),
-            "ood_dropout_prob": config.get(
-                "ood_dropout_prob",
-                0,
-            ),
-            "approx_prediction_mode": config.get(
-                'approx_prediction_mode',
-                'same',
-            ),
-            "global_mixture_components": config.get(
-                'global_mixture_components',
-                None,
-            ),
-            "ood_loss_weight": config.get(
-                'ood_loss_weight',
-                0,
-            ),
-        }
-
-        run_name = config["run_name"]
-        split = config.get("split", 0)
-        if split is not None:
-            full_run_name = (
-                f"{run_name}_fold_{split + 1}"
-            )
-        else:
-            full_run_name = (
-                f"{run_name}"
-            )
-        result_dir = config.get("result_dir", ".")
-
-        gmm_model_path = os.path.join(
-            result_dir or ".",
-            f'{full_run_name}_GMM_model.pt'
-        )
-
-        if os.path.exists(gmm_model_path):
-            extra_params['gmms'] = joblib.load(gmm_model_path)
-
-        gmm_threshold_path = os.path.join(
-            result_dir or ".",
-            f'{full_run_name}_GMM_threshold.pt'
-        )
-        if os.path.exists(gmm_threshold_path):
-            extra_params['gmm_thresholds'] = joblib.load(gmm_threshold_path)
-
-        prob_gmm_model_path = os.path.join(
-            result_dir or ".",
-            f'{full_run_name}_Prob_GMM_model.pt'
-        )
-        if os.path.exists(prob_gmm_model_path):
-            extra_params['prob_gmms'] = joblib.load(prob_gmm_model_path)
-
-        prob_gmm_threshold_path = os.path.join(
-            result_dir or ".",
-            f'{full_run_name}_Prob_GMM_threshold.pt'
-        )
-        if os.path.exists(prob_gmm_threshold_path):
-            extra_params['prob_threshs'] = joblib.load(prob_gmm_threshold_path)
-
-
-    elif config["architecture"] in ["IntAwareMixCEM"]:
-        task_loss_weight = config.get('task_loss_weight', 1)
-        model_cls = backtrack.IntAwareMixCEM
-        extra_params = {
-            "emb_size": config["emb_size"],
-            "intervention_policy": intervention_policy,
-            "training_intervention_prob": config.get(
-                'training_intervention_prob',
-                0.25,
-            ),
-            "embedding_activation": config.get(
-                "embedding_activation",
-                "leakyrelu",
-            ),
-            "c2y_model": c2y_model,
-            "c2y_layers": config.get("c2y_layers", []),
-
-            "intervention_weight": config.get("intervention_weight", 5),
-            "horizon_rate": config.get("horizon_rate", 1.005),
-            "concept_map": config.get("concept_map", None),
-            "max_horizon": config.get("max_horizon", 6),
-            "include_only_last_trajectory_loss": config.get(
-                "include_only_last_trajectory_loss",
-                True,
-            ),
-            "intervention_task_loss_weight": config.get(
-                "intervention_task_loss_weight",
+            montecarlo_train_tries=config.get(
+                'montecarlo_train_tries',
                 1,
             ),
-            "initial_horizon": config.get("initial_horizon", 2),
-            "use_concept_groups": config.get("use_concept_groups", False),
-            "intervention_task_discount": config.get(
-                "intervention_task_discount",
-                config.get("intervention_task_discount", 1.1),
+            montecarlo_test_tries=config.get(
+                'montecarlo_test_tries',
+                50,
             ),
-            "rollout_init_steps": config.get('rollout_init_steps', 0),
-            "int_model_layers": config.get("int_model_layers", None),
-            "int_model_use_bn": config.get("int_model_use_bn", False),
-            "num_rollouts": config.get("num_rollouts", 1),
-
-
-
-            "fixed_embeddings": config.get('fixed_embeddings', False),
-            "initial_concept_embeddings": config.get(
-                'initial_concept_embeddings',
+            output_uncertainty=config.get(
+                'output_uncertainty',
+                False,
+            ),
+            hard_selection_value=config.get(
+                'hard_selection_value',
                 None,
             ),
-            "residual_scale": config.get('residual_scale', None),
-            "learnable_residual_scale": config.get('learnable_residual_scale', True),
-            "residual_scale_reg": config.get('residual_scale_reg', 0),
-            "sigmoidal_residual_scale": config.get('sigmoidal_residual_scale', False),
-            "residual_scale_norm_metric": config.get('residual_scale_norm_metric', 1),
-            "normalize_residual": config.get('normalize_residual', False),
-            "residual_nll_reg": config.get('residual_nll_reg', 0),
-            "fixed_residual_scale": config.get('fixed_residual_scale', None),
-            "intermediate_task_concept_loss": config.get('intermediate_task_concept_loss', 0),
-            "drop_residual_prob": config.get('drop_residual_prob', 0),
-            "scalar_residual": config.get('scalar_residual', False),
-            "sigmoidal_residual": config.get('sigmoidal_residual', False),
-            "use_distance_probs": config.get('use_distance_probs', False),
-        }
 
-    elif (
-        "AdversarialConceptBottleneckModel" in config["architecture"] or
-        "AdversarialCBM" in config["architecture"]
-    ):
-        model_cls = adversarial_cbm.AdversarialConceptBottleneckModel
-        extra_params = {
-            "bool": config["bool"],
-            "extra_dims": config["extra_dims"],
-            "sigmoidal_extra_capacity": config.get(
-                "sigmoidal_extra_capacity",
+            ##################################
+            # IntCEM-specific arguments
+            #################################
+
+            # Intervention-aware hyperparameters (NO intervention-aware loss
+            # is used by default)
+            intervention_task_discount=config.get(
+                'intervention_task_discount',
+                1,
+            ),
+            intervention_weight=config.get(
+                'intervention_weight',
+                0,
+            ),
+            concept_map=config.get(
+                'concept_map',
+                None,
+            ),
+            use_concept_groups=config.get(
+                'use_concept_groups',
                 True,
             ),
-            "sigmoidal_prob": config.get("sigmoidal_prob", True),
-            "intervention_policy": intervention_policy,
-            "bottleneck_nonlinear": config.get("bottleneck_nonlinear", None),
-            "active_intervention_values": active_intervention_values,
-            "inactive_intervention_values": inactive_intervention_values,
-            "x2c_model": x2c_model,
-            "c2y_model": c2y_model,
-            "c2y_layers": config.get("c2y_layers", []),
-            "discriminator_layers": config.get('discriminator_layers', []),
-            "discriminator_loss_weight": config.get('discriminator_loss_weight', 1),
-            "interleave_steps": config.get('interleave_steps', 5),
-        }
+            rollout_init_steps=config.get(
+                'rollout_init_steps',
+                0,
+            ),
+            int_model_layers=config.get(
+                'int_model_layers',
+                None,
+            ),
+            int_model_use_bn=config.get(
+                'int_model_use_bn',
+                False,
+            ),
+            num_rollouts=config.get(
+                'num_rollouts',
+                1,
+            ),
+            max_horizon=config.get(
+                'max_horizon',
+                1,
+            ),
+            initial_horizon=config.get(
+                'initial_horizon',
+                2,
+            ),
+            horizon_rate=config.get(
+                'horizon_rate',
+                1,
+            ),
+        )
 
     elif config["architecture"] in [
         "PCBM",
@@ -1241,322 +535,11 @@ def construct_model(
             ),
         }
 
-
-    elif "NewMixingConceptEmbeddingModel" in config["architecture"]:
-        if config['architecture'] == 'NeSyMixingConceptEmbeddingModel':
-            model_cls = models_mixcem.NeSyMixingConceptEmbeddingModel
-        else:
-            model_cls = models_mixcem.MixingConceptEmbeddingModel
-        extra_params = {
-            'rollout_init_steps': config.get('rollout_init_steps', 0),
-            'int_model_layers': config.get('int_model_layers', None),
-            'int_model_use_bn': config.get('int_model_use_bn', True),
-            'num_rollouts': config.get('num_rollouts', 1),
-            'intervention_discount': config.get('intervention_discount', 1),
-            'include_only_last_trajectory_loss': config.get('include_only_last_trajectory_loss', True),
-            'intervention_task_loss_weight': config.get('intervention_task_loss_weight', 1),
-            'intervention_weight': config.get('intervention_weight', 5),
-            'concept_map': config.get('concept_map', None),
-            'max_horizon': config.get('max_horizon', 6),
-            'initial_horizon': config.get('initial_horizon', 2),
-            'horizon_rate': config.get('horizon_rate', 1.005),
-
-
-            "emb_size": config["emb_size"],
-            "normalize_embs": config.get(
-                "normalize_embs",
-                False,
-            ),
-            "intermediate_task_concept_loss": config.get(
-                "intermediate_task_concept_loss",
-                0.0,
-            ),
-            "intervention_task_discount": config.get(
-                "intervention_task_discount",
-                1,
-            ),
-            "mix_ground_truth_embs": config.get(
-                "mix_ground_truth_embs",
-                True,
-            ),
-            "intervention_policy": intervention_policy,
-            "training_intervention_prob": config.get(
-                'training_intervention_prob',
-                0.25,
-            ),
-            "embedding_activation": config.get(
-                "embedding_activation",
-                None,
-            ),
-            "c2y_model": c2y_model,
-            "c2y_layers": config.get("c2y_layers", []),
-
-            "fixed_embeddings": config.get('fixed_embeddings', False),
-            "initial_concept_embeddings": config.get(
-                'initial_concept_embeddings',
-                None,
-            ),
-            "use_cosine_similarity": config.get('use_cosine_similarity', False),
-            "use_linear_emb_layer": config.get('use_linear_emb_layer', False),
-            "fixed_scale": config.get('fixed_scale', None),
-            "residual_scale": config.get('residual_scale', 1),
-            "conditional_residual": config.get('conditional_residual', False),
-            "residual_layers": config.get("residual_layers", []),
-            "bottleneck_pooling": config.get('bottleneck_pooling', 'concat'),
-            "per_concept_residual": config.get('per_concept_residual', False),
-            "shared_per_concept_residual": config.get('shared_per_concept_residual', False),
-            "sigmoidal_residual": config.get('sigmoidal_residual', False),
-            "residual_deviation": config.get('residual_deviation', False),
-            "warmup_mode": train and (config.get('blackbox_warmup_epochs', 0) > 0),
-            "include_bypass_model": (config.get('blackbox_warmup_epochs', 0) > 0),
-            "residual_norm_loss": config.get('residual_norm_loss', 0),
-            "learnable_residual_scale": config.get('learnable_residual_scale', False),
-            "sigmoidal_residual_scale": config.get('sigmoidal_residual_scale', False),
-            "learn_residual_embeddings": config.get("learn_residual_embeddings", False),
-            "residual_norm_metric": config.get('residual_norm_metric', 1),
-            "residual_scale_norm_metric": config.get('residual_scale_norm_metric', 1),
-            "noise_residual_embedings": config.get('noise_residual_embedings', False),
-            "dynamic_residual": config.get('dynamic_residual', False),
-            "learnable_distance_metric": config.get('learnable_distance_metric', False),
-            "learnable_prob_model": config.get('learnable_prob_model', False),
-            "residual_model_weight_l2_reg": config.get('residual_model_weight_l2_reg', 0),
-            "extra_capacity_dropout_prob": config.get('extra_capacity_dropout_prob', 0),
-            "extra_capacity": config.get("extra_capacity", 0),
-            "orthogonal_extra_capacity": config.get("orthogonal_extra_capacity", False),
-            "use_residual": config.get('use_residual', True),
-        }
-        # extra_params = {
-        #     "emb_size": config["emb_size"],
-        #     "normalize_embs": config.get(
-        #         "normalize_embs",
-        #         False,
-        #     ),
-        #     "intermediate_task_concept_loss": config.get(
-        #         "intermediate_task_concept_loss",
-        #         0.0,
-        #     ),
-        #     "intervention_task_discount": config.get(
-        #         "intervention_task_discount",
-        #         1,
-        #     ),
-        #     "mix_ground_truth_embs": config.get(
-        #         "mix_ground_truth_embs",
-        #         True,
-        #     ),
-        #     "intervention_policy": intervention_policy,
-        #     "training_intervention_prob": config.get(
-        #         'training_intervention_prob',
-        #         0.25,
-        #     ),
-        #     "embedding_activation": config.get(
-        #         "embedding_activation",
-        #         None,
-        #     ),
-        #     "c2y_model": c2y_model,
-        #     "c2y_layers": config.get("c2y_layers", []),
-
-        #     "fixed_embeddings": config.get('fixed_embeddings', False),
-        #     "initial_concept_embeddings": config.get(
-        #         'initial_concept_embeddings',
-        #         None,
-        #     ),
-        #     "use_cosine_similarity": config.get('use_cosine_similarity', False),
-        #     "use_linear_emb_layer": config.get('use_linear_emb_layer', False),
-        #     "fixed_scale": config.get('fixed_scale', None),
-        #     "residual_scale": config.get('residual_scale', 1),
-        #     "conditional_residual": config.get('conditional_residual', False),
-        #     "residual_layers": config.get("residual_layers", []),
-        #     "bottleneck_pooling": config.get('bottleneck_pooling', 'concat'),
-        #     "per_concept_residual": config.get('per_concept_residual', False),
-        #     "shared_per_concept_residual": config.get('shared_per_concept_residual', False),
-        #     "sigmoidal_residual": config.get('sigmoidal_residual', False),
-        #     "residual_deviation": config.get('residual_deviation', False),
-        #     "warmup_mode": train and (config.get('blackbox_warmup_epochs', 0) > 0),
-        #     "include_bypass_model": (config.get('blackbox_warmup_epochs', 0) > 0),
-        #     "residual_norm_loss": config.get('residual_norm_loss', 0),
-        #     "learnable_residual_scale": config.get('learnable_residual_scale', False),
-        #     "sigmoidal_residual_scale": config.get('sigmoidal_residual_scale', False),
-        #     "learn_residual_embeddings": config.get("learn_residual_embeddings", False),
-        #     "residual_norm_metric": config.get('residual_norm_metric', 1),
-        #     "residual_scale_norm_metric": config.get('residual_scale_norm_metric', 1),
-        #     "noise_residual_embedings": config.get('noise_residual_embedings', False),
-        #     "dynamic_residual": config.get('dynamic_residual', False),
-        #     "learnable_distance_metric": config.get('learnable_distance_metric', False),
-        #     "learnable_prob_model": config.get('learnable_prob_model', False),
-        #     "residual_model_weight_l2_reg": config.get('residual_model_weight_l2_reg', 0),
-        #     "extra_capacity_dropout_prob": config.get('extra_capacity_dropout_prob', 0),
-        #     "extra_capacity": config.get("extra_capacity", 0),
-        #     "orthogonal_extra_capacity": config.get("orthogonal_extra_capacity", False),
-        #     "use_residual": config.get('use_residual', True),
-        # }
-    elif config['architecture'] == "ProjectionConceptEmbeddingModel":
-        model_cls = direction_cem.ProjectionConceptEmbeddingModel
-        extra_params = {
-            'rollout_init_steps': config.get('rollout_init_steps', 0),
-            'int_model_layers': config.get('int_model_layers', None),
-            'int_model_use_bn': config.get('int_model_use_bn', True),
-            'num_rollouts': config.get('num_rollouts', 1),
-            'intervention_discount': config.get('intervention_discount', 1),
-            'include_only_last_trajectory_loss': config.get('include_only_last_trajectory_loss', True),
-            'intervention_task_loss_weight': config.get('intervention_task_loss_weight', 1),
-            'intervention_weight': config.get('intervention_weight', 5),
-            'concept_map': config.get('concept_map', None),
-            'max_horizon': config.get('max_horizon', 6),
-            'initial_horizon': config.get('initial_horizon', 2),
-            'horizon_rate': config.get('horizon_rate', 1.005),
-
-
-
-            "emb_size": config["emb_size"],
-            "normalize_embs": config.get(
-                "normalize_embs",
-                False,
-            ),
-            "intermediate_task_concept_loss": config.get(
-                "intermediate_task_concept_loss",
-                0.0,
-            ),
-            "intervention_task_discount": config.get(
-                "intervention_task_discount",
-                1,
-            ),
-            "mix_ground_truth_embs": config.get(
-                "mix_ground_truth_embs",
-                True,
-            ),
-            "intervention_policy": intervention_policy,
-            "training_intervention_prob": config.get(
-                'training_intervention_prob',
-                0.25,
-            ),
-            "embedding_activation": config.get(
-                "embedding_activation",
-                None,
-            ),
-            "c2y_model": c2y_model,
-            "c2y_layers": config.get("c2y_layers", []),
-
-            "fixed_embeddings": config.get('fixed_embeddings', False),
-            "initial_concept_embeddings": config.get(
-                'initial_concept_embeddings',
-                None,
-            ),
-            "use_cosine_similarity": config.get('use_cosine_similarity', False),
-            "use_linear_emb_layer": config.get('use_linear_emb_layer', False),
-            "fixed_scale": config.get('fixed_scale', None),
-            "residual_scale": config.get('residual_scale', 1),
-            "residual_layers": config.get("residual_layers", []),
-            "bottleneck_pooling": config.get('bottleneck_pooling', 'concat'),
-            "per_concept_residual": config.get('per_concept_residual', False),
-            "shared_per_concept_residual": config.get('shared_per_concept_residual', False),
-            "sigmoidal_residual": config.get('sigmoidal_residual', False),
-            "residual_deviation": config.get('residual_deviation', False),
-            "warmup_mode": train and (config.get('blackbox_warmup_epochs', 0) > 0),
-            "include_bypass_model": (config.get('blackbox_warmup_epochs', 0) > 0),
-            "residual_norm_loss": config.get('residual_norm_loss', 0),
-            "learnable_residual_scale": config.get('learnable_residual_scale', False),
-            "sigmoidal_residual_scale": config.get('sigmoidal_residual_scale', False),
-            "learn_residual_embeddings": config.get("learn_residual_embeddings", False),
-            "residual_norm_metric": config.get('residual_norm_metric', 1),
-            "residual_scale_norm_metric": config.get('residual_scale_norm_metric', 1),
-            "noise_residual_embedings": config.get('noise_residual_embedings', False),
-            "dynamic_residual": config.get('dynamic_residual', False),
-            "learnable_distance_metric": config.get('learnable_distance_metric', False),
-            "learnable_prob_model": config.get('learnable_prob_model', False),
-            "residual_model_weight_l2_reg": config.get('residual_model_weight_l2_reg', 0),
-            "extra_capacity": config.get("extra_capacity", 0),
-            "orthogonal_extra_capacity": config.get("orthogonal_extra_capacity", False),
-            "use_residual": config.get('use_residual', True),
-            "simplified_mode": config.get('simplified_mode', False),
-            "use_triplet_loss": config.get('use_triplet_loss', False),
-            "learnable_orthogonal_dir": config.get('learnable_orthogonal_dir', False),
-            "single_residual_vector": config.get('single_residual_vector', False),
-            "extra_capacity_dropout_prob": config.get('extra_capacity_dropout_prob', 0),
-
-            "adversary_loss_weight": config.get('adversary_loss_weight', 0),
-            "use_learnable_residual": config.get('use_learnable_residual', False),
-            "warmup_period": config.get('warmup_period', 0),
-            "sigmoidal_extra_capacity": config.get('sigmoidal_extra_capacity', True),
-            "conditional_residual": config.get('conditional_residual', True),
-            "use_learnable_prob": config.get('use_learnable_prob', False),
-            "dyn_scaling": config.get('dyn_scaling', 100),
-
-            "residual_weight_l2": config.get('residual_weight_l2', 0),
-            "residual_drop_prob": config.get('residual_drop_prob', 0),
-            "mix_residuals": config.get('mix_residuals', False),
-            "manual_residual_scale": config.get('manual_residual_scale', 1),
-            "residual_sep_loss": config.get('residual_sep_loss', 0),
-            "residual_ood_detection": config.get('residual_ood_detection', 1),
-        }
-
-
-    elif config['architecture'] == "DeferConceptEmbeddingModel":
-        model_cls = defer_cem.DeferConceptEmbeddingModel
-        extra_params = {
-            'rollout_init_steps': config.get('rollout_init_steps', 0),
-            'int_model_layers': config.get('int_model_layers', None),
-            'int_model_use_bn': config.get('int_model_use_bn', True),
-            'num_rollouts': config.get('num_rollouts', 1),
-            'intervention_discount': config.get('intervention_discount', 1),
-            'include_only_last_trajectory_loss': config.get('include_only_last_trajectory_loss', True),
-            'intervention_task_loss_weight': config.get('intervention_task_loss_weight', 1),
-            'intervention_weight': config.get('intervention_weight', 5),
-            'concept_map': config.get('concept_map', None),
-            'max_horizon': config.get('max_horizon', 6),
-            'initial_horizon': config.get('initial_horizon', 2),
-            'horizon_rate': config.get('horizon_rate', 1.005),
-
-
-
-
-            "emb_size": config["emb_size"],
-            "intervention_task_discount": config.get(
-                "intervention_task_discount",
-                1,
-            ),
-            "intervention_policy": intervention_policy,
-            "training_intervention_prob": config.get(
-                'training_intervention_prob',
-                0.25,
-            ),
-            "embedding_activation": config.get(
-                "embedding_activation",
-                None,
-            ),
-            "c2y_model": c2y_model,
-            "c2y_layers": config.get("c2y_layers", []),
-
-            "fixed_embeddings": config.get('fixed_embeddings', False),
-            "fixed_scale": config.get('fixed_scale', None),
-            "initial_concept_embeddings": config.get(
-                'initial_concept_embeddings',
-                None,
-            ),
-            "bottleneck_pooling": config.get('bottleneck_pooling', 'concat'),
-
-            'bottleneck_pooling': config.get('bottleneck_pooling', 'concat'),
-            'fixed_embeddings': config.get('fixed_embeddings', False),
-            'initial_concept_embeddings': config.get('initial_concept_embeddings', None),
-            'fixed_scale': config.get('fixed_scale', None),
-            'simplified_mode': config.get('simplified_mode', False),
-            'shared_emb_generator': config.get('shared_emb_generator', True),
-            'dynamic_ood_detection': config.get('dynamic_ood_detection', 1),
-            'dynamic_weights_reg': config.get('dynamic_weights_reg', 0),
-            'dynamic_weights_reg_norm': config.get('dynamic_weights_reg_norm', 2),
-            'dynamic_activations_reg': config.get('dynamic_activations_reg', 0),
-            'dynamic_activations_reg_norm': config.get('dynamic_activations_reg_norm', 2),
-            'dynamic_drop_prob': config.get('dynamic_drop_prob', 0),
-            'conditional_pred_mixture': config.get('conditional_pred_mixture', False),
-            'mode': config.get('mode', 'joint'),
-            "mixcem_c2y_scaling": config.get('mixcem_c2y_scaling', 1),
-            "dynamic_c2y_scaling": config.get('dynamic_c2y_scaling', 1),
-            "dyn_from_shared_space": config.get('dyn_from_shared_space', True),
-            "probability_mode": config.get('probability_mode', 'joint'),
-            "mix_before_predictor": config.get('mix_before_predictor', False),
-            "joint_model_pooling": config.get('joint_model_pooling', None),
-        }
-
-    elif config["architecture"] in ["FixedEmbConceptEmbeddingModel", "FixedConceptEmbeddingModel", "FixedCEM"]:
+    elif config["architecture"] in [
+        "FixedEmbConceptEmbeddingModel",
+        "FixedConceptEmbeddingModel",
+        "FixedCEM",
+    ]:
         model_cls = models_cem.FixedEmbConceptEmbeddingModel
         extra_params = {
             "emb_size": config["emb_size"],
@@ -1573,13 +556,15 @@ def construct_model(
             "c2y_model": c2y_model,
             "c2y_layers": config.get("c2y_layers", []),
             "fixed_embeddings": config.get("fixed_embeddings", True),
-            "initial_concept_embeddings": config.get("initial_concept_embeddings", None),
+            "initial_concept_embeddings": config.get(
+                "initial_concept_embeddings",
+                None,
+            ),
             "fixed_embeddings_always": config.get('fixed_embeddings_always', True),
         }
         if "embeding_activation" in config:
             # Legacy support for typo in argument
             extra_params["embedding_activation"] = config["embeding_activation"]
-
     else:
         raise ValueError(f'Invalid architecture "{config["architecture"]}"')
 
@@ -1613,7 +598,7 @@ def construct_model(
             if (task_class_weights is not None)
             else None
         ),
-        concept_loss_weight=config.get('concept_loss_weight', 0.01),
+        concept_loss_weight=config.get('concept_loss_weight', 1),
         task_loss_weight=task_loss_weight,
         learning_rate=config.get('learning_rate', 1e-3),
         weight_decay=config.get('weight_decay', 0),
@@ -1761,11 +746,20 @@ def load_trained_model(
         ((intervention_policy is not None) or intervene) and
         (train_dl is not None) and (
             (
-                (config['architecture'] in ["ConceptBottleneckModel", "CBM"]) and
-                (not config.get('sigmoidal_prob', True))
+                (
+                    config['architecture'] in ["ConceptBottleneckModel", "CBM"]
+                ) and
+                (
+                    not config.get('sigmoidal_prob', True)
+                )
             ) or
-            (config['architecture'] in ["PosthocConceptBottleneckModel", "PCBM", "PosthocCBM"])
-            # (config['architecture'] in ["FixedEmbConceptEmbeddingModel", "FixedCEM", "FixedEmbConceptEmbeddingModel"])
+            (
+                config['architecture'] in [
+                    "PosthocConceptBottleneckModel",
+                    "PCBM",
+                    "PosthocCBM",
+                ]
+            )
         )
     ):
         # Then let's look at the empirical distribution of the logits in order

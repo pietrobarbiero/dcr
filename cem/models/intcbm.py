@@ -1081,6 +1081,11 @@ class IntAwareConceptEmbeddingModel(
 
         bottleneck_size=None,
     ):
+        """
+        Official implementation of an IntCEM model by Espinosa Zarlenga et al. (https://arxiv.org/abs/2309.16928).
+        Please see README of repository for documentation on this class's
+        arguments.
+        """
         self._intervention_idxs = None
         self.task_loss_weight = task_loss_weight
         self.num_rollouts = num_rollouts

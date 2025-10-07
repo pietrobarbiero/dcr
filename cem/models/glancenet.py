@@ -75,9 +75,6 @@ def update_osr_thresholds(
     model.thr_rec.data = torch.tensor(thr_rec, device=device)
     model.thr_y.data = thr_y.to(device)
 
-    print(f"Set model.thr_rec to: {model.thr_rec.item():.4f}")
-    print(f"Set model.thr_y to: {model.thr_y.tolist()}")
-
 
 ################################################################################
 ## GlanceNets
@@ -127,7 +124,15 @@ class GlanceNet(ConceptBottleneckModel):
         top_k_accuracy=None,
     ):
         """
-        TODO
+        Implementation of a GlanceNet by Marconato et al. (https://arxiv.org/abs/2205.15612).
+        For this implementation, we tried to stick as closely as possible to the
+        original implementation of the authors (found here: https://github.com/ema-marconato/glancenet),
+        changing things only so that the model fits the interfaces and infrastructure
+        used in our experimentation pipeline.
+
+        IMPORTANT NOTE: This implementation has not been heavily tested, so
+        there is a high chance it is buggy (hence why we don't advertise it
+        yet). Please use at your own risk.
         """
         pl.LightningModule.__init__(self)
         self.n_concepts = n_concepts
@@ -309,7 +314,6 @@ class GlanceNet(ConceptBottleneckModel):
                 x.view(x.size(0), -1),
             )
             recon_losses = torch.mean(recon_losses)
-            # print("recon_losses =", recon_losses)
             loss += recon_losses
 
         # And align the prior distribution using the same approach
@@ -330,18 +334,12 @@ class GlanceNet(ConceptBottleneckModel):
                 concepts,
                 c,
             )
-            # print("prior_loss =", prior_loss)
             loss += self.prior_loss_weight * prior_loss
 
         if (self.beta != 0) and (self._means is not None) and (
             self._logvars is not None
         ):
             # Then add the KL divergence loss
-            # y_onehot = F.one_hot(y, self.n_tasks).to(
-            #     dtype=torch.float,
-            #     device=y.device,
-            # )
-            # mu_target = self.enc_z_from_y(y_onehot)
             mu_target = self.enc_z_from_y(y)
             kl_loss = (
                 -0.5 * torch.sum(
@@ -350,7 +348,6 @@ class GlanceNet(ConceptBottleneckModel):
                     self._logvars.exp()
                 )
             )
-            # print("kl_loss =", self.beta * kl_loss)
             loss += self.beta * kl_loss
         return loss
 
@@ -396,8 +393,6 @@ class GlanceNet(ConceptBottleneckModel):
             pred_class = torch.argmax(y_pred, dim=1)
 
         # Get prototype latent vectors
-        # y_onehot = F.one_hot(pred_class, num_classes=self.n_tasks).float().to(x.device)
-        # z_proto = self.enc_z_from_y(y_onehot)  # shape: [batch_size, z_dim]
         z_proto = self.enc_z_from_y(pred_class)  # shape: [batch_size, z_dim]
 
         # Compute distances to prototype

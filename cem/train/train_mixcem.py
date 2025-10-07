@@ -10,24 +10,28 @@ import torch
 from pytorch_lightning import seed_everything
 
 import cem.train.utils as utils
+import cem.utils.data as data_utils
 
 from cem.models.construction import construct_model
 
 import cem.train.evaluate as evaluate
-from cem.train.training import _make_callbacks, _check_interruption, _restore_checkpoint
+from cem.train.training import (
+    _make_callbacks, _check_interruption, _restore_checkpoint
+)
+
 
 ################################################################################
 ## MODEL TRAINING
 ################################################################################
 
 def train_mixcem(
-    input_shape,
     n_concepts,
     n_tasks,
     config,
     train_dl,
-    val_dl,
-    run_name,
+    val_dl=None,
+    run_name=None,
+    input_shape=None,
     result_dir=None,
     split=None,
     imbalance=None,
@@ -37,8 +41,6 @@ def train_mixcem(
     project_name='',
     seed=None,
     save_model=True,
-    activation_freq=0,
-    single_frequency_epochs=0,
     gradient_clip_val=0,
     old_results=None,
     enable_checkpointing=False,
@@ -51,6 +53,9 @@ def train_mixcem(
     )
     if seed is not None:
         seed_everything(seed)
+
+    if run_name is None:
+        run_name = "MixCEM"
 
     if split is not None:
         full_run_name = (
@@ -92,9 +97,19 @@ def train_mixcem(
                 torch.load(config.get("model_pretrain_path")),
                 strict=False,
             )
-
+    if config.get('load_weights_from'):
+        load_file_name = os.path.join(
+            result_dir,
+            f'{config["load_weights_from"]}_fold_{split + 1}.pt',
+        )
+    else:
+        load_file_name = os.path.join(result_dir, f'{full_run_name}.pt')
+    model_saved_path = os.path.join(
+        result_dir or ".",
+        f'{full_run_name}.pt'
+    )
     if (project_name) and result_dir and (
-        not os.path.exists(os.path.join(result_dir, f'{full_run_name}.pt'))
+        not os.path.exists(load_file_name)
     ):
         # Lazy import to avoid importing unless necessary
         import wandb
@@ -109,384 +124,260 @@ def train_mixcem(
 
     with enter_obj as run:
         # Else it is time to train it
-        model_saved_path = os.path.join(
-            result_dir or ".",
-            f'{full_run_name}.pt'
-        )
-        if (not rerun) and os.path.exists(model_saved_path):
+        if (not rerun) and os.path.exists(load_file_name):
             # Then we simply load the model and proceed
             print("\tFound cached model... loading it")
-            model.load_state_dict(torch.load(model_saved_path))
+            model.load_state_dict(torch.load(load_file_name))
             if os.path.exists(
-                model_saved_path.replace(".pt", "_training_times.npy")
+                load_file_name.replace(".pt", "_training_times.npy")
             ):
                 [training_time, num_epochs] = np.load(
-                    model_saved_path.replace(".pt", "_training_times.npy"),
+                    load_file_name.replace(".pt", "_training_times.npy"),
                 )
             else:
                 training_time, num_epochs = 0, 0
         else:
             training_time = 0
             num_epochs = 0
-
-            ####################################################################
-            ## Step 0: Blackbox Warmup
-            ####################################################################
-            if hasattr(model, 'adversary_loss_weight'):
-                prev_adversary_loss_weight = model.adversary_loss_weight
-                model.adversary_loss_weight = 0
-            start_time = time.time()
-            blackbox_warmup_epochs = config.get('blackbox_warmup_epochs', 0)
-            if blackbox_warmup_epochs:
-                print(
-                    f"\tTraining entire model as a blackbox model for {blackbox_warmup_epochs} epochs"
+            load_path_name = config.get('load_path_name', None)
+            loaded_weights = False
+            if load_path_name:
+                load_path_name = os.path.join(
+                    result_dir,
+                    load_path_name + f"_fold_{split + 1}.pt",
                 )
-                if (not rerun) and "warmup_model_path" in config and (
-                    os.path.exists(os.path.join(
-                        result_dir,
-                        f'{config["warmup_model_path"]}.pt'
-                    ))
-                ):
-                    warmup_model_saved_path = os.path.join(
-                        result_dir,
-                        f'{config["warmup_model_path"]}.pt'
-                    )
-                    # Then we simply load the model and proceed
-                    print("\tFound cached warmup model... loading it")
-                    model.load_state_dict(torch.load(warmup_model_saved_path), strict=False)
-                else:
-                    warmup_callbacks, warmup_ckpt_call = _make_callbacks(
-                        config,
-                        result_dir,
-                        full_run_name,
-                    )
-                    prev_task_loss_weight = model.task_loss_weight
-                    prev_concept_loss_weight = model.concept_loss_weight
-                    prev_intervention_task_discount = model.intervention_task_discount
-                    model.intervention_task_discount = 1
-                    prev_intervention_weight = model.intervention_weight
-                    model.intervention_weight = 0
-                    model.task_loss_weight = 1
-                    model.concept_loss_weight = 0
-                    model.warmup_mode = True
-                    opt_configs = model.configure_optimizers()
-                    warmup_trainer = pl.Trainer(
-                        accelerator=accelerator,
-                        devices=devices,
-                        max_epochs=blackbox_warmup_epochs,
-                        check_val_every_n_epoch=config.get("check_val_every_n_epoch", 5),
-                        callbacks=warmup_callbacks,
-                        logger=logger or False,
-                        enable_checkpointing=enable_checkpointing,
-                        gradient_clip_val=gradient_clip_val,
-                    )
-                    warmup_trainer.fit(model, train_dl, val_dl)
-                    _check_interruption(warmup_trainer)
-                    _restore_checkpoint(
-                        model=model,
-                        max_epochs=blackbox_warmup_epochs,
-                        ckpt_call=warmup_ckpt_call,
-                        trainer=warmup_trainer,
-                    )
-                    training_time += time.time() - start_time
-                    num_epochs += warmup_trainer.current_epoch
-                    start_time = time.time()
-                    print(
-                        f"\t\tDone after {num_epochs} epochs and {training_time} secs"
-                    )
+            if load_path_name and os.path.exists(load_path_name):
+                # Then we simply load the model and proceed
+                print(
+                    "\tFound model weights to load from for the initial "
+                    "finetuning!"
+                )
+                model.load_state_dict(torch.load(load_path_name))
+                loaded_weights = True
 
-                    # Restore state
-                    model.task_loss_weight = prev_task_loss_weight
-                    model.concept_loss_weight = prev_concept_loss_weight
-                    model.intervention_task_discount = prev_intervention_task_discount
-                    model.intervention_weight = prev_intervention_weight
-                    model.warmup_mode = False
-
-
-                    # Restart the optimizer state!
-                    opts = model.optimizers()
-                    opts.load_state_dict(opt_configs['optimizer'].state_dict())
-                    if 'lr_scheduler' in opt_configs:
-                        lr_scheduler = model.lr_schedulers()
-                        lr_scheduler.load_state_dict(opt_configs['lr_scheduler'].state_dict())
-                        lr_scheduler._reset()
-
-                    if "warmup_model_path" in config:
-                        Warmup_model_saved_path = os.path.join(
-                            result_dir or ".",
-                            f'{config["warmup_model_path"]}.pt'
-                        )
-                        torch.save(
-                            model.state_dict(),
-                            Warmup_model_saved_path,
-                        )
 
             ####################################################################
-            ## Step 1: Train the concept model
+            ## Step 1: Train the end-to-end-model
             ####################################################################
 
             start_time = time.time()
-            concept_epochs = config.get('concept_epochs', 0)
-            model.warmup_mode = False
-            if concept_epochs:
+            max_epochs = config.get('max_epochs', 100)
+            if (not loaded_weights) and max_epochs:
                 print(
-                    f"\tTraining up concept generator for {concept_epochs} epochs"
+                    f"\tTraining up the end-to-end model for {max_epochs} "
+                    f"epochs"
                 )
 
                 # Else it is time to train it
-                if (not rerun) and "concept_model_path" in config and (
+                if (not rerun) and "end_to_end_model_path" in config and (
                     os.path.exists(os.path.join(
                         result_dir,
-                        f'{config["concept_model_path"]}.pt'
+                        f'{config["end_to_end_model_path"]}.pt'
                     ))
                 ):
-                    concept_model_saved_path = os.path.join(
+                    e2e_model_saved_path = os.path.join(
                         result_dir or ".",
-                        f'{config["concept_model_path"]}.pt'
+                        f'{config["end_to_end_model_path"]}.pt'
                     )
                     # Then we simply load the model and proceed
                     print("\tFound cached concept model... loading it")
-                    state_dict = torch.load(concept_model_saved_path)
-                    ignored = set()
-                    for name, _ in state_dict.items():
-                        if name.startswith('c2y_model') or name.startswith('concept_rank_model'):
-                            ignored.add(name)
-                    state_dict = {k:v for k, v in state_dict.items() if k not in ignored}
+                    state_dict = torch.load(e2e_model_saved_path)
                     model.load_state_dict(state_dict, strict=False)
                 else:
-                    if config.get('fix_backbone_for_concept', False):
-                        model.freeze_backbone(freeze_emb_generators=config.get('freeze_emb_generators_for_concept', True))
-                    concept_callbacks, concept_ckpt_call = _make_callbacks(
+                    print(
+                        "[Number of parameters in model",
+                        sum(
+                            p.numel() for p in model.parameters()
+                            if p.requires_grad
+                        ),
+                        "]"
+                    )
+                    print(
+                        "[Number of non-trainable parameters in model",
+                        sum(
+                            p.numel() for p in model.parameters()
+                            if not p.requires_grad
+                        ),
+                        "]",
+                    )
+                    e2e_callbacks, e2e_ckpt_call = _make_callbacks(
                         config,
                         result_dir,
                         full_run_name,
                     )
-                    prev_task_loss_weight = model.task_loss_weight
-                    prev_concept_loss_weight = model.concept_loss_weight
-                    prev_num_rollouts = model.num_rollouts
-                    prev_training_intervention_prob = model.training_intervention_prob
-                    model.num_rollouts = 0
-                    model.task_loss_weight = 0
-                    model.concept_loss_weight = 1
-                    model.training_intervention_prob = 0
                     opt_configs = model.configure_optimizers()
-                    concept_trainer = pl.Trainer(
+                    e2e_trainer = pl.Trainer(
                         accelerator=accelerator,
                         devices=devices,
-                        max_epochs=concept_epochs,
-                        check_val_every_n_epoch=config.get("check_val_every_n_epoch", 5),
-                        callbacks=concept_callbacks,
+                        max_epochs=max_epochs,
+                        check_val_every_n_epoch=config.get(
+                            "check_val_every_n_epoch",
+                            5,
+                        ),
+                        callbacks=e2e_callbacks,
                         logger=logger or False,
                         enable_checkpointing=enable_checkpointing,
                         gradient_clip_val=gradient_clip_val,
                     )
-                    concept_trainer.fit(model, train_dl, val_dl)
-                    _check_interruption(concept_trainer)
+                    if val_dl is not None:
+                        e2e_trainer.fit(model, train_dl, val_dl)
+                    else:
+                        e2e_trainer.fit(model, train_dl)
+                    _check_interruption(e2e_trainer)
                     _restore_checkpoint(
                         model=model,
-                        max_epochs=concept_epochs,
-                        ckpt_call=concept_ckpt_call,
-                        trainer=concept_trainer,
+                        max_epochs=max_epochs,
+                        ckpt_call=e2e_ckpt_call,
+                        trainer=e2e_trainer,
                     )
                     # Restart the optimizer state!
                     opts = model.optimizers()
                     opts.load_state_dict(opt_configs['optimizer'].state_dict())
                     if 'lr_scheduler' in opt_configs:
                         lr_scheduler = model.lr_schedulers()
-                        lr_scheduler.load_state_dict(opt_configs['lr_scheduler'].state_dict())
+                        lr_scheduler.load_state_dict(
+                            opt_configs['lr_scheduler'].state_dict()
+                        )
                         lr_scheduler._reset()
 
-                    model.task_loss_weight = prev_task_loss_weight
-                    model.concept_loss_weight = prev_concept_loss_weight
-                    model.training_intervention_prob = prev_training_intervention_prob
-                    model.num_rollouts = prev_num_rollouts
-                    if config.get('fix_backbone_for_concept', False):
-                        model.unfreeze_backbone()
-
                     training_time += time.time() - start_time
-                    num_epochs += concept_trainer.current_epoch
+                    num_epochs += e2e_trainer.current_epoch
                     start_time = time.time()
                     print(
-                        f"\t\tDone after {num_epochs} epochs and {training_time} secs"
+                        f"\t\tDone after {num_epochs} epochs "
+                        f"and {training_time} secs"
                     )
 
-                    if "conceptxl_path" in config:
-                        concept_model_saved_path = os.path.join(
+                    if "end_to_end_model_path" in config:
+                        e2e_model_saved_path = os.path.join(
                             result_dir or ".",
-                            f'{config["concept_model_path"]}.pt'
+                            f'{config["end_to_end_model_path"]}.pt'
                         )
                         torch.save(
                             model.state_dict(),
-                            concept_model_saved_path,
+                            e2e_model_saved_path,
                         )
 
+            if config.get('freeze_global_components', False):
+                model.unfreeze_global_components()
+
+            eval_trainer = pl.Trainer(
+                accelerator=accelerator,
+                devices=devices,
+                logger=False,
+            )
+
             ####################################################################
-            ## Step 2: Train the end-to-end model without any residual
+            ## Step 2: Calibrate logits (DONE by default)
             ####################################################################
 
             start_time = time.time()
-            no_residual_epochs = config.get('no_residual_epochs', 0)
-            if no_residual_epochs:
+            calibration_epochs = config.get('calibration_epochs', 30)
+            include_calibration = not (loaded_weights and config.get(
+                'no_calibration_if_found',
+                False,
+            ))
+            if include_calibration and calibration_epochs:
                 print(
-                    f"\tTraining end-to-end model WITHOUT residual for {no_residual_epochs} epochs"
+                    f"\tCalibrating model for {calibration_epochs} epochs"
                 )
-                # Setup
-                model.freeze_residual()
-                if config.get('fix_concept_embeddings_for_no_res', False):
-                    model.freeze_concept_embeddings()
-                if config.get('fix_backbone_for_no_res', False):
-                    model.freeze_backbone(freeze_emb_generators=config.get('freeze_emb_generators_for_no_res', True))
-                    if config.get('fix_concept_embeddings_for_no_res', False) and (
-                        config.get('freeze_emb_generators_for_no_res', True)
-                    ):
-                        # Then there is no point in having a concept loss cause
-                        # everything is frozen
-                        prev_task_loss_weight = model.task_loss_weight
-                        prev_concept_loss_weight = model.concept_loss_weight
-                        model.task_loss_weight = 1
-                        model.concept_loss_weight = 0
-                if config.get('use_ground_truth_mixing_for_no_res', False):
-                    # Then we will make sure we use ground truth concepts when
-                    # mixing embeddings
-                    prev_training_intervention_prob = model.training_intervention_prob
-                    model.training_intervention_prob = 1
+                trainable_params = set()
+                for name, param in model.named_parameters():
+                    if param.requires_grad:
+                        trainable_params.add(name)
+                        param.requires_grad = False
+                model.unfreeze_calibration_components(
+                    unfreeze_dynamic=config.get(
+                        'calibrate_dynamic_logits',
+                        True,
+                    ),
+                    unfreeze_global=config.get(
+                        'calibrate_global_logits',
+                        True,
+                    ),
+                )
 
-                # Training
-                no_residual_callbacks, no_residual_ckpt_call = _make_callbacks(config, result_dir, full_run_name)
+                if config.get('ignore_task_acc_in_calibration', False):
+                    prev_task_loss_weight = model.task_loss_weight
+                    model.task_loss_weight = 0
+                    prev_all_intervened_loss_weight = model.all_intervened_loss_weight
+                    model.all_intervened_loss_weight = 0
+
+                calibration_callbacks, calibration_ckpt_call = \
+                    _make_callbacks(
+                        config,
+                        result_dir,
+                        full_run_name,
+                    )
+                print(
+                    "[Number of parameters in model",
+                    sum(
+                        p.numel() for p in model.parameters()
+                        if p.requires_grad
+                    ),
+                    "]"
+                )
+                print(
+                    "[Number of non-trainable parameters in model",
+                    sum(
+                        p.numel() for p in model.parameters()
+                        if not p.requires_grad
+                    ),
+                    "]",
+                )
                 opt_configs = model.configure_optimizers()
-                no_residual_trainer = pl.Trainer(
+                calibration_trainer = pl.Trainer(
                     accelerator=accelerator,
                     devices=devices,
-                    max_epochs=no_residual_epochs,
-                    check_val_every_n_epoch=config.get("check_val_every_n_epoch", 5),
-                    callbacks=no_residual_callbacks,
+                    max_epochs=calibration_epochs,
+                    check_val_every_n_epoch=config.get(
+                        "check_val_every_n_epoch",
+                        5,
+                    ),
+                    callbacks=calibration_callbacks,
                     logger=logger or False,
                     enable_checkpointing=enable_checkpointing,
                     gradient_clip_val=gradient_clip_val,
                 )
-                no_residual_trainer.fit(model, train_dl, val_dl)
-                _check_interruption(no_residual_trainer)
+
+                # Train it on the validation set!
+                if config.get('finetune_with_val', True) and (
+                    val_dl is not None
+                ):
+                    calibration_trainer.fit(model, val_dl, val_dl)
+                else:
+                    calibration_trainer.fit(model, train_dl)
+                _check_interruption(calibration_trainer)
                 training_time += time.time() - start_time
-                num_epochs += no_residual_trainer.current_epoch
+                num_epochs += calibration_trainer.current_epoch
                 _restore_checkpoint(
                     model=model,
-                    max_epochs=no_residual_epochs,
-                    ckpt_call=no_residual_ckpt_call,
-                    trainer=no_residual_trainer,
+                    max_epochs=calibration_epochs,
+                    ckpt_call=calibration_ckpt_call,
+                    trainer=calibration_trainer,
                 )
-                # Restart the optimizer state!
-                opts = model.optimizers()
-                opts.load_state_dict(opt_configs['optimizer'].state_dict())
-                if 'lr_scheduler' in opt_configs:
-                    lr_scheduler = model.lr_schedulers()
-                    lr_scheduler.load_state_dict(opt_configs['lr_scheduler'].state_dict())
-                    lr_scheduler._reset()
+                if config.get('ignore_task_acc_in_calibration', False):
+                    model.task_loss_weight = prev_task_loss_weight
+                    model.all_intervened_loss_weight = \
+                        prev_all_intervened_loss_weight
 
-                # And recover the state of the model
-                model.unfreeze_residual()
-                if config.get('fix_concept_embeddings_for_no_res', False):
-                    model.unfreeze_concept_embeddings()
-                if config.get('fix_backbone_for_no_res', False):
-                    model.unfreeze_backbone()
-                    if config.get('fix_concept_embeddings_for_no_res', False) and (
-                        config.get('freeze_emb_generators_for_no_res', True)
-                    ):
-                        model.task_loss_weight = prev_task_loss_weight
-                        model.concept_loss_weight = prev_concept_loss_weight
-                if config.get('use_ground_truth_mixing_for_no_res', False):
-                    # Then we will make sure we use ground truth concepts when
-                    # mixing embeddings
-                    model.training_intervention_prob = prev_training_intervention_prob
+                # And restore the state
+                model.hard_selection_value = None
+                for name, param in model.named_parameters():
+                    param.requires_grad = name in trainable_params
 
 
-
-
-            ####################################################################
-            ## Step 3: Train the end-to-end model with residual
-            ####################################################################
-            # Also include here any adversarial bits
-            if hasattr(model, 'adversary_loss_weight'):
-                model.adversary_loss_weight = prev_adversary_loss_weight
-
-            start_time = time.time()
-            e2e_epochs = config.get('e2e_epochs', 0)
-            if e2e_epochs:
-                print(
-                    f"\tTraining end-to-end model WITH residual for {e2e_epochs} epochs"
-                )
-                # Setup
-                if config.get('fix_backbone_for_res', False):
-                    model.freeze_backbone(freeze_emb_generators=config.get('freeze_emb_generators_for_res', True))
-                if config.get('fix_concept_embeddings_for_res', False):
-                    model.freeze_concept_embeddings()
-                    if config.get('fix_backbone_for_res', False) and (
-                        config.get('freeze_emb_generators_for_res', True)
-                    ):
-                        # Then there is no point in having a concept loss cause
-                        # everything is frozen
-                        prev_task_loss_weight = model.task_loss_weight
-                        prev_concept_loss_weight = model.concept_loss_weight
-                        model.task_loss_weight = 1
-                        model.concept_loss_weight = 0
-                if config.get('fix_label_predictor_for_res', False):
-                    model.freeze_label_predictor()
-                if config.get('use_ground_truth_mixing_for_res', False):
-                    # Then we will make sure we use ground truth concepts when
-                    # mixing embeddings
-                    prev_training_intervention_prob = model.training_intervention_prob
-                    model.training_intervention_prob = 1
-
-
-                e2e_callbacks, e2e_ckpt_call = _make_callbacks(config, result_dir, full_run_name)
-                opt_configs = model.configure_optimizers()
-                e2e_trainer = pl.Trainer(
-                    accelerator=accelerator,
-                    devices=devices,
-                    max_epochs=e2e_epochs,
-                    check_val_every_n_epoch=config.get("check_val_every_n_epoch", 5),
-                    callbacks=e2e_callbacks,
-                    logger=logger or False,
-                    enable_checkpointing=enable_checkpointing,
-                    gradient_clip_val=gradient_clip_val,
-                )
-                e2e_trainer.fit(model, train_dl, val_dl)
-                _check_interruption(e2e_trainer)
-                training_time += time.time() - start_time
-                num_epochs += e2e_trainer.current_epoch
-                _restore_checkpoint(
-                    model=model,
-                    max_epochs=e2e_epochs,
-                    ckpt_call=e2e_ckpt_call,
-                    trainer=e2e_trainer,
-                )
-
-                # And undo any changes needed just for this stage
-                if config.get('fix_backbone_for_res', False):
-                    model.unfreeze_backbone()
-                if config.get('fix_concept_embeddings_for_res', False):
-                    model.unfreeze_concept_embeddings()
-                    if config.get('fix_backbone_for_res', False) and (
-                        config.get('freeze_emb_generators_for_res', True)
-                    ):
-                        model.task_loss_weight = prev_task_loss_weight
-                        model.concept_loss_weight = prev_concept_loss_weight
-                if config.get('fix_label_predictor_for_res', False):
-                    model.unfreeze_label_predictor()
-                if config.get('use_ground_truth_mixing_for_res', False):
-                    # Then we will make sure we use ground truth concepts when
-                    # mixing embeddings
-                    model.training_intervention_prob = prev_training_intervention_prob
-
-
-            if save_model and (result_dir is not None):
-                torch.save(
-                    model.state_dict(),
-                    model_saved_path,
-                )
-                np.save(
-                    model_saved_path.replace(".pt", "_training_times.npy"),
-                    np.array([training_time, num_epochs]),
-                )
+        if save_model and (result_dir is not None) and (
+            not os.path.exists(model_saved_path)
+        ):
+            torch.save(
+                model.state_dict(),
+                model_saved_path,
+            )
+            np.save(
+                model_saved_path.replace(".pt", "_training_times.npy"),
+                np.array([training_time, num_epochs]),
+            )
 
 
         if not os.path.exists(os.path.join(
@@ -503,9 +394,6 @@ def train_mixcem(
                 result_dir,
                 f'{run_name}_experiment_config.joblib'
             ))
-
-        if config.get('drop_residual', False):
-            model.manual_residual_scale = 0
 
         eval_trainer = pl.Trainer(
             accelerator=accelerator,

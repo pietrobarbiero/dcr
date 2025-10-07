@@ -1,12 +1,10 @@
 """
-Dataloader our synthetic traffic dataset
+Dataloader the synthetic traffic dataset described in PyC (https://pyc-team.github.io/pyc-book/intro.html)
 """
 import numpy as np
 import os
 import torch
-import torchvision.transforms as transforms
 
-from functools import reduce
 from pytorch_lightning import seed_everything
 from torch.utils.data import Dataset, Subset, DataLoader
 
@@ -193,7 +191,7 @@ def load_data(
     additional_sample_transform=None,
 ):
     """
-    TODO
+    Loader for the synthetic Traffic dataset.
     """
     dataset = TrafficDataset(
         split=split,

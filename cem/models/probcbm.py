@@ -655,6 +655,7 @@ class ProbConceptModel(ConceptConvModelBase):
 
 class ProbCBM(ProbConceptModel, ConceptBottleneckModel):
     """
+    Implementation of a ProbCBM by Kim et al. (https://arxiv.org/abs/2306.01574).
     Code adapted from Kim et al.'s
     https://github.com/ejkim47/prob-cbm/blob/main/models/build_model_resnset.py
     """

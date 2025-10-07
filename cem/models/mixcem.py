@@ -1,169 +1,25 @@
 import numpy as np
-import pytorch_lightning as pl
-import scipy
-import sklearn.metrics
 import torch
-import math
 
 from torchvision.models import resnet50
 
-from cem.metrics.accs import compute_accuracy
-from cem.models.cem import ConceptEmbeddingModel
-from cem.models.intcbm import IntAwareConceptEmbeddingModel
 import cem.train.utils as utils
-
-def log(x):
-    return torch.log(x + 1e-6)
-
-def Gaussian_CDF(x): #change from erf function
-    return 0.5 * (1. + torch.erf(x / np.sqrt(2.)))
+from cem.models.intcbm import IntAwareConceptEmbeddingModel
 
 
-def _binary_entropy(probs):
-    return -probs * torch.log2(probs) - (1 - probs) * torch.log2(1 - probs)
-
-
-
-
-
-
-
-class TransposeLayer(torch.nn.Module):
-    def __init__(self):
-        super().__init__()
-
-    def forward(self, input):
-        return torch.transpose(input, -2, -1)
-
-class VectorLinear(torch.nn.Module):
-
-    def __init__(
-        self,
-        in_embs: int,
-        emb_size: int,
-        dim,
-        bias: bool = True,
-        device=None,
-        dtype=None,
-    ) -> None:
-        factory_kwargs = {"device": device, "dtype": dtype}
-        super().__init__()
-        self.in_embs = in_embs
-        self.dim = dim
-        self.emb_size = emb_size
-        self.weight = torch.nn.Parameter(
-            torch.empty((in_embs, 1), **factory_kwargs)
-        )
-        if bias:
-            self.bias = torch.nn.Parameter(torch.empty((emb_size,), **factory_kwargs))
-        else:
-            self.register_parameter("bias", None)
-        self.reset_parameters()
-
-    def reset_parameters(self) -> None:
-        # Setting a=sqrt(5) in kaiming_uniform is the same as initializing with
-        # uniform(-1/sqrt(in_features), 1/sqrt(in_features)). For details, see
-        # https://github.com/pytorch/pytorch/issues/57109
-        torch.nn.init.kaiming_uniform_(self.weight, a=math.sqrt(5))
-        if self.bias is not None:
-            fan_in = self.emb_size
-            bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
-            torch.nn.init.uniform_(self.bias, -bound, bound)
-
-    def forward(self, input):
-        if self.dim in [1, -2]:
-            result = input[:, 0, :] * self.weight[0, 0]
-            for i in range(1, self.in_embs):
-                result += input[:, i, :] * self.weight[i, 0]
-        else:
-            result = input[:, :, 0] * self.weight[0, 0]
-            for i in range(1, self.in_embs):
-                result += input[:, :, i] * self.weight[i, 0]
-        if self.bias is not None:
-            result += self.bias
-        return result
-
-    def extra_repr(self) -> str:
-        return f"in_embs={self.in_embs}, emb_size={self.emb_size}, bias={self.bias is not None}"
-
-
-
-
-################################################################################
-## Final Version
-################################################################################
-
-def dot(x, y):
-    return (x * y).sum(dim=-1).unsqueeze(-1)
-
-def _orthogonal_projection(latent_space, embs):
-    # Latent space has shape (B, m)
-    # embs has shape (k, m)
-    # Output should have shape (B, k, m)
-    result = []
-    used_pred_concepts = embs.expand(latent_space.shape[0], -1, -1)
-    for i in range(used_pred_concepts.shape[1]):
-        y_y = dot(used_pred_concepts[:, i, :], used_pred_concepts[:, i, :])
-        x_y = dot(latent_space, used_pred_concepts[:, i, :])
-        orth_proj = latent_space - (x_y * used_pred_concepts[:, i, :]) / (y_y + 1e-8)
-        orth_proj = torch.nn.functional.normalize(orth_proj, dim=-1)
-        result.append(orth_proj.unsqueeze(1))
-    return torch.concat(result, dim=1)
-
-class MixingConceptEmbeddingModel(IntAwareConceptEmbeddingModel):
+class MixCEM(IntAwareConceptEmbeddingModel):
+    """
+    Mixture of Concept Embeddings Model (MixCEM) as proposed by
+    Espinosa Zarlenga et al. at ICML 2025 (https://arxiv.org/abs/2504.17921).
+    """
     def __init__(
         self,
         n_concepts,
         n_tasks,
-        emb_size=128,
+        emb_size=16,
         training_intervention_prob=0.25,
-        embedding_activation=None,
+        embedding_activation="leakyrelu",
         concept_loss_weight=1,
-        task_loss_weight=1,
-        intermediate_task_concept_loss=0,
-        intervention_task_discount=1,
-
-        # Residual stuff
-        use_residual=True,
-        residual_scale=1,
-        learnable_residual_scale=False,
-        conditional_residual=False,
-        residual_layers=None,
-        per_concept_residual=False,
-        sigmoidal_residual=False,
-        shared_per_concept_residual=False,
-        learn_residual_embeddings=False,
-        noise_residual_embedings=False,
-        residual_deviation=0,
-        residual_norm_loss=0,
-        residual_norm_metric=1,
-        residual_scale_norm_metric=1,
-        residual_scale_reg=0,
-        residual_model_weight_l2_reg=0,
-        dynamic_residual=False,
-        sigmoidal_residual_scale=False,
-        warmup_mode=False,
-        include_bypass_model=False,
-
-        # Mixing
-        bottleneck_pooling='concat',
-        learnable_distance_metric=False,
-        learnable_prob_model=False,
-        use_latent_space=False,
-
-        mix_ground_truth_embs=True,
-        normalize_embs=False,
-
-        fixed_embeddings=False,
-        initial_concept_embeddings=None,
-        use_cosine_similarity=False,
-        use_linear_emb_layer=False,
-        fixed_scale=None,
-
-        # Extra capacity
-        extra_capacity=0,
-        extra_capacity_dropout_prob=0,
-        orthogonal_extra_capacity=False,
 
         c2y_model=None,
         c2y_layers=None,
@@ -178,113 +34,118 @@ class MixingConceptEmbeddingModel(IntAwareConceptEmbeddingModel):
         lr_scheduler_patience=10,
         weight_loss=None,
         task_class_weights=None,
-        tau=1,
 
         active_intervention_values=None,
         inactive_intervention_values=None,
         intervention_policy=None,
         output_interventions=False,
-        use_concept_groups=False,
 
         top_k_accuracy=None,
 
-
-        # INTCEM ARGS
-        rollout_init_steps=0,
-        int_model_layers=None,
-        int_model_use_bn=True,
-        num_rollouts=1,
+        # Experimental/debugging arguments
         intervention_discount=1,
         include_only_last_trajectory_loss=True,
+        task_loss_weight=1,
         intervention_task_loss_weight=1,
-        intervention_weight=5,
+
+        ##################################
+        # New MixCEM-specific arguments
+        #################################
+        ood_dropout_prob=0.5, # Probability of random dynamic component drop in training (λ_drop in paper)
+        all_intervened_loss_weight=1, # Strength of prior error (λ_p in paper)
+        initial_concept_embeddings=None,
+        fixed_embeddings=False,
+        temperature=1,
+
+        # Monte carlo stuff
+        montecarlo_test_tries=50,  # Number of MC trials to use during inference
+        deterministic=False,
+        montecarlo_train_tries=1,
+        output_uncertainty=False,
+        hard_selection_value=None,
+
+        ##################################
+        # IntCEM-specific arguments (use this only for IntMixCEM, that is
+        # MixCEM's intervention-aware version)
+        #################################
+
+        # Intervention-aware hyperparameters (NO intervention-aware loss
+        # is used by default)
+        intervention_task_discount=1,
+        intervention_weight=0,
         concept_map=None,
-        max_horizon=6,
+        use_concept_groups=True,
+        rollout_init_steps=0,
+        int_model_layers=None,
+        int_model_use_bn=False,
+        num_rollouts=1,
+        max_horizon=1,
         initial_horizon=2,
-        horizon_rate=1.005,
+        horizon_rate=1,
     ):
-        pl.LightningModule.__init__(self)
-        self.n_concepts = n_concepts
-        self.output_interventions = output_interventions
-        self.intervention_policy = intervention_policy
-        self.bottleneck_pooling = bottleneck_pooling
-        self.orthogonal_extra_capacity = orthogonal_extra_capacity
-        if orthogonal_extra_capacity:
-            extra_capacity = n_concepts * emb_size
-        self.extra_capacity = extra_capacity
-        if extra_capacity:
-            assert bottleneck_pooling == 'concat', 'Currently only support extra capcity when using concat pooling'
-            if orthogonal_extra_capacity:
-                self.extra_capacity_residual = lambda latent, probs: (
-                    probs.unsqueeze(-1) * _orthogonal_projection(latent, self.concept_embeddings[:, 0, :]) +
-                    (1 - probs.unsqueeze(-1)) * _orthogonal_projection(latent, self.concept_embeddings[:, 1, :])
-                ).view(latent.shape[0], -1)
-            else:
-                self._extra_capacity_residual =  torch.nn.Sequential(*[
-                    torch.nn.LeakyReLU(),
-                    torch.nn.Linear(emb_size, self.extra_capacity),
-                    torch.nn.Dropout(p=extra_capacity_dropout_prob),
-                    torch.nn.Sigmoid(),
-                ])
-                self.extra_capacity_residual = lambda x, *args: self._extra_capacity_residual(x)
-        else:
-            self.extra_capacity_residual = None
-        assert self.bottleneck_pooling in ['concat', 'additive', 'mean', 'weighted_mean', 'per_class_mixing', 'per_class_mixing_shared'], (
-            f'We only support bottleneck pooling functions "concat", '
-            f'"additive", "per_class_mixing", "weighted_mean", and "mean". However we were given '
-            f'pooling function "{bottleneck_pooling}".'
+        self.temperature = temperature
+        self._context_scale_factors = None
+        self.all_intervened_loss_weight = all_intervened_loss_weight
+        self.hard_selection_value = hard_selection_value
+        self._construct_c2y_model = False
+        bottleneck_size = emb_size * n_concepts
+        self.montecarlo_train_tries = montecarlo_train_tries
+        self.montecarlo_test_tries = montecarlo_test_tries
+        self.deterministic = deterministic
+        self.ood_dropout_prob = ood_dropout_prob
+        self.output_uncertainty = output_uncertainty
+
+        self._mixed_stds = None
+
+        super(MixCEM, self).__init__(
+            n_concepts=n_concepts,
+            n_tasks=n_tasks,
+            emb_size=emb_size,
+            training_intervention_prob=training_intervention_prob,
+            embedding_activation=embedding_activation,
+            concept_loss_weight=concept_loss_weight,
+            c2y_model=c2y_model,
+            c2y_layers=c2y_layers,
+            c_extractor_arch=c_extractor_arch,
+            output_latent=output_latent,
+            optimizer=optimizer,
+            momentum=momentum,
+            learning_rate=learning_rate,
+            weight_decay=weight_decay,
+            lr_scheduler_factor=lr_scheduler_factor,
+            lr_scheduler_patience=lr_scheduler_patience,
+            weight_loss=weight_loss,
+            task_class_weights=task_class_weights,
+            active_intervention_values=active_intervention_values,
+            inactive_intervention_values=inactive_intervention_values,
+            intervention_policy=intervention_policy,
+            output_interventions=output_interventions,
+            top_k_accuracy=top_k_accuracy,
+            intervention_task_discount=intervention_task_discount,
+            intervention_weight=intervention_weight,
+            concept_map=concept_map,
+            use_concept_groups=use_concept_groups,
+            rollout_init_steps=rollout_init_steps,
+            int_model_layers=int_model_layers,
+            int_model_use_bn=int_model_use_bn,
+            num_rollouts=num_rollouts,
+            max_horizon=max_horizon,
+            initial_horizon=initial_horizon,
+            horizon_rate=horizon_rate,
+            intervention_discount=intervention_discount,
+            include_only_last_trajectory_loss=include_only_last_trajectory_loss,
+            task_loss_weight=task_loss_weight,
+            intervention_task_loss_weight=intervention_task_loss_weight,
+            bottleneck_size=bottleneck_size,
         )
-        if self.bottleneck_pooling == 'weighted_mean':
-            self.concept_pool_weights = torch.nn.Parameter(
-                torch.rand((self.n_concepts,)),
-                requires_grad=True,
-            )
-        if self.bottleneck_pooling in ["additive", "mean", "weighted_mean"]:
-            self.bottleneck_size = emb_size + self.extra_capacity
-        else:
-            self.bottleneck_size = emb_size * n_concepts + self.extra_capacity
-        if c_extractor_arch == "identity":
-            self.pre_concept_model = lambda x: x
-        else:
-            self.pre_concept_model = c_extractor_arch(output_dim=None)
-        if self.pre_concept_model == "identity":
-            c_extractor_arch = "identity"
-            self.pre_concept_model = lambda x: x
 
-
-        self.training_intervention_prob = training_intervention_prob
-        self.output_latent = output_latent
-        self.mix_ground_truth_embs = mix_ground_truth_embs
-        self.normalize_embs = normalize_embs
-        self.intervention_task_discount = intervention_task_discount
-        self.intermediate_task_concept_loss = intermediate_task_concept_loss
-        self.residual_model_weight_l2_reg = residual_model_weight_l2_reg
-
-        if self.training_intervention_prob != 0:
-            self.ones = torch.ones(n_concepts)
-
-        if active_intervention_values is not None:
-            self.active_intervention_values = torch.tensor(
-                active_intervention_values
-            )
-        else:
-            self.active_intervention_values = torch.ones(n_concepts)
-        if inactive_intervention_values is not None:
-            self.inactive_intervention_values = torch.tensor(
-                inactive_intervention_values
-            )
-        else:
-            self.inactive_intervention_values = torch.ones(n_concepts)
-        self.task_loss_weight = task_loss_weight
-        self.top_k_accuracy = top_k_accuracy
-
+        # Let's generate the global embeddings we will use
         if (initial_concept_embeddings is False) or (
             initial_concept_embeddings is None
         ):
-            initial_concept_embeddings = torch.rand(
-                self.n_concepts,
-                2,
-                emb_size,
+            initial_concept_embeddings = torch.normal(
+                torch.zeros(self.n_concepts, 2, emb_size),
+                torch.ones(self.n_concepts, 2, emb_size),
             )
         else:
             if isinstance(initial_concept_embeddings, np.ndarray):
@@ -292,420 +153,312 @@ class MixingConceptEmbeddingModel(IntAwareConceptEmbeddingModel):
                     initial_concept_embeddings
                 )
             emb_size = initial_concept_embeddings.shape[-1]
-        self.emb_size = emb_size
         self.concept_embeddings = torch.nn.Parameter(
             initial_concept_embeddings,
             requires_grad=(not fixed_embeddings),
         )
-        if fixed_scale is not None:
-            self.contrastive_scale = torch.nn.Parameter(
-                fixed_scale * torch.ones((self.n_concepts,)),
-                requires_grad=False,
-            )
-        else:
-            self.contrastive_scale = torch.nn.Parameter(
-                torch.rand((self.n_concepts,)),
-                requires_grad=True,
-            )
 
-        self.concept_emb_generators = torch.nn.ModuleList()
-        self.shared_emb_generator = True
-        for i in range(n_concepts):
-            if c_extractor_arch == "identity":
-                self.concept_emb_generators.append(torch.nn.Identity())
-                continue
-            if embedding_activation is None:
-                emb_act = torch.nn.Identity()
-            elif embedding_activation == "sigmoid":
-                emb_act = torch.nn.Sigmoid()
-            elif embedding_activation == "leakyrelu":
-                emb_act = torch.nn.LeakyReLU()
-            elif embedding_activation == "relu":
-                emb_act = torch.nn.ReLU()
-            else:
-                raise ValueError(
-                    f'Unsupported embedding activation "{embedding_activation}"'
-                )
-            if self.shared_emb_generator:
-                if len(self.concept_emb_generators) == 0:
-                    self.concept_emb_generators.append(
-                        torch.nn.Sequential(*[
-                            torch.nn.Linear(
-                                list(
-                                    self.pre_concept_model.modules()
-                                )[-1].out_features,
-                                emb_size,
-                            ),
-                            torch.nn.LeakyReLU(),
-                            torch.nn.Linear(
-                                emb_size,
-                                emb_size,
-                            ),
-                            emb_act,
-                        ])
-                    )
-                else:
-                    self.concept_emb_generators.append(
-                        self.concept_emb_generators[0]
-                    )
-            else:
-                self.concept_emb_generators.append(
-                    torch.nn.Sequential(*[
-                        torch.nn.Linear(
-                            list(
-                                self.pre_concept_model.modules()
-                            )[-1].out_features,
-                            emb_size,
-                        ),
-                        torch.nn.LeakyReLU(),
-                        torch.nn.Linear(
-                            emb_size,
-                            emb_size,
-                        ),
-                        emb_act,
-                    ])
-                )
 
-        self.use_linear_emb_layer = use_linear_emb_layer
         if c2y_model is None:
             # Else we construct it here directly
-            if 'per_class_mixing' in self.bottleneck_pooling:
-                self.downstream_label_weights = torch.nn.Parameter(
-                    torch.rand((n_tasks, self.n_concepts)),
-                    requires_grad=True,
-                )
-                if self.bottleneck_pooling == 'per_class_mixing_shared':
-                    self.class_embeddings = torch.nn.Parameter(
-                        torch.rand((n_tasks, self.emb_size)),
-                        requires_grad=True,
-                    )
-                    for i in range(n_tasks):
-                        units = [self.emb_size * 2] + (c2y_layers or []) + [1]
-                        layers = []
-                        for i in range(1, len(units)):
-                            layers.append(torch.nn.LeakyReLU())
-                            layers.append(torch.nn.Linear(units[i-1], units[i]))
-                    self.c2y_model = torch.nn.Sequential(*layers)
-                else:
-                    self.c2y_model = torch.nn.ModuleList()
-                    for i in range(n_tasks):
-                        units = [self.emb_size] + (c2y_layers or []) + [1]
-                        layers = []
-                        for i in range(1, len(units)):
-                            layers.append(torch.nn.LeakyReLU())
-                            layers.append(torch.nn.Linear(units[i-1], units[i]))
-                        self.c2y_model.append(torch.nn.Sequential(*layers))
-            elif self.use_linear_emb_layer:
-                units = [self.emb_size] + (c2y_layers or []) + [n_tasks]
-                layers = [
-                    torch.nn.Unflatten(-1, (self.n_concepts, self.emb_size)),
-                    VectorLinear(in_embs=self.n_concepts, emb_size=self.emb_size, dim=1),
-                    torch.nn.LeakyReLU(),
-                ]
-                for i in range(1, len(units)):
-                    layers.append(torch.nn.Linear(units[i-1], units[i]))
-                    if i != len(units) - 1:
-                        layers.append(torch.nn.LeakyReLU())
-                self.c2y_model = torch.nn.Sequential(*layers)
-            else:
-                units = [self.bottleneck_size] + (c2y_layers or []) + [n_tasks]
-                layers = []
-                for i in range(1, len(units)):
+            units = [
+                n_concepts * emb_size
+            ] + (c2y_layers or []) + [n_tasks]
+            layers = [torch.nn.Flatten(1, -1)]
+            for i in range(1, len(units)):
+                layers.append(torch.nn.Linear(units[i-1], units[i]))
+                if i != len(units) - 1:
                     layers.append(torch.nn.LeakyReLU())
-                    layers.append(torch.nn.Linear(units[i-1], units[i]))
-                self.c2y_model = torch.nn.Sequential(*layers)
+            self.c2y_model = torch.nn.Sequential(*layers)
         else:
             self.c2y_model = c2y_model
+        self.global_c2y_model = self.c2y_model
 
-        self.sig = torch.nn.Sigmoid()
-        self.loss_concept = torch.nn.BCELoss(weight=weight_loss)
-        self.loss_task = (
-            torch.nn.CrossEntropyLoss(weight=task_class_weights) #, reduction='none')
-            if n_tasks > 1 else torch.nn.BCEWithLogitsLoss(
-                weight=task_class_weights,
-                # reduction='none',
+        self.ood_dropout_prob = ood_dropout_prob
+        self.global_concept_context_generators = torch.nn.Linear(
+            list(
+                self.pre_concept_model.modules()
+            )[-1].out_features,
+            self.emb_size,
+        )
+        self.concept_scales = torch.nn.Parameter(
+            torch.rand(n_concepts),
+            requires_grad=True,
+        )
+        self.ood_uncertainty_thresh = torch.nn.Parameter(
+            torch.zeros(1),
+            requires_grad=False,
+        )
+        self.concept_platt_scales = torch.nn.Parameter(
+            torch.ones(n_concepts),
+            requires_grad=False,
+        )
+        self.concept_platt_biases = torch.nn.Parameter(
+            torch.zeros(n_concepts),
+            requires_grad=False,
+        )
+        self.logit_temperatures = torch.nn.Parameter(
+            torch.ones(n_concepts, n_tasks),
+            requires_grad=False,
+        )
+
+    def _uncertainty_based_context_addition(self, concept_probs, temperature=1):
+        # We only select to add a context when the uncertainty is far
+        # from the extremes
+        entr = (
+            -concept_probs * torch.log2(concept_probs + 1e-6) -
+            (1 - concept_probs) * torch.log2(1 - concept_probs + 1e-6)
+        )
+        return self.temperature * (1 - entr)
+
+
+    def _predict_labels(self, bottleneck, **task_loss_kwargs):
+        outputs = []
+        if bottleneck.shape[-1] == 2:
+            # Then no test time sampling was done!! So let's just use the
+            # normal mixed bottleneck. This will always be the first
+            # trial output
+            outputs.append(
+                self.logit_temperatures[0, 0] *
+                self.c2y_model(bottleneck[:, :, :, 0])
+            )
+        else:
+            for trial_idx in range(2, bottleneck.shape[-1]):
+                out_vals = self.c2y_model(bottleneck[:, :, :, trial_idx])
+                out_vals = self.logit_temperatures[0, 0] * out_vals
+                outputs.append(out_vals.unsqueeze(-1))
+            outputs = torch.concat(outputs, dim=-1)
+        self._mixed_stds = torch.std(outputs, dim=-1)
+        outputs = torch.mean(outputs, dim=-1)
+        return outputs
+
+    def _construct_c2y_input(
+        self,
+        pos_embeddings,
+        neg_embeddings,
+        probs,
+        **task_loss_kwargs,
+    ):
+        # We will generate several versions of the bottleneck with different
+        # masks.Then, downstream in the line with _predict_labels, we will
+        # unpack them, make a label prediction, and compute the mean and
+        # variance of all samples
+        extra_scale = 1
+        if self.deterministic or (self.hard_selection_value is not None):
+            n_trials = 1
+        elif not self.training:
+            if self.montecarlo_test_tries == 0:
+                # Then we will interpret this as a normal dropout rescaling
+                # during inference
+                n_trials = 1
+                extra_scale = (
+                    self.ood_dropout_prob if self.ood_dropout_prob > 0
+                    else 1
+                )
+            else:
+                n_trials = max(self.montecarlo_test_tries, 0)
+        else:
+            n_trials = max(self.montecarlo_train_tries, 0)
+
+
+        global_pos_embeddings = pos_embeddings[:, :, :self.emb_size]
+        contextual_pos_embeddings = pos_embeddings[:, :, self.emb_size:]
+        contextual_pos_embeddings = (
+            contextual_pos_embeddings *
+            self._context_scale_factors.unsqueeze(-1)
+        )
+        global_neg_embeddings = neg_embeddings[:, :, :self.emb_size]
+        contextual_neg_embeddings = neg_embeddings[:, :, self.emb_size:]
+        contextual_neg_embeddings = (
+            contextual_neg_embeddings *
+            self._context_scale_factors.unsqueeze(-1)
+        )
+        bottlenecks = []
+        # The first two elements of the array will always be the contextual
+        # mixed embedding followed by just the one using the global embeddings
+        combined_pos_embs = global_pos_embeddings + \
+            extra_scale * contextual_pos_embeddings
+        combined_neg_embs = global_neg_embeddings + \
+            extra_scale * contextual_neg_embeddings
+        new_bottleneck = (
+            combined_pos_embs * torch.unsqueeze(probs, dim=-1) + (
+                combined_neg_embs * (
+                    1 - torch.unsqueeze(probs, dim=-1)
+                )
             )
         )
-        self.concept_loss_weight = concept_loss_weight
-        self.momentum = momentum
-        self.learning_rate = learning_rate
-        self.weight_decay = weight_decay
-        self.optimizer_name = optimizer
-        self.lr_scheduler_factor = lr_scheduler_factor
-        self.lr_scheduler_patience = lr_scheduler_patience
-        self.n_tasks = n_tasks
-        self.tau = tau
-        self.use_concept_groups = use_concept_groups
-
-        self.use_cosine_similarity = use_cosine_similarity
-        if self.use_cosine_similarity:
-            self._cos_similarity = torch.nn.CosineSimilarity(dim=-1, eps=1e-08)
-        else:
-            self._cos_similarity = None
-
-
-        self.learnable_distance_metric = learnable_distance_metric
-        if self.learnable_distance_metric:
-            units = [
-                2 * emb_size
-            ] + [128, 64, 1]
-            layers = []
-            for i in range(1, len(units)):
-                layers.append(torch.nn.Linear(units[i-1], units[i]))
-                if i != (len(units) - 1):
-                    layers.append(torch.nn.LeakyReLU())
-            self.distance_model = torch.nn.Sequential(*layers)
-
-        self.use_latent_space = use_latent_space
-        if learnable_prob_model:
-            units = [
-                emb_size if use_latent_space else 2 * emb_size
-            ] + [1]
-            layers = []
-            for i in range(1, len(units)):
-                layers.append(torch.nn.Linear(units[i-1], units[i]))
-                if i != (len(units) - 1):
-                    layers.append(torch.nn.LeakyReLU())
-            self.learnable_prob_model = torch.nn.Sequential(*layers)
-        else:
-            self.learnable_prob_model = None
-
-
-        # Black-box label predictor
-        self.warmup_mode = warmup_mode
-        if self.warmup_mode or include_bypass_model:
-            self.bypass_label_predictor = torch.nn.Linear(
-                emb_size,
-                n_tasks,
-            )
-
-        # Residual handling
-        if not use_residual:
-            # Then that's it for setup!
-            self.residual_model = None
-
-        self.per_concept_residual = per_concept_residual
-        self.learnable_residual_scale = learnable_residual_scale
-        self.conditional_residual = conditional_residual
-        self.sigmoidal_residual = sigmoidal_residual
-        self.shared_per_concept_residual = shared_per_concept_residual
-        self.residual_deviation = residual_deviation
-        self.residual_norm_loss = residual_norm_loss
-        self.residual_norm_metric = residual_norm_metric
-        self.residual_scale_norm_metric = residual_scale_norm_metric
-        self.residual_scale_reg = residual_scale_reg
-        self.sigmoidal_residual_scale = sigmoidal_residual_scale
-        self._training_residual = True
-        self._current_residuals = []
-
-        if self.learnable_residual_scale:
-            if self.per_concept_residual:
-                if residual_scale is not None:
-                    self.residual_scale = torch.nn.Parameter(
-                        residual_scale * torch.ones((self.n_concepts,)),
-                        requires_grad=True,
-                    )
-                else:
-                    self.residual_scale = torch.nn.Parameter(
-                        torch.rand((self.n_concepts,)),
-                        requires_grad=True,
-                    )
-            else:
-                if residual_scale is not None:
-                    self.residual_scale = torch.nn.Parameter(
-                        residual_scale * torch.ones((self.n_tasks,)),
-                        requires_grad=True,
-                    )
-                else:
-                    self.residual_scale = torch.nn.Parameter(
-                        torch.rand((self.n_tasks,)),
-                        requires_grad=True,
-                    )
-        else:
-            self.residual_scale = (
-                residual_scale if residual_scale is not None else 1
-            )
-
-        self.learn_residual_embeddings = learn_residual_embeddings
-        self.noise_residual_embedings = noise_residual_embedings
-        self.dynamic_residual = dynamic_residual
-        if self.learn_residual_embeddings and (not self.dynamic_residual):
-            self.residual_embeddings = torch.nn.Parameter(
-                torch.rand((self.n_concepts, 2, self.emb_size)),
-                requires_grad=True,
-            )
-        if self.dynamic_residual:
-            units = [
-                emb_size
-            ] + (residual_layers or []) + [emb_size * 2]
-            self.residual_model = torch.nn.ModuleList()
-
-            for _ in range(self.n_concepts):
-                layers = []
-                for i in range(1, len(units)):
-                    layers.append(torch.nn.Linear(units[i-1], units[i]))
-                    if i != (len(units) - 1):
-                        layers.append(torch.nn.LeakyReLU())
-
-                layers.append(torch.nn.Unflatten(-1, (2, emb_size)))
-                self.residual_model.append(torch.nn.Sequential(*layers))
-        elif self.per_concept_residual:
-            if self.shared_per_concept_residual:
-                assert conditional_residual, (
-                    'conditional_residual needs to be True if '
-                    'shared_per_concept_residual is True'
+        bottlenecks.append(new_bottleneck.unsqueeze(-1))
+        new_bottleneck = (
+            global_pos_embeddings * torch.unsqueeze(probs, dim=-1) + (
+                global_neg_embeddings * (
+                    1 - torch.unsqueeze(probs, dim=-1)
                 )
-                if self.learn_residual_embeddings:
-                    units = [
-                            (emb_size * 2)
-                            if conditional_residual else emb_size
-
-                        ] + (residual_layers or []) + [1]
-                    layers = []
-                    for i in range(1, len(units)):
-                        layers.append(torch.nn.Linear(units[i-1], units[i]))
-                        if i != (len(units) - 1):
-                            layers.append(torch.nn.LeakyReLU())
-                    self.residual_model = torch.nn.Sequential(*layers)
-
-                else:
-                    units = [
-                        emb_size * 2
-
-                    ] + (residual_layers or []) + [
-                        emb_size if per_concept_residual else n_tasks
-                    ]
-                    layers = []
-                    for i in range(1, len(units)):
-                        layers.append(torch.nn.LeakyReLU())
-                        layers.append(torch.nn.Linear(units[i-1], units[i]))
-
-                    if sigmoidal_residual:
-                        layers.append(torch.nn.Sigmoid())
-
-                    self.residual_model = torch.nn.Sequential(*layers)
-            elif self.learn_residual_embeddings:
-                units = [
-                        (emb_size * 2)
-                        if conditional_residual else emb_size
-
-                    ] + (residual_layers or []) + [1]
-                self.residual_model = torch.nn.ModuleList()
-
-                for _ in range(self.n_concepts):
-                    layers = []
-                    for i in range(1, len(units)):
-                        layers.append(torch.nn.Linear(units[i-1], units[i]))
-                        if i != (len(units) - 1):
-                            layers.append(torch.nn.LeakyReLU())
-
-                    if sigmoidal_residual:
-                        layers.append(torch.nn.Sigmoid())
-                    self.residual_model.append(torch.nn.Sequential(*layers))
+            )
+        )
+        bottlenecks.append(new_bottleneck.unsqueeze(-1))
+        for _ in range(n_trials):
+            if self.hard_selection_value is not None:
+                context_selected = (1 - self.hard_selection_value) * torch.ones(
+                    global_pos_embeddings.shape[0], self.n_concepts, 1
+                ).to(global_pos_embeddings.device)
+            elif self.deterministic:
+                context_selected = torch.ones(
+                    global_pos_embeddings.shape[0], self.n_concepts, 1
+                ).to(global_pos_embeddings.device)
             else:
-                units = [
-                    (2 * emb_size) if conditional_residual else emb_size
-
-                ] + (residual_layers or []) + [emb_size]
-                self.residual_model = torch.nn.ModuleList()
-                for _ in range(self.n_concepts):
-                    layers = []
-                    for i in range(1, len(units)):
-                        layers.append(torch.nn.LeakyReLU())
-                        layers.append(torch.nn.Linear(units[i-1], units[i]))
-
-                    if sigmoidal_residual:
-                        layers.append(torch.nn.Sigmoid())
-                    self.residual_model.append(
-                        torch.nn.Sequential(*layers)
+                # Then we generate a simple random mask
+                dropout_prob = self.ood_dropout_prob
+                context_selected = torch.bernoulli(
+                    torch.ones(
+                        global_pos_embeddings.shape[0],
+                        self.n_concepts,
+                        1,
+                    ) * (1 - dropout_prob)
+                ).to(global_pos_embeddings.device)
+            combined_pos_embs = global_pos_embeddings + (
+                context_selected * contextual_pos_embeddings
+            )
+            combined_neg_embs = global_neg_embeddings + (
+                context_selected * contextual_neg_embeddings
+            )
+            new_bottleneck = (
+                combined_pos_embs * torch.unsqueeze(probs, dim=-1) + (
+                    combined_neg_embs * (
+                        1 - torch.unsqueeze(probs, dim=-1)
                     )
+                )
+            )
+            bottlenecks.append(new_bottleneck.unsqueeze(-1))
+        return torch.concat(bottlenecks, dim=-1)
 
-        elif self.learn_residual_embeddings:
-            units = [
-                    (emb_size + self.bottleneck_size)
-                    if conditional_residual else emb_size
-
-                ] + (residual_layers or []) + [n_concepts]
-            layers = []
-            for i in range(1, len(units)):
-                layers.append(torch.nn.Linear(units[i-1], units[i]))
-                if i != (len(units) - 1):
-                    layers.append(torch.nn.LeakyReLU())
-            if sigmoidal_residual:
-                layers.append(torch.nn.Sigmoid())
-            self.residual_model = torch.nn.Sequential(*layers)
-
-        else:
-            units = [
-                    (emb_size + self.bottleneck_size)
-                    if conditional_residual else emb_size
-
-                ] + (residual_layers or []) + [n_tasks]
-            layers = []
-            for i in range(1, len(units)):
-                layers.append(torch.nn.LeakyReLU())
-                layers.append(torch.nn.Linear(units[i-1], units[i]))
-
-            if sigmoidal_residual:
-                layers.append(torch.nn.Sigmoid())
-            self.residual_model = torch.nn.Sequential(*layers)
-
-
-
-
-        # INTCEM STUFF!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-        self.num_rollouts = num_rollouts
-        if concept_map is None:
-            concept_map = dict([
-                (i, [i]) for i in range(n_concepts)
-            ])
-        self.concept_map = concept_map
-
-        # Else we construct it here directly
-        units = [
-            self.bottleneck_size + # Bottleneck
-            n_concepts # Prev interventions
-        ] + (int_model_layers or [256, 128]) + [
-            len(self.concept_map) if self.use_concept_groups else n_concepts
+    def _construct_rank_model_input(self, bottleneck, prev_interventions):
+        # We always use the dynamic + global embeddings
+        bottleneck = bottleneck[:, :, :, 0]
+        cat_inputs = [
+            bottleneck.reshape(bottleneck.shape[0], -1),
+            prev_interventions,
         ]
-        layers = []
-        for i in range(1, len(units)):
-            if int_model_use_bn:
-                layers.append(
-                    torch.nn.BatchNorm1d(num_features=units[i-1]),
+        return torch.concat(
+            cat_inputs,
+            dim=-1,
+        )
+
+    def _new_tail_results(
+        self,
+        x=None,
+        c=None,
+        y=None,
+        c_sem=None,
+        bottleneck=None,
+        y_pred=None,
+    ):
+        tail_results = []
+        if (
+            (self._mixed_stds is not None) and
+            (self.output_uncertainty)
+        ):
+            tail_results.append(self._mixed_stds)
+            self._mixed_stds = None
+        return tail_results
+
+    def _generate_dynamic_concept(self, pre_c, concept_idx):
+        context = self.concept_context_generators[concept_idx](pre_c)
+        return context
+
+
+    def _generate_concept_embeddings(
+        self,
+        x,
+        latent=None,
+        training=False,
+    ):
+        extra_outputs = {}
+        if latent is None:
+            pre_c = self.pre_concept_model(x)
+            global_emb_center = self.global_concept_context_generators(pre_c)
+            dynamic_contexts = []
+            for concept_idx in range(self.n_concepts):
+                dynamic_context = self._generate_dynamic_concept(
+                    pre_c,
+                    concept_idx=concept_idx,
                 )
-            layers.append(torch.nn.Linear(units[i-1], units[i]))
-            if i != len(units) - 1:
-                layers.append(torch.nn.LeakyReLU())
+                dynamic_contexts.append(torch.unsqueeze(dynamic_context, dim=1))
+            dynamic_contexts = torch.cat(dynamic_contexts, axis=1)
+            self._dynamic_context = dynamic_contexts
 
-        self.concept_rank_model = torch.nn.Sequential(*layers)
+            global_context_pos = \
+                self.concept_embeddings[:, 0, :].unsqueeze(0).expand(
+                    pre_c.shape[0],
+                    -1,
+                    -1,
+                )
+            global_context_neg = \
+                self.concept_embeddings[:, 1, :].unsqueeze(0).expand(
+                    pre_c.shape[0],
+                    -1,
+                    -1,
+                )
+            global_contexts = torch.concat(
+                [global_context_pos, global_context_neg],
+                dim=-1,
+            )
+            latent = dynamic_contexts, global_contexts
+        else:
+            dynamic_contexts, global_contexts = latent
 
-        self.intervention_discount = intervention_discount
-        self.intervention_task_discount = intervention_task_discount
-        self.horizon_rate = horizon_rate
-        self.horizon_limit = torch.nn.Parameter(
-            torch.FloatTensor([initial_horizon]),
-            requires_grad=False,
+        # Now we can compute all the probabilites!
+        c_sem = []
+
+        for concept_idx in range(self.n_concepts):
+            if self.shared_prob_gen:
+                prob_gen = self.concept_prob_generators[0]
+            else:
+                prob_gen = self.concept_prob_generators[concept_idx]
+            if self.hard_selection_value is None:
+                dyn_logits = prob_gen(
+                    global_contexts[:, concept_idx, :] +
+                    dynamic_contexts[:, concept_idx, :]
+                )
+            else:
+                # Else we adjust the contextual embeddings here directly
+                dyn_logits = prob_gen(
+                    global_contexts[:, concept_idx, :] +
+                    (
+                        (1 - self.hard_selection_value) *
+                        dynamic_contexts[:, concept_idx, :]
+                    )
+                )
+            prob = self.sig(
+                self._concept_platt_scaling(dyn_logits, concept_idx)
+            )
+            c_sem.append(prob)
+
+        c_sem = torch.cat(c_sem, axis=-1)
+        self._context_scale_factors = self._uncertainty_based_context_addition(
+            concept_probs=c_sem,
+            temperature=self.temperature,
         )
-        self.current_steps = torch.nn.Parameter(
-            torch.IntTensor([0]),
-            requires_grad=False,
-        )
-        self.rollout_init_steps = rollout_init_steps
-        self.intervention_weight = intervention_weight
-        self.loss_interventions = torch.nn.CrossEntropyLoss()
-        self.max_horizon = max_horizon
-        self.include_only_last_trajectory_loss = \
-            include_only_last_trajectory_loss
-        self.intervention_task_loss_weight = intervention_task_loss_weight
-        self.use_concept_groups = use_concept_groups
-        self._horizon_distr = lambda init, end: np.random.randint(
-            init,
-            end,
-        )
-        self._task_loss_kwargs = {}
+        if self.hard_selection_value is not None:
+            self._context_scale_factors = \
+                1 - self.hard_selection_value * torch.ones_like(
+                    self._context_scale_factors
+                )
 
-
+        pos_embeddings = torch.concat(
+            [
+                global_contexts[:, :, :self.emb_size],
+                dynamic_contexts[:, :, :self.emb_size],
+            ],
+            dim=-1
+        )
+        neg_embeddings = torch.concat(
+            [
+                global_contexts[:, :, self.emb_size:],
+                dynamic_contexts[:, :, self.emb_size:],
+            ],
+            dim=-1
+        )
+        return c_sem, pos_embeddings, neg_embeddings, extra_outputs
 
     def _extra_losses(
         self,
@@ -719,678 +472,81 @@ class MixingConceptEmbeddingModel(IntAwareConceptEmbeddingModel):
         prev_interventions=None,
     ):
         loss = 0.0
-        if self.residual_norm_loss and self._current_residuals and (
-            self.task_loss_weight > 0
-        ):
-            for res_norm in self._current_residuals:
-                loss += self.residual_norm_loss * torch.mean(res_norm) / len(self._current_residuals)
-            self._current_residuals = []
-        if self.learnable_residual_scale and self.per_concept_residual and (
-            self.residual_scale_reg
-        ):
-            if self.sigmoidal_residual_scale:
-                loss += torch.norm(self.sig(self.residual_scale), p=self.residual_scale_norm_metric)
-            else:
-                loss += torch.norm(self.residual_scale, p=self.residual_scale_norm_metric)
-
-        if self.residual_model_weight_l2_reg and (self.residual_model is not None):
-            total_sum = 0.0
-            total_elems = 0
-            for param in self.residual_model.parameters():
-                total_sum += torch.pow(param, 2).sum()
-                total_elems += np.prod(param.shape)
-            total_sum = self.residual_model_weight_l2_reg * total_sum
-            loss += total_sum/(total_elems if total_elems else 1)
+        if self.all_intervened_loss_weight != 0:
+            global_context_pos = \
+                self.concept_embeddings[:, 0, :].unsqueeze(0).expand(
+                    c.shape[0],
+                    -1,
+                    -1,
+                )
+            global_context_neg = \
+                self.concept_embeddings[:, 1, :].unsqueeze(0).expand(
+                    c.shape[0],
+                    -1,
+                    -1,
+                )
+            new_bottleneck = (
+                global_context_pos * torch.unsqueeze(c, dim=-1) + (
+                    global_context_neg * (
+                        1 - torch.unsqueeze(c, dim=-1)
+                    )
+                )
+            )
+            new_y_logits = \
+                self.logit_temperatures[0, 0] * self.c2y_model(new_bottleneck)
+            loss += self.all_intervened_loss_weight * self.loss_task(
+                (
+                    new_y_logits if new_y_logits.shape[-1] > 1
+                    else new_y_logits.reshape(-1)
+                ),
+                y,
+            )
         return loss
 
-    def _relaxed_multi_bernoulli_sample(self, probs, temperature=1, idx=None):
-        # Sample from a standard Gaussian first to perform the
-        # reparameterization trick
-        if len(probs.shape):
-            shape = (probs.shapea[0],)
-        else:
-            shape = []
-        epsilon = torch.normal(mean=torch.zeros(shape), std=torch.ones(shape)).to(
-            probs.device
-        )
-        u = Gaussian_CDF(epsilon)
-        return torch.sigmoid(
-            1.0/temperature * (
-                log(probs) - log(1. - probs) + log(u) - log(1. - u)
-            )
+
+    def _concept_platt_scaling(self, logits, concept_idx):
+        return (
+            self.concept_platt_scales[concept_idx] * logits +
+            self.concept_platt_biases[concept_idx]
         )
 
-    def _construct_c2y_input(
-        self,
-        pos_embeddings,
-        neg_embeddings,
-        probs,
-        **task_loss_kwargs,
-    ):
-        pred_concepts = (
-            pos_embeddings * torch.unsqueeze(probs, dim=-1) + (
-                neg_embeddings * (
-                    1 - torch.unsqueeze(probs, dim=-1)
-                )
-            )
-        )
-        return self._make_bottleneck(
-            pred_concepts=pred_concepts,
-            projected_space=task_loss_kwargs['projected_space'],
-            probs=probs,
-            train=True,
-        )
-
-    def _make_bottleneck(
-        self,
-        pred_concepts,
-        projected_space,
-        probs,
-        train=False,
-    ):
-        self._pre_residual_acts = pred_concepts.view(pred_concepts.shape[-1], -1)
-        used_pred_concepts = pred_concepts
-        if self.dynamic_residual:
-            if self.residual_norm_loss:
-                self._current_residuals = []
-            # Then we actually introduce some residuals here!
-            used_pred_concepts = torch.zeros_like(pred_concepts)
-            for i in range(self.n_concepts):
-                # Size (B, 2, m)
-                pos_res, neg_res, scale = self._make_anchor_residual(
-                    projected_space=projected_space,
-                    concept_idx=i,
-                )
-                res_emb = probs[:, i:i+1] * pos_res + (1 - probs[:, i:i+1]) * neg_res
-                if self.residual_norm_loss:
-                    self._current_residuals.append(torch.norm(res_emb, p=self.residual_norm_metric, dim=-1))
-                used_global_emb = pred_concepts[:, i, :]
-                used_residual = res_emb
-                if self.normalize_embs:
-                    # used_global_emb = torch.nn.functional.normalize(
-                    #     pred_concepts[:, i, :],
-                    #     dim=-1,
-                    # )
-                    used_residual = torch.nn.functional.normalize(res_emb, dim=-1)
-                used_pred_concepts[:, i, :] = (
-                    used_global_emb  + scale * used_residual
-                )
-        elif (self.residual_model is not None) and self.per_concept_residual:
-            if self.residual_norm_loss:
-                self._current_residuals = []
-            if self.shared_per_concept_residual and self._training_residual:
-                # Then we actually introduce some residuals here!
-                used_pred_concepts = (
-                    torch.zeros_like(pred_concepts) +
-                    pred_concepts
-                )
-                if self.learn_residual_embeddings:
-                    res_embs = probs.unsqueeze(-1) * self.residual_embeddings[:, 0, :].unsqueeze(0) + (1 - probs.unsqueeze(-1)) * self.residual_embeddings[:, 1, :].unsqueeze(0)
-                for i in range(self.n_concepts):
-                    updated_input = torch.concat(
-                        [projected_space, pred_concepts[:, i, :]],
-                        dim=-1,
-                    )
-                    if self.learnable_residual_scale:
-                        scale = self.residual_scale[i]
-                    else:
-                        scale = self.residual_scale
-                    if self.sigmoidal_residual_scale:
-                        scale = self.sig(scale)
-                        if train:
-                            scale = self._relaxed_multi_bernoulli_sample(scale)
-                    res = scale * self.residual_model(
-                        updated_input
-                    )
-                    if self.residual_norm_loss:
-                        self._current_residuals.append(torch.norm(res, p=self.residual_norm_metric, dim=-1))
-                    if self.learn_residual_embeddings:
-                        res_emb = res_embs[:, i, :]
-                        if self.noise_residual_embedings:
-                            # Then the residual scale is treated as a log scale
-                            # for the normal distribution
-                            res = torch.exp(res)
-                            if train:
-                                res_emb = res_emb + torch.normal(
-                                    0,
-                                    torch.ones_like(res_emb),
-                                )
-                        used_pred_concepts[:, i, :] += (
-                            # Shape: (B, m)
-                            pred_concepts[:, i, :]  +
-                            # Shape: (1, m)
-                            res * res_emb
-                        )
-                    else:
-                        used_pred_concepts[:, i, :] += res
-            elif (self.residual_model is not None) and self.learn_residual_embeddings and self._training_residual:
-                # Then we actually introduce some residuals here!
-                used_pred_concepts = torch.zeros_like(pred_concepts)
-                res_embs = probs.unsqueeze(-1) * self.residual_embeddings[:, 0, :].unsqueeze(0) + (1 - probs.unsqueeze(-1)) * self.residual_embeddings[:, 1, :].unsqueeze(0)
-                for i in range(self.n_concepts):
-                    if self.learnable_residual_scale:
-                        scale =  self.residual_scale[i]
-                    else:
-                        scale = self.residual_scale
-
-                    if self.conditional_residual:
-                        updated_input = torch.concat(
-                            [projected_space, pred_concepts[:, i, :]],
-                            dim=-1,
-                        )
-                    else:
-                        updated_input = projected_space
-                    # Shape (B, 1)
-                    res = self.residual_model[i](
-                        updated_input
-                    )
-                    if self.sigmoidal_residual_scale:
-                        scale = self.sig(scale)
-                        if train:
-                            scale = self._relaxed_multi_bernoulli_sample(scale)
-                    res = scale * res
-                    if self.residual_norm_loss:
-                        self._current_residuals.append(torch.norm(res, p=self.residual_norm_metric, dim=-1))
-
-                    res_emb = res_embs[:, i, :]
-                    if self.noise_residual_embedings:
-                        # Then the residual scale is treated as a log scale
-                        # for the normal distribution
-                        res = torch.exp(res)
-                        if train:
-                            res_emb = res_emb + torch.normal(
-                                0,
-                                torch.ones_like(res_emb),
-                            )
-                    used_pred_concepts[:, i, :] += (
-                        # Shape: (B, m)
-                        pred_concepts[:, i, :]  +
-                        # Shape: (1, m)
-                        res * res_emb
-                    )
-            elif (self.residual_model is not None) and self._training_residual:
-                for i in range(self.n_concepts):
-                    if self.learnable_residual_scale:
-                        scale = self.residual_scale[i]
-                    else:
-                        scale = self.residual_scale
-                    if self.sigmoidal_residual_scale:
-                        scale = self.sig(scale)
-                        if train:
-                            scale = self._relaxed_multi_bernoulli_sample(scale)
-                    if self.conditional_residual:
-                        updated_input = torch.concat(
-                            [projected_space, pred_concepts[:, i, :]],
-                            dim=-1,
-                        )
-                    else:
-                        updated_input = projected_space
-                    res = scale * self.residual_model[i](
-                        updated_input
-                    )
-                    if self.residual_norm_loss:
-                        self._current_residuals.append(
-                            torch.norm(res, p=self.residual_norm_metric, dim=-1)
-                        )
-                    used_pred_concepts[:, i, :] += res
-
-        elif (self.residual_model is not None) and self.learn_residual_embeddings and self._training_residual:
-            scale = self.residual_scale
-            if self.sigmoidal_residual_scale:
-                scale = self.sig(scale)
-                if train:
-                    scale = self._relaxed_multi_bernoulli_sample(scale)
-            if self.conditional_residual:
-                updated_input = torch.concat(
-                    [projected_space, pred_concepts.view(pred_concepts.shape[0], -1)],
-                    dim=-1,
-                )
-            else:
-                updated_input = projected_space
-            res =  self.residual_model(
-                updated_input
-            )
-            # Shape: (B, k, 1)
-            res = res.unsqueeze(-1)
-            if self.residual_norm_loss:
-                self._current_residuals.append(
-                    torch.norm(res, p=self.residual_norm_metric, dim=-1)
-                )
-            res_embs = self.residual_embeddings[:, 0, :].unsqueeze(0) + (1 - probs) * self.residual_embeddings[:, 1, :].unsqueeze(0)
-            if self.noise_residual_embedings:
-                # Then the residual scale is treated as a log scale
-                # for the normal distribution
-                res = torch.exp(res)
-                if train:
-                    res_embs = res_embs + torch.normal(
-                        0,
-                        torch.ones_like(res_embs),
-                    )
-            used_pred_concepts = (
-                # Shape: (B, k, m)
-                pred_concepts  +
-                # Shape: (B, k, m)
-                res * res_embs
-            )
-
-
-        if self.bottleneck_pooling == 'additive':
-            bottleneck = torch.zeros(
-                (used_pred_concepts.shape[0], self.emb_size)
-            ).to(used_pred_concepts.device)
-            for i in range(self.n_concepts):
-                bottleneck += used_pred_concepts[:, i, :]
-        elif self.bottleneck_pooling == 'mean':
-            bottleneck = torch.mean(used_pred_concepts, axis=1)
-        elif self.bottleneck_pooling == 'weighted_mean':
-            bottleneck = torch.zeros(
-                (used_pred_concepts.shape[0], self.emb_size)
-            ).to(used_pred_concepts.device)
-            norm_factor = torch.sum(self.concept_pool_weights)
-            for i in range(self.n_concepts):
-                bottleneck += (
-                    self.concept_pool_weights[i] * used_pred_concepts[:, i, :]
-                )
-            bottleneck = bottleneck / norm_factor
-        elif self.bottleneck_pooling == 'concat':
-            bottleneck = torch.flatten(
-                used_pred_concepts,
-                start_dim=1,
-            )
-            if self.extra_capacity_residual is not None:
-                extra_capacity = self.extra_capacity_residual(projected_space, probs)
-                bottleneck = torch.concat(
-                    [bottleneck, extra_capacity],
-                    dim=-1,
-                )
-        elif 'per_class_mixing' in self.bottleneck_pooling:
-            bottleneck = used_pred_concepts
-        else:
-            raise ValueError(
-                f'Unsupported bottleneck pooling "{self.bottleneck_pooling}".'
-            )
-        return bottleneck
-
-
-    def _distance_metric(self, neg_anchor, pos_anchor, latent):
-
-        if self.use_cosine_similarity:
-            # neg_sim = self._cos_similarity(neg_anchor, latent)
-            # pos_sim = self._cos_similarity(pos_anchor, latent)
-            pos_projection = pos_anchor * dot(pos_anchor, latent)/(torch.norm(pos_anchor, p=2) + 1e-8)
-            neg_projection = neg_anchor * dot(neg_anchor, latent)/(torch.norm(neg_anchor, p=2) + 1e-8)
-            neg_dist = (neg_anchor - neg_projection).pow(2).sum(-1).sqrt()
-            pos_dist = (pos_anchor - pos_projection).pow(2).sum(-1).sqrt()
-            return neg_dist - pos_dist
-        if self.learnable_distance_metric:
-            neg_dist = (
-                self.distance_model(torch.concat([neg_anchor.expand(latent.shape[0], -1), latent],  dim=-1)) +
-                self.distance_model(torch.concat([latent, neg_anchor.expand(latent.shape[0], -1)],  dim=-1))
-            ) / 2
-            neg_dist = torch.exp(neg_dist.squeeze(-1))
-            pos_dist = (
-                self.distance_model(torch.concat([pos_anchor.expand(latent.shape[0], -1), latent],  dim=-1)) +
-                self.distance_model(torch.concat([latent, pos_anchor.expand(latent.shape[0], -1)],  dim=-1))
-            ) / 2
-            pos_dist = torch.exp(pos_dist.squeeze(-1))
-        else:
-            neg_dist = (neg_anchor - latent).pow(2).sum(-1).sqrt()
-            pos_dist = (pos_anchor - latent).pow(2).sum(-1).sqrt()
-        return neg_dist - pos_dist
-
-    def _make_anchor_residual(
-        self,
-        projected_space,
-        concept_idx,
-    ):
-        if (self.residual_model is None) or (not self.learnable_prob_model):
-            return 0
-        res_emb = self.residual_model[concept_idx](projected_space)
-        if self.learnable_residual_scale:
-            scale = self.residual_scale[concept_idx]
-        else:
-            scale = self.residual_scale
-
-        used_residual = res_emb
-        if self.normalize_embs:
-            used_residual = torch.nn.functional.normalize(res_emb, dim=-1)
-        return scale * used_residual[:, 0, :], scale * used_residual[:, 1, :], scale
-
-
-    def _generate_concept_embeddings(
-        self,
-        x,
-        latent=None,
-        training=False,
-    ):
-        if latent is None:
-            pre_c = self.pre_concept_model(x)
-            c_sem = []
-            pred_concepts = []
-            pos_embs = []
-            neg_embs = []
-
-            # First predict all the concept probabilities
-            for i, concept_emb_generator in enumerate(
-                self.concept_emb_generators
-            ):
-                # [Shape: (B, emb_size)]
-                projected_space = concept_emb_generator(pre_c)
-                # [Shape: (1, emb_size)]
-                anchor_concept_pos_emb = torch.unsqueeze(
-                    self.concept_embeddings[i, 0, :],
-                    dim=0,
-                )
-                # [Shape: (1, emb_size)]
-                anchor_concept_neg_emb = torch.unsqueeze(
-                    self.concept_embeddings[i, 1, :],
-                    dim=0,
-                )
-                # [Shape: (B)]
-                if self.learnable_prob_model is not None:
-                    # [Shape: (B, 1)]
-                    if self.use_latent_space:
-                        prob = self.sig(
-                            self.learnable_prob_model(
-                                projected_space
-                            )
-                        )
-                    else:
-                        pos_res, neg_res, scale = self._make_anchor_residual(projected_space, concept_idx=i)
-                        prob = self.sig(
-                            self.learnable_prob_model(
-                                torch.concat(
-                                    [anchor_concept_pos_emb + scale * pos_res, anchor_concept_neg_emb + scale * neg_res],
-                                    dim=-1
-                                )
-                            )
-                        )
-                else:
-                    prob = self.sig(
-                        self.contrastive_scale[i] * self._distance_metric(
-                            neg_anchor=anchor_concept_neg_emb,
-                            pos_anchor=anchor_concept_pos_emb,
-                            latent=projected_space,
-                        )
-                    )
-                    # [Shape: (B, 1)]
-                    prob = torch.unsqueeze(prob, dim=-1)
-
-                if self.mix_ground_truth_embs:
-                    mixed_embs = (
-                        prob * anchor_concept_pos_emb +
-                        (1 - prob) * anchor_concept_neg_emb
-                    )
-                else:
-                    mixed_embs = projected_space
-
-                anchor_concept_pos_emb = anchor_concept_pos_emb.unsqueeze(1)
-                if anchor_concept_pos_emb.shape[0] == 1:
-                    anchor_concept_pos_emb = anchor_concept_pos_emb.expand(
-                        prob.shape[0],
-                        -1,
-                        -1,
-                    )
-                pos_embs.append(anchor_concept_pos_emb)
-
-                anchor_concept_neg_emb = anchor_concept_neg_emb.unsqueeze(1)
-                if anchor_concept_neg_emb.shape[0] == 1:
-                    anchor_concept_neg_emb = anchor_concept_neg_emb.expand(
-                        prob.shape[0],
-                        -1,
-                        -1,
-                    )
-                neg_embs.append(anchor_concept_neg_emb)
-
-                c_sem.append(prob)
-                pred_concepts.append(
-                    torch.unsqueeze(mixed_embs, dim=1)
-                )
-            c_sem = torch.cat(c_sem, dim=-1)
-            pos_embs = torch.cat(pos_embs, dim=1)
-            neg_embs = torch.cat(neg_embs, dim=1)
-            pred_concepts = torch.cat(pred_concepts, dim=1)
-            latent = pre_c,  c_sem, pred_concepts, projected_space, pos_embs, neg_embs
-        else:
-            pre_c, c_sem, pred_concepts, projected_space, pos_embs, neg_embs = latent
-        self._task_loss_kwargs.update({
-            'pre_c': pre_c,
-            'projected_space': projected_space,
-        })
-        return c_sem, pos_embs, neg_embs, {
-            "pred_concepts": pred_concepts,
-            "pre_c": pre_c,
-            "projected_space": projected_space,
-            "latent": latent,
-        }
-
-
-    def _forward(
-        self,
-        x,
-        intervention_idxs=None,
-        c=None,
-        y=None,
-        train=False,
-        latent=None,
-        competencies=None,
-        prev_interventions=None,
-        output_embeddings=False,
-        output_latent=None,
-        output_interventions=None,
-    ):
-        output_interventions = (
-            output_interventions if output_interventions is not None
-            else self.output_interventions
-        )
-        output_latent = (
-            output_latent if output_latent is not None
-            else self.output_latent
-        )
-
-        c_sem, pos_embs, neg_embs, out_kwargs = self._generate_concept_embeddings(
-            x=x,
-            latent=latent,
-            training=train,
-        )
-
-        # Now include any interventions that we may want to perform!
-        if (intervention_idxs is None) and (c is not None) and (
-            self.intervention_policy is not None
-        ):
-            horizon = self.intervention_policy.num_groups_intervened
-            if hasattr(self.intervention_policy, "horizon"):
-                horizon = self.intervention_policy.horizon
-            prior_distribution = self._prior_int_distribution(
-                prob=c_sem,
-                pos_embeddings=pos_embs,
-                neg_embeddings=neg_embs,
-                competencies=competencies,
-                prev_interventions=prev_interventions,
-                c=c,
-                train=train,
-                horizon=horizon,
-                **self._task_loss_kwargs,
-            )
-            intervention_idxs, c_int = self.intervention_policy(
-                x=x,
-                c=c,
-                pred_c=c_sem,
-                y=y,
-                competencies=competencies,
-                prev_interventions=prev_interventions,
-                prior_distribution=prior_distribution,
-            )
-
-        else:
-            c_int = c
-        if not train:
-            intervention_idxs = self._standardize_indices(
-                intervention_idxs=intervention_idxs,
-                batch_size=x.shape[0],
-            )
-
-        # Then, time to do the mixing between the positive and the
-        # negative embeddings
-        projected_space = out_kwargs.pop('projected_space')
-        _, intervention_idxs, bottleneck = \
-            self._after_interventions(
-                c_sem,
-                pos_embeddings=pos_embs,
-                neg_embeddings=neg_embs,
-                projected_space=projected_space,
-                intervention_idxs=intervention_idxs,
-                c_true=c_int,
-                train=train,
-                competencies=competencies,
-                **out_kwargs
-            )
-
-        if self.warmup_mode:
-            y_pred = self.bypass_label_predictor(projected_space)
-        elif 'per_class_mixing' in self.bottleneck_pooling:
-            logits = []
-            for task_idx in range(self.n_tasks):
-                # shape (B, emb_size)
-                mixed_emb = torch.sum(
-                    self.downstream_label_weights.unsqueeze(0)[:, task_idx:task_idx+1, :].transpose(1, 2) * bottleneck,
-                    dim=1,
-                )
-                if self.bottleneck_pooling == 'per_class_mixing_shared':
-                    # shape (1, emb_size)
-                    class_embs = self.class_embeddings[task_idx:task_idx+1, :].expand(
-                        mixed_emb.shape[0],
-                        -1,
-                    )
-                    # shape (B, 2 * emb_size)
-                    mixed_emb = torch.concat(
-                        [mixed_emb, class_embs],
-                        dim=-1,
-                    )
-                    logits.append(self.c2y_model(mixed_emb))
-                else:
-                    logits.append(self.c2y_model[task_idx](mixed_emb))
-
-            if len(logits) > 1:
-                y_pred = torch.concat(logits, dim=-1)
-            else:
-                y_pred = logits[0]
-
-        else:
-            y_pred = self.c2y_model(bottleneck)
-
-        if (not self.warmup_mode) and (not self.per_concept_residual) and (
-            not self.learn_residual_embeddings
-        ) and (self.residual_model is not None):
-            if self.residual_deviation:
-                # Then add some noise!
-                projected_space = projected_space + torch.normal(
-                    0,
-                    torch.ones_like(projected_space) * self.residual_deviation,
-                )
-
-            scale = self.residual_scale
-            if self.sigmoidal_residual_scale:
-                scale = self.sig(scale)
-            if self.conditional_residual:
-                projected_space = torch.concat(
-                    [bottleneck.view(bottleneck.shape[0], -1), projected_space],
-                    dim=-1
-                )
-            residual = self.residual_model(
-                projected_space
-            )
-            if self.residual_norm_loss:
-                self._current_residuals = [torch.norm(residual, p=self.residual_norm_metric, dim=-1)]
-            y_pred += self.residual_scale * residual
-
-        tail_results = []
-        if output_interventions:
-            if (
-                (intervention_idxs is not None) and
-                isinstance(intervention_idxs, np.ndarray)
-            ):
-                intervention_idxs = torch.FloatTensor(
-                    intervention_idxs
-                ).to(x.device)
-            tail_results.append(intervention_idxs)
-        if output_latent:
-            if "latent" in out_kwargs:
-                latent = out_kwargs['latent']
-            tail_results.append(latent)
-        if output_embeddings and (not pos_embs is None) and (
-            not neg_embs is None
-        ):
-            tail_results.append(pos_embs)
-            tail_results.append(neg_embs)
-
-        return tuple([c_sem, bottleneck, y_pred] + tail_results)
-
-    def freeze_concept_embeddings(self):
+    def freeze_global_components(self):
         self.concept_embeddings.requires_grad = False
+        self.concept_scales.requires_grad = False
+        for param in self.global_concept_context_generators.parameters():
+            param.requires_grad = False
+        for param in self.pre_concept_model.parameters():
+            param.requires_grad = False
 
-    def unfreeze_concept_embeddings(self):
+    def freeze_ood_separator(self):
+        pass
+
+    def unfreeze_ood_separator(self):
+        pass
+
+    def unfreeze_calibration_components(
+        self,
+        unfreeze_dynamic=True,
+        unfreeze_global=True,
+    ):
+        self.concept_platt_scales.requires_grad = True
+        self.concept_platt_biases.requires_grad = True
+
+    def freeze_calibration_components(
+        self,
+        freeze_dynamic=True,
+        freeze_global=True,
+    ):
+        self.concept_platt_scales.requires_grad = False
+        self.concept_platt_biases.requires_grad = False
+
+    def unfreeze_global_components(self):
         self.concept_embeddings.requires_grad = True
-
-    def freeze_residual(self):
-        # self._training_residual = False
-        if (self.residual_model is None):
-            return
-        for param in self.residual_model.parameters():
-            param.requires_grad = False
-        if self.learn_residual_embeddings:
-            self.residual_embeddings.requires_grad = False
-        if self.learnable_residual_scale:
-            self.residual_scale.requires_grad = False
-
-    def unfreeze_residual(self):
-        # self._training_residual = True
-        if (self.residual_model is None):
-            return
-        for param in self.residual_model.parameters():
+        self.concept_scales.requires_grad = True
+        for param in self.global_concept_context_generators.parameters():
             param.requires_grad = True
-        if self.learn_residual_embeddings:
-            self.residual_embeddings.requires_grad = True
-        if self.learnable_residual_scale:
-            self.residual_scale.requires_grad = True
-
-    def freeze_label_predictor(self):
-        if 'per_class_mixing' in self.bottleneck_pooling:
-            for submodel in self.c2y_model:
-                for param in submodel.parameters():
-                    param.requires_grad = False
-            self.downstream_label_weights.requires_grad = False
-            if self.bottleneck_pooling == 'per_class_mixing_shared':
-                self.class_embeddings.requires_grad = False
-        else:
-            for param in self.c2y_model.parameters():
-                param.requires_grad = False
-
-    def unfreeze_label_predictor(self):
-        if 'per_class_mixing' in self.bottleneck_pooling:
-            for submodel in self.c2y_model:
-                for param in submodel.parameters():
-                    param.requires_grad = True
-            self.downstream_label_weights.requires_grad = True
-            if self.bottleneck_pooling == 'per_class_mixing_shared':
-                self.class_embeddings.requires_grad = True
-        else:
-            for param in self.c2y_model.parameters():
-                param.requires_grad = True
-
-    def freeze_backbone(self, freeze_emb_generators=False):
         for param in self.pre_concept_model.parameters():
-            param.requires_grad = False
-        if freeze_emb_generators:
-            # And the concept generators
-            for emb_generator in self.concept_emb_generators:
-                for param in emb_generator.parameters():
-                    param.requires_grad = False
+            param.requires_grad = True
 
-    def unfreeze_backbone(self):
-        for param in self.pre_concept_model.parameters():
-            param.requires_grad = False
-        # And the concept generators
-        for emb_generator in self.concept_emb_generators:
-            for param in emb_generator.parameters():
-                param.requires_grad = False
+
+

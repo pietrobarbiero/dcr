@@ -362,7 +362,7 @@ def load_data(
     template="",
 ):
     """
-    TODO
+    Loader for Cifar10 dataset as described in MixCEM's paper.
     """
     dataset = Cifar10Dataset(
         split=split,

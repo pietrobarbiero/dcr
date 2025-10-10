@@ -7,7 +7,7 @@ shared_params:
     num_workers: 8
     num_load_workers: 4
     batch_size: 512
-    root_dir: "./data/" # REPLACE ME
+    root_dir: "/path/to/awa2/" # REPLACE ME
     sampling_percent: 0.1
     sampling_groups: false
     test_subsampling: 1
@@ -50,32 +50,6 @@ shared_params:
       - name: "mixcem_sel"
         include_list: [".*(MixCEM).*"]
     additional_test_sets:
-      - name: "OOD"
-        update_previous: true
-        skip_list: [".*(MixCEM).*", ".*(Fixed).*(CEM).*"]
-        dataset_config:
-          test_transformation_config:
-            name: "random_noise"
-            low_noise_level: 1
-            noise_level: 0.5
-      - name: "OOD_sap_0.01"
-        update_previous: true
-        skip_list: [".*(MixCEM).*", ".*(Fixed).*(CEM).*"]
-        dataset_config:
-          test_transformation_config:
-            post_generation: false
-            name: "salt_and_pepper"
-            amount: 0.01
-            s_vs_p: 0.5
-      - name: "OOD_sap_0.05"
-        update_previous: true
-        skip_list: [".*(MixCEM).*", ".*(Fixed).*(CEM).*"]
-        dataset_config:
-          test_transformation_config:
-            post_generation: false
-            name: "salt_and_pepper"
-            amount: 0.05
-            s_vs_p: 0.5
       - name: "OOD_sap_0.1"
         update_previous: true
         dataset_config:
@@ -84,51 +58,7 @@ shared_params:
             name: "salt_and_pepper"
             amount: 0.1
             s_vs_p: 0.5
-      - name: "OOD_sap_0.25"
-        update_previous: true
-        skip_list: [".*(MixCEM).*", ".*(Fixed).*(CEM).*"]
-        dataset_config:
-          test_transformation_config:
-            post_generation: false
-            name: "salt_and_pepper"
-            amount: 0.25
-            s_vs_p: 0.5
-      - name: "OOD_sap_0.5"
-        update_previous: true
-        skip_list: [".*(MixCEM).*", ".*(Fixed).*(CEM).*"]
-        dataset_config:
-          test_transformation_config:
-            post_generation: false
-            name: "salt_and_pepper"
-            amount: 0.5
-            s_vs_p: 0.5
-      - name: "OOD_sap_0.75"
-        update_previous: true
-        skip_list: [".*(MixCEM).*", ".*(Fixed).*(CEM).*"]
-        dataset_config:
-          test_transformation_config:
-            post_generation: false
-            name: "salt_and_pepper"
-            amount: 0.75
-            s_vs_p: 0.5
-      - name: "OOD_sap_0.9"
-        update_previous: true
-        skip_list: [".*(MixCEM).*", ".*(Fixed).*(CEM).*"]
-        dataset_config:
-          test_transformation_config:
-            post_generation: false
-            name: "salt_and_pepper"
-            amount: 0.9
-            s_vs_p: 0.5
-      - name: "OOD_sap_0.99"
-        update_previous: true
-        skip_list: [".*(MixCEM).*", ".*(Fixed).*(CEM).*"]
-        dataset_config:
-          test_transformation_config:
-            post_generation: false
-            name: "salt_and_pepper"
-            amount: 0.99
-            s_vs_p: 0.5
+
   skip_repr_evaluation: true
   num_load_workers: 4
   max_epochs: 150
@@ -275,16 +205,6 @@ runs:
     blackbox_training_epochs: 150
     max_residual_epochs: 150
     blackbox_path: "PCBM_BlackBox_Model_resnet18_pre_True_fold_2_layers_[112]"
-
-  - architecture: "FixedConceptEmbeddingModel"
-    run_name: "FixedOnlyGTCEM"
-    concept_loss_weight: 5
-    sigmoidal_prob: true
-    training_intervention_prob: 0.25
-    embedding_activation: "leakyrelu"
-    weights_path: "results/awa2_incomplete//CEM_Baseline_emb_size_16_cwl_5"
-    fixed_embeddings_always: false
-    ground_truth_emb_averages: true
 
   - architecture: "MixCEM"
     run_name: "MixCEM"

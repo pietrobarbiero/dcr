@@ -1,20 +1,22 @@
 shared_params:
-  results_dir: "results/awa2_complete/"
+  results_dir: "results/travelingbirds_complete/"
   trials: 5
   model_selection_trials: 3
   dataset_config:
-    dataset: "awa2"
+    dataset: "cub"
     num_workers: 8
-    batch_size: 512
-    root_dir: "/path/to/awa2/" # REPLACE ME
+    batch_size: 256
+    traveling_birds: true
+    traveling_birds_root_dir: "/path/to/TravelingBirds/"
+    root_dir: "/path/to/CUB200/"
     sampling_percent: 1
     sampling_groups: true
     test_subsampling: 1
-    weight_loss: false
+    weight_loss: true
   intervention_config:
     competence_levels: [1]
     intervention_freq: 1
-    intervention_batch_size: 1024
+    intervention_batch_size: 512
     val_intervention_policies:
       - policy: "random"
         group_level: true
@@ -23,27 +25,10 @@ shared_params:
       - policy: "random"
         group_level: true
         use_prior: false
-      # Remove the following if you are only interested in random interventions
       - policy: "random"
         group_level: true
         use_prior: true
         include_run_names: [".*(IntCEM).*"]
-      - policy: "coop"
-        group_level: true
-        use_prior: False
-      - policy: "behavioural_cloning"
-        group_level: true
-        use_prior: False
-      - policy: "optimal_greedy"
-        group_level: true
-        use_prior: False
-      - policy: "global_val_error"
-        group_level: true
-        use_prior: False
-      - policy: "global_val_improvement"
-        group_level: true
-        use_prior: False
-      ##########################################################################
   eval_config:
     additional_metrics:
       - name: "mixcem_sel"
@@ -57,13 +42,20 @@ shared_params:
             name: "salt_and_pepper"
             amount: 0.1
             s_vs_p: 0.5
+      - name: "OOD_sap_0.25"
+        update_previous: true
+        dataset_config:
+          test_transformation_config:
+            post_generation: false
+            name: "salt_and_pepper"
+            amount: 0.25
+            s_vs_p: 0.5
+
   skip_repr_evaluation: true
   max_epochs: 150
   top_k_accuracy: null
   save_model: true
-  patience: 2
-  lr_scheduler_patience: 5
-  check_val_every_n_epoch: 5
+  patience: 15
   emb_size: 16
   extra_dims: 0
   concept_loss_weight: [1, 5, 10]
@@ -79,6 +71,7 @@ shared_params:
   momentum: 0.9
   sigmoidal_prob: false
   training_intervention_prob: 0
+  num_load_workers: 0
 runs:
 
   - architecture: "ConceptBottleneckModel"
@@ -90,7 +83,7 @@ runs:
 
   - architecture: "ConceptBottleneckModel"
     run_name: "Joint CBM"
-    concept_loss_weight: 5
+    concept_loss_weight: 10
     sigmoidal_prob: true
     embedding_activation: "leakyrelu"
     sigmoidal_extra_capacity: false
@@ -117,14 +110,13 @@ runs:
 
   - architecture: "ConceptBottleneckModel"
     run_name: "Hybrid-CBM"
-    extra_dims: 50
+    extra_dims: 100
     concept_loss_weight: 10
     sigmoidal_prob: true
     embedding_activation: "leakyrelu"
 
   - architecture: "ConceptEmbeddingModel"
     run_name: "CEM"
-    emb_size: 32
     concept_loss_weight: 1
     sigmoidal_prob: true
     training_intervention_prob: 0.25
@@ -134,7 +126,7 @@ runs:
     run_name: "IntCEM"
     concept_loss_weight: 1
     training_intervention_prob: 0.25
-    intervention_weight: 5
+    intervention_weight: 1
     intervention_task_discount: 1.1
     use_concept_groups: true
     int_model_use_bn: true
@@ -157,7 +149,7 @@ runs:
     init_negative_scale: 5
     init_shift: 5
     pretrained: true
-    hidden_dim: 16
+    hidden_dim: 32
     class_hidden_dim: 128
     intervention_prob: 0.5
     gradient_clip_val: 2.0
@@ -171,7 +163,7 @@ runs:
     run_name: "Posthoc CBM"
     emb_size: null
     residual: false
-    reg_strength: 1.0e-06
+    reg_strength: 0.1
     l1_ratio: 0.99
     freeze_pretrained_model: true
     freeze_concept_embeddings: true
@@ -203,11 +195,17 @@ runs:
     max_residual_epochs: 150
     blackbox_path: "PCBM_BlackBox_Model_resnet18_pre_True_fold_2_layers_[112]"
 
+  - architecture: "ConceptToLabelModel"
+    run_name: "Bayes MLP"
+    max_epochs: 75
+    c2y_layers: [128, 64, 32]
+    feature_drop_out: 0.25
+
   - architecture: "MixCEM"
     run_name: "MixCEM"
     concept_loss_weight: 1
     training_intervention_prob: 0.25
-    load_path_name: "MixCEM_r_1_g_ood_0.9_cwl_1_ce_0"
+    load_path_name: "MixCEM_r_1_g_ood_0.5_cwl_1_ce_0"
     all_intervened_loss_weight: 1
-    ood_dropout_prob: 0.9
+    ood_dropout_prob: 0.5
     calibration_epochs: 30

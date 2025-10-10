@@ -6,7 +6,7 @@ shared_params:
     dataset: "cub"
     num_workers: 8
     batch_size: 64
-    root_dir: "./data/" # REPLACE ME
+    root_dir: "/path/to/CUB200/" # REPLACE ME
     sampling_percent: 0.25
     sampling_groups: true
     test_subsampling: 1
@@ -50,7 +50,6 @@ shared_params:
         include_list: [".*(MixCEM).*"]
     additional_test_sets:
       - name: "OOD_sap_0.01"
-        skip_list: [".*(MixCEM_no_task_cal).*", ".*(Fixed).*(CEM).*"]
         update_previous: true
         dataset_config:
           test_transformation_config:
@@ -59,7 +58,6 @@ shared_params:
             amount: 0.01
             s_vs_p: 0.5
       - name: "OOD_sap_0.05"
-        skip_list: [".*(MixCEM_no_task_cal).*", ".*(Fixed).*(CEM).*"]
         update_previous: true
         dataset_config:
           test_transformation_config:
@@ -76,7 +74,6 @@ shared_params:
             amount: 0.1
             s_vs_p: 0.5
       - name: "OOD_sap_0.25"
-        skip_list: [".*(MixCEM_no_task_cal).*", ".*(Fixed).*(CEM).*"]
         update_previous: true
         dataset_config:
           test_transformation_config:
@@ -85,7 +82,6 @@ shared_params:
             amount: 0.25
             s_vs_p: 0.5
       - name: "OOD_sap_0.5"
-        skip_list: [".*(MixCEM_no_task_cal).*", ".*(Fixed).*(CEM).*"]
         update_previous: true
         dataset_config:
           test_transformation_config:
@@ -95,7 +91,6 @@ shared_params:
             s_vs_p: 0.5
       - name: "OOD_sap_0.75"
         update_previous: true
-        skip_list: [".*(MixCEM).*", ".*(Fixed).*(CEM).*"]
         dataset_config:
           test_transformation_config:
             post_generation: false
@@ -104,7 +99,6 @@ shared_params:
             s_vs_p: 0.5
       - name: "OOD_sap_0.9"
         update_previous: true
-        skip_list: [".*(MixCEM).*", ".*(Fixed).*(CEM).*"]
         dataset_config:
           test_transformation_config:
             post_generation: false
@@ -113,21 +107,13 @@ shared_params:
             s_vs_p: 0.5
       - name: "OOD_sap_0.99"
         update_previous: true
-        skip_list: [".*(MixCEM).*", ".*(Fixed).*(CEM).*"]
         dataset_config:
           test_transformation_config:
             post_generation: false
             name: "salt_and_pepper"
             amount: 0.99
             s_vs_p: 0.5
-      - name: "OOD"
-        update_previous: true
-        skip_list: [".*(MixCEM).*", ".*(Fixed).*(CEM).*"]
-        dataset_config:
-          test_transformation_config:
-            name: "random_noise"
-            low_noise_level: 1
-            noise_level: 0.5
+
   skip_repr_evaluation: false
   run_ois: false
   run_repr_avg_pred: false
@@ -274,16 +260,6 @@ runs:
     blackbox_training_epochs: 150
     max_residual_epochs: 150
     blackbox_path: "PCBM_BlackBox_Model_resnet18_pre_True_fold_2_layers_[112]"
-
-  - architecture: "FixedConceptEmbeddingModel"
-    run_name: "FixedOnlyGTCEM"
-    sigmoidal_prob: true
-    training_intervention_prob: 0.25
-    concept_loss_weight: 5
-    embedding_activation: "leakyrelu"
-    weights_path: "results/cub_incomplete//CEM_Baseline_emb_size_16_cwl_5"
-    fixed_embeddings_alway5: false
-    ground_truth_emb_averages: true
 
   - architecture: "MixCEM"
     run_name: "MixCEM"

@@ -209,7 +209,7 @@ runs:
     training_intervention_prob: 0.25
     embedding_activation: "leakyrelu"
     weights_path: '{results_dir}/CEM_Baseline_emb_size_16_cwl_{concept_loss_weight}'
-    concept_loss_weight: [5] # Best performing weights for CEMs
+    concept_loss_weight: [1] # Best performing weights for CEMs
     fixed_embeddings_always: False
     ground_truth_emb_averages: True
 

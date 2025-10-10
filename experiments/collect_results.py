@@ -786,6 +786,7 @@ if __name__ == '__main__':
                 indent=2,
                 Dumper=IndentDumper,
             )
+            # Some extra cleanup for aesthetics
             out = out.replace("  - architecture:", "\n  - architecture:")
             for o, n in [
                 ('    - val_acc_y\n', ''),

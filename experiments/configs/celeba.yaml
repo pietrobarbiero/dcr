@@ -7,7 +7,7 @@ shared_params:
     image_size: 64
     num_classes: 1000
     batch_size: 512
-    root_dir: "./data/" # REPLACE ME
+    root_dir: "/path/to/celeba/" # REPLACE ME
     use_imbalance: true
     use_binary_vector_class: true
     num_concepts: 6
@@ -54,24 +54,6 @@ shared_params:
       - name: "mixcem_sel"
         include_list: [".*(MixCEM).*", ".*(MixIntCEM).*"]
     additional_test_sets:
-      - name: "OOD_sap_0.01"
-        update_previous: true
-        skip_list: [".*(MixCEM).*"]
-        dataset_config:
-          test_transformation_config:
-            post_generation: true
-            name: "salt_and_pepper"
-            amount: 0.01
-            s_vs_p: 0.5
-      - name: "OOD_sap_0.05"
-        update_previous: true
-        skip_list: [".*(MixCEM).*"]
-        dataset_config:
-          test_transformation_config:
-            post_generation: true
-            name: "salt_and_pepper"
-            amount: 0.05
-            s_vs_p: 0.5
       - name: "OOD_sap_0.1"
         update_previous: true
         dataset_config:
@@ -80,51 +62,7 @@ shared_params:
             name: "salt_and_pepper"
             amount: 0.1
             s_vs_p: 0.5
-      - name: "OOD_sap_0.25"
-        update_previous: true
-        skip_list: [".*(MixCEM).*"]
-        dataset_config:
-          test_transformation_config:
-            post_generation: true
-            name: "salt_and_pepper"
-            amount: 0.25
-            s_vs_p: 0.5
-      - name: "OOD_sap_0.5"
-        update_previous: true
-        skip_list: [".*(MixCEM).*"]
-        dataset_config:
-          test_transformation_config:
-            post_generation: true
-            name: "salt_and_pepper"
-            amount: 0.5
-            s_vs_p: 0.5
-      - name: "OOD_sap_0.75"
-        update_previous: true
-        skip_list: [".*(MixCEM).*"]
-        dataset_config:
-          test_transformation_config:
-            post_generation: true
-            name: "salt_and_pepper"
-            amount: 0.75
-            s_vs_p: 0.5
-      - name: "OOD_sap_0.9"
-        update_previous: true
-        skip_list: [".*(MixCEM).*"]
-        dataset_config:
-          test_transformation_config:
-            post_generation: true
-            name: "salt_and_pepper"
-            amount: 0.9
-            s_vs_p: 0.5
-      - name: "OOD_sap_0.99"
-        update_previous: true
-        skip_list: [".*(MixCEM).*"]
-        dataset_config:
-          test_transformation_config:
-            post_generation: true
-            name: "salt_and_pepper"
-            amount: 0.99
-            s_vs_p: 0.5
+
   skip_repr_evaluation: true
   save_model: true
   max_epochs: 150
@@ -244,12 +182,12 @@ runs:
     active_top_percentile: 95
     active_bottom_percentile: 5
     blackbox_model_config:
-      name: "resnet18"
+      name: "resnet34"
       imagenet_pretrained: true
       add_linear_layers: [8]
     blackbox_training_epochs: 150
     max_residual_epochs: 150
-    blackbox_path: "PCBM_BlackBox_Model_resnet18_pre_True_fold_4_layers_[8]"
+    blackbox_path: "PCBM_BlackBox_Model_resnet34_pre_True_fold_4_layers_[8]"
 
   - architecture: "PosthocConceptBottleneckModel"
     run_name: "Posthoc Hybrid CBM"
@@ -261,12 +199,12 @@ runs:
     freeze_concept_embeddings: true
     svd_penalty: 1
     blackbox_model_config:
-      name: "resnet18"
+      name: "resnet34"
       imagenet_pretrained: true
       add_linear_layers: [8]
     blackbox_training_epochs: 150
     max_residual_epochs: 150
-    blackbox_path: "PCBM_BlackBox_Model_resnet18_pre_True_fold_4_layers_[8]"
+    blackbox_path: "PCBM_BlackBox_Model_resnet34_pre_True_fold_4_layers_[8]"
 
   - architecture: "ConceptToLabelModel"
     run_name: "Bayes MLP"

@@ -6,7 +6,7 @@ shared_params:
     dataset: "cub"
     num_workers: 8
     batch_size: 64
-    root_dir: "./data/" # REPLACE ME
+    root_dir: "/path/to/CUB200/" # REPLACE ME
     sampling_percent: 1
     sampling_groups: true
     test_subsampling: 1
@@ -51,7 +51,6 @@ shared_params:
     additional_test_sets:
       - name: "OOD_sap_0.01"
         update_previous: true
-        skip_list: [".*(MixCEM).*", ".*(Fixed).*(CEM).*"]
         dataset_config:
           test_transformation_config:
             post_generation: false
@@ -60,7 +59,6 @@ shared_params:
             s_vs_p: 0.5
       - name: "OOD_sap_0.05"
         update_previous: true
-        skip_list: [".*(MixCEM).*", ".*(Fixed).*(CEM).*"]
         dataset_config:
           test_transformation_config:
             post_generation: false
@@ -93,7 +91,6 @@ shared_params:
             s_vs_p: 0.5
       - name: "OOD_sap_0.75"
         update_previous: true
-        skip_list: [".*(MixCEM).*", ".*(Fixed).*(CEM).*"]
         dataset_config:
           test_transformation_config:
             post_generation: false
@@ -102,7 +99,6 @@ shared_params:
             s_vs_p: 0.5
       - name: "OOD_sap_0.9"
         update_previous: true
-        skip_list: [".*(MixCEM).*", ".*(Fixed).*(CEM).*"]
         dataset_config:
           test_transformation_config:
             post_generation: false
@@ -111,21 +107,13 @@ shared_params:
             s_vs_p: 0.5
       - name: "OOD_sap_0.99"
         update_previous: true
-        skip_list: [".*(MixCEM).*", ".*(Fixed).*(CEM).*"]
         dataset_config:
           test_transformation_config:
             post_generation: false
             name: "salt_and_pepper"
             amount: 0.99
             s_vs_p: 0.5
-      - name: "OOD"
-        update_previous: true
-        skip_list: [".*(MixCEM).*", ".*(Fixed).*(CEM).*"]
-        dataset_config:
-          test_transformation_config:
-            name: "random_noise"
-            low_noise_level: 1
-            noise_level: 0.5
+
   skip_repr_evaluation: true
   max_epochs: 150
   top_k_accuracy: null
@@ -196,46 +184,6 @@ runs:
     sigmoidal_prob: true
     training_intervention_prob: 0.25
     embedding_activation: "leakyrelu"
-
-  - architecture: "FixedConceptEmbeddingModel"
-    run_name: "FixedCEM"
-    concept_loss_weight: 1
-    sigmoidal_prob: true
-    training_intervention_prob: 0.25
-    embedding_activation: "leakyrelu"
-    weights_path: "results/cub_complete//CEM_Baseline_cwl_1"
-    fixed_embeddings_always: true
-    ground_truth_emb_averages: false
-
-  - architecture: "FixedConceptEmbeddingModel"
-    run_name: "FixedGTCEM"
-    concept_loss_weight: 1
-    sigmoidal_prob: true
-    training_intervention_prob: 0.25
-    embedding_activation: "leakyrelu"
-    weights_path: "results/cub_complete//CEM_Baseline_cwl_1"
-    fixed_embeddings_always: true
-    ground_truth_emb_averages: true
-
-  - architecture: "FixedConceptEmbeddingModel"
-    run_name: "FixedOnlyCEM"
-    concept_loss_weight: 1
-    sigmoidal_prob: true
-    training_intervention_prob: 0.25
-    embedding_activation: "leakyrelu"
-    weights_path: "results/cub_complete//CEM_Baseline_cwl_1"
-    fixed_embeddings_always: false
-    ground_truth_emb_averages: false
-
-  - architecture: "FixedConceptEmbeddingModel"
-    run_name: "FixedOnlyGTCEM"
-    concept_loss_weight: 1
-    sigmoidal_prob: true
-    training_intervention_prob: 0.25
-    embedding_activation: "leakyrelu"
-    weights_path: "results/cub_complete//CEM_Baseline_cwl_1"
-    fixed_embeddings_always: false
-    ground_truth_emb_averages: true
 
   - architecture: "IntAwareConceptEmbeddingModel"
     run_name: "IntCEM"

@@ -185,7 +185,7 @@ runs:
     active_top_percentile: 95
     active_bottom_percentile: 5
     blackbox_model_config:
-      name: resnet18
+      name: resnet34
       imagenet_pretrained: True
       add_linear_layers: [8]  # Add an intermediate layer with the same size as the number of concepts so that the evaluation is fair
     blackbox_training_epochs: 150
@@ -211,7 +211,7 @@ runs:
 
     svd_penalty: [1]
     blackbox_model_config:
-      name: resnet18
+      name: resnet34
       imagenet_pretrained: True
       add_linear_layers: [8]  # Add an intermediate layer with the same size as the number of concepts so that the evaluation is fair
     blackbox_training_epochs: 150

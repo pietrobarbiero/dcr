@@ -9,7 +9,7 @@ shared_params:
     binarization_mode: "percentile_threshold"
     regenerate: true
     threshold: 50
-    root_dir: "./data/" # REPLACE ME
+    root_dir: "/path/to/cifar10/" # REPLACE ME
     sampling_percent: 1
     sampling_groups: true
     test_subsampling: 1

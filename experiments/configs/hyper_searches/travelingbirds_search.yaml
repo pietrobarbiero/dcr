@@ -261,7 +261,7 @@ runs:
     weights_path: '{results_dir}/CEM_Baseline_cwl_{concept_loss_weight}'
     concept_loss_weight: [1] # Best performing weights for CEMs
     fixed_embeddings_always: True
-    ground_truth_emb_averages: True # Difference!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    ground_truth_emb_averages: True
 
 
   - architecture: 'FixedConceptEmbeddingModel'
@@ -271,7 +271,7 @@ runs:
     embedding_activation: "leakyrelu"
     weights_path: '{results_dir}/CEM_Baseline_cwl_{concept_loss_weight}'
     concept_loss_weight: [1] # Best performing weights for CEMs
-    fixed_embeddings_always: False  # Difference!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    fixed_embeddings_always: False
     ground_truth_emb_averages: False
 
 
@@ -282,8 +282,8 @@ runs:
     embedding_activation: "leakyrelu"
     weights_path: '{results_dir}/CEM_Baseline_cwl_{concept_loss_weight}'
     concept_loss_weight: [1] # Best performing weights for CEMs
-    fixed_embeddings_always: False  # Difference!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    ground_truth_emb_averages: True # Difference!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    fixed_embeddings_always: False
+    ground_truth_emb_averages: True
 
   - architecture: 'ConceptBottleneckModel'
     run_name: "DNN_extra_dims_{extra_dims}"
@@ -410,7 +410,7 @@ runs:
     all_intervened_loss_weight: [0.1, 1]
     emb_size: 16
     ood_dropout_prob: [0.1, 0.5, 0.9]
-    concept_loss_weight: [1]
+    concept_loss_weight: [1] # Selected from CEM's hyperparameter search
     calibration_epochs: [0, 30]
     max_epochs: 150
     training_intervention_prob: 0.25

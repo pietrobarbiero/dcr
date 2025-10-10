@@ -494,7 +494,7 @@ Depending on which experiments you may wish to run, you may have to **download**
 a pre-processed. This is particularly necessary for the following datasets:
 1. **CUB**: For our CUB experiments, we use the pre-processed concept-standardized version by Koh et al. which can be found [here](https://worksheets.codalab.org/bundles/0xd013a7ba2e88481bbc07e787f73109f5). To use it in our setup, please download this dataset to `cem/data/CUB200/`. This should allow you to also run our CUB-Incomplete experiments are they are based on the same dataset.
 2. **CelebA**: For our CelebA experiments, please use the dataset found [here](https://mmlab.ie.cuhk.edu.hk/projects/CelebA.html).
-3. **Cifar10**: For Cifar10, please download the dataset from [here](https://github.com/mateoespinosa/cem/blob/main/data/cifar10.zip) and unzip it into a data folder you can link to when training on this dataset. For details on how this dataset was constructed, please refer to the Appendix of our MixCEM paper.
+3. **Cifar10**: For Cifar10, please download the dataset from [here](https://drive.google.com/file/d/14Cj2ig3TpRbDkoeLv-m6PEYuuHNLkMJZ/view?usp=drive_link) and unzip it into a data folder you can link to when training on this dataset. For details on how this dataset was constructed, please refer to the Appendix of our MixCEM paper.
 4. **AwA2**: For the AwA2 experiments, please download the dataset from [here](https://cvml.ista.ac.at/AwA2/).
 5. **TravelingBirds**: For the TravelingBirds experiments, please download the `CUB_Fixed` dataset from Koh et al.'s [official code](https://worksheets.codalab.org/bundles/0x518829de2aa440c79cd9d75ef6669f27). Once you download this dataset, use the same instructions/loader as the CUB dataset (as this is a variation of the CUB dataset).
 

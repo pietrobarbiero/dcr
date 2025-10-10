@@ -1,0 +1,317 @@
+trials: 2
+model_selection_trials: 2
+
+results_dir: /anfs/bigdisc/me466/mixcem_results/cub_completeness_ablation/
+
+model_selection_groups:
+  - ["^(DNN).*$", "DNN (Baseline)"]
+  - ["^(CBM_Sigmoid_).*$", "Joint CBM (Baseline)"]
+  - ["^(CBM_Logit_).*$", "Joint Logit CBM (Baseline)"]
+  - ["^(CBM_Seq).*$", "Sequential CBM (Baseline)"]
+  - ["^(CBM_Ind).*$", "Independent CBM (Baseline)"]
+  - ["^(Hybrid-CBM_).*(_).*$", "Hybrid-CBM (Baseline)"]
+  - ["^(CEM_).*$", "CEM (Baseline)"]
+  - ["^(IntCEM_).*(_Baseline).*$", "IntCEM (Baseline)"]
+  - ["^(MixCEM_).*(_Baseline).*$", "MixCEM (Baseline)"]
+  - ["^(ProbCBM_).*$", "ProbCBM (Baseline)"]
+  - ["^(PCBM_).*$", "Posthoc CBM (Baseline)"]
+  - ["^(HybridPCBM_).*$", "Posthoc Hybrid CBM (Baseline)"]
+
+  - ["^(ConceptToLabelModel).*$", "Bayes MLP (Baseline)"]
+  - [".*(MixCEM_Final_t_).*(emc_50_).*$", "MixCEM Final All Sample (Baseline)"]
+
+model_selection_metrics:
+  - val_acc_y_random_group_level_True_use_prior_False_int_auc
+  - val_acc_y
+  - val_mixcem_sel_acc
+
+shared_params:
+  # Dataset Configuration
+  dataset_config:
+    dataset: "cub"
+    num_workers: 8
+    batch_size: 128 #64
+
+    # DATASET VARIABLES
+    root_dir: /homes/me466/data/CUB200/
+    sampling_percent: [0.1, 0.25, 0.5, 0.75, 0.9, 1]
+    sampling_groups: False # True # DIFFERENCE!!!!
+    test_subsampling: 1
+    weight_loss: True
+
+  # Intervention Parameters
+  intervention_config:
+    competence_levels: [1]
+    intervention_freq: 1
+    intervention_batch_size: 512 #1024 #512
+    intervention_policies:
+      - policy: "random"
+        group_level: False # True # DIFFERENCE!!!!
+        use_prior: False
+    val_intervention_policies:
+      - policy: "random"
+        group_level: False # True # DIFFERENCE!!!!
+        use_prior: False
+
+  # Representation metrics
+  # Change to False if you want representation metrics to be included in the
+  # evaluation (may significantly increase experiment times)
+  skip_repr_evaluation: True
+
+  max_epochs: 150
+  top_k_accuracy: null
+  save_model: True
+  patience: 15
+  extra_dims: 0
+  learning_rate: 0.01
+  weight_decay: 0.000004
+  weight_loss: True
+  c_extractor_arch: resnet18
+  optimizer: sgd
+  bool: False
+  early_stopping_monitor: val_loss
+  early_stopping_mode: min
+  early_stopping_delta: 0.0
+  momentum: 0.9
+  sigmoidal_prob: False
+  training_intervention_prob: 0
+  concept_loss_weight: 1
+  grid_variables:
+    - dataset_config.sampling_percent
+  grid_search_mode: exhaustive
+runs:
+
+  #########################
+  ## MixCEM's Turn
+  #########################
+
+  - architecture: 'ConceptBottleneckModel'
+    run_name: "CBM_Sigmoid_sampling_{dataset_config[sampling_percent]}_cwl_{concept_loss_weight}"
+    training_intervention_prob: 0
+    embedding_activation: "leakyrelu"
+    bool: False
+    extra_dims: 0
+    sigmoidal_extra_capacity: False
+    sigmoidal_prob: True
+    concept_loss_weight: [1]
+    grid_variables:
+    - dataset_config.sampling_percent
+    - concept_loss_weight
+    grid_search_mode: exhaustive
+
+  - architecture: 'ConceptBottleneckModel'
+    run_name: "CBM_Sigmoid_sampling_{dataset_config[sampling_percent]}_cwl_{concept_loss_weight}"
+    training_intervention_prob: 0
+    embedding_activation: "leakyrelu"
+    bool: False
+    extra_dims: 0
+    sigmoidal_extra_capacity: False
+    sigmoidal_prob: True
+    concept_loss_weight: [1, 0.1, 10]
+    dataset_config:
+      dataset: "cub"
+      num_workers: 8
+      batch_size: 128 #64
+
+      # DATASET VARIABLES
+      root_dir: /homes/me466/data/CUB200/
+      sampling_percent: [0.5, 1] #[0.1, 0.25, 0.5, 0.75, 0.9, 1]
+      sampling_groups: False # True # DIFFERENCE!!!!
+      test_subsampling: 1
+      weight_loss: True
+    grid_variables:
+    - dataset_config.sampling_percent
+    - concept_loss_weight
+    grid_search_mode: exhaustive
+
+  - architecture: 'ConceptBottleneckModel'
+    run_name: "CBM_Logit_sampling_{dataset_config[sampling_percent]}_cwl_{concept_loss_weight}"
+    training_intervention_prob: 0
+    embedding_activation: "leakyrelu"
+    bool: False
+    extra_dims: 0
+    sigmoidal_extra_capacity: False
+    sigmoidal_prob: False
+    concept_loss_weight: [1, 10]
+    grid_variables:
+    - dataset_config.sampling_percent
+    - concept_loss_weight
+    grid_search_mode: exhaustive
+
+  - architecture: 'ConceptBottleneckModel'
+    run_name: "CBM_Bool_sampling_{dataset_config[sampling_percent]}_cwl_{concept_loss_weight}"
+    training_intervention_prob: 0
+    embedding_activation: "leakyrelu"
+    bool: true
+    extra_dims: 0
+    sigmoidal_extra_capacity: False
+    sigmoidal_prob: True
+    concept_loss_weight: [1] # [1, 0.1, 10]
+    grid_variables:
+    - dataset_config.sampling_percent
+    - concept_loss_weight
+    grid_search_mode: exhaustive
+
+  - architecture: 'ConceptEmbeddingModel'
+    run_name: "CEM_sampling_{dataset_config[sampling_percent]}_cwl_{concept_loss_weight}"
+    sigmoidal_prob: True
+    training_intervention_prob: 0.25
+    embedding_activation: "leakyrelu"
+    emb_size: 16
+
+  - architecture: 'ConceptEmbeddingModel'
+    run_name: "CEM_no_randint_sampling_{dataset_config[sampling_percent]}_cwl_{concept_loss_weight}"
+    sigmoidal_prob: True
+    training_intervention_prob: 0
+    embedding_activation: "leakyrelu"
+    emb_size: 16
+
+  - architecture: 'IndependentConceptBottleneckModel'
+    run_name: "CBM_Ind_sampling_{dataset_config[sampling_percent]}"
+    embedding_activation: "leakyrelu"
+    bool: False
+    extra_dims: 0
+    sigmoidal_extra_capacity: False
+    sigmoidal_prob: True
+
+  - architecture: 'SequentialConceptBottleneckModel'
+    run_name: "CBM_Seq_sampling_{dataset_config[sampling_percent]}"
+    embedding_activation: "leakyrelu"
+    bool: False
+    extra_dims: 0
+    sigmoidal_extra_capacity: False
+    sigmoidal_prob: True
+
+  # Different intervention policies
+  - architecture: 'ConceptEmbeddingModel'
+    run_name: "CEM_sampling_{dataset_config[sampling_percent]}_cwl_{concept_loss_weight}"
+    sigmoidal_prob: True
+    training_intervention_prob: 0.25
+    embedding_activation: "leakyrelu"
+    emb_size: 16
+    # Intervention Parameters
+    intervention_config:
+      competence_levels: [1]
+      intervention_freq: 1
+      intervention_batch_size: 1024 #2048 #8096 #1024 #512
+      intervention_policies:
+        - policy: "random"
+          group_level: False
+          use_prior: False
+        - policy: "random"
+          group_level: True
+          use_prior: False
+        - policy: "optimal_greedy"
+          group_level: True
+          use_prior: False
+        - policy: "global_val_error"
+          group_level: True
+          use_prior: False
+        - policy: "global_val_improvement"
+          group_level: True
+          use_prior: False
+        - policy: "uncertainty"
+          group_level: True
+          use_prior: False
+        - policy: "coop"
+          group_level: True
+          use_prior: False
+        # - policy: "behavioural_cloning"
+        #   group_level: True
+        #   use_prior: False
+
+      val_intervention_policies:
+        - policy: "random"
+          group_level: False # True # DIFFERENCE!!!!
+          use_prior: False
+    dataset_config:
+      dataset: "cub"
+      num_workers: 8
+      batch_size: 128 #64
+
+      # DATASET VARIABLES
+      root_dir: /homes/me466/data/CUB200/
+      sampling_percent: [1]
+      sampling_groups: False # True # DIFFERENCE!!!!
+      test_subsampling: 1
+      weight_loss: True
+
+  - architecture: 'ConceptEmbeddingModel'
+    run_name: "CEM_sampling_{dataset_config[sampling_percent]}_cwl_{concept_loss_weight}_emb_size_{emb_size}"
+    sigmoidal_prob: True
+    training_intervention_prob: 0.25
+    embedding_activation: "leakyrelu"
+    emb_size: [1, 2, 4, 8, 16, 32]
+    dataset_config:
+      dataset: "cub"
+      num_workers: 8
+      batch_size: 128 #64
+
+      # DATASET VARIABLES
+      root_dir: /homes/me466/data/CUB200/
+      sampling_percent: [0.25, 1]
+      sampling_groups: False # True # DIFFERENCE!!!!
+      test_subsampling: 1
+      weight_loss: True
+
+    grid_variables:
+      - dataset_config.sampling_percent
+      - emb_size
+    grid_search_mode: exhaustive
+
+  - architecture: 'ConceptBottleneckModel'
+    run_name: "Hybrid-CBM_Sigmoid_extra_dims_{extra_dims}_sampling_{dataset_config[sampling_percent]}_cwl_{concept_loss_weight}"
+    extra_dims: [128, 512, 1024]
+    training_intervention_prob: 0
+    embedding_activation: "leakyrelu"
+    sigmoidal_prob: True
+    grid_variables:
+      - extra_dims
+      - dataset_config.sampling_percent
+    grid_search_mode: exhaustive
+
+  - architecture: 'ConceptBottleneckModel'
+    run_name: "Hybrid-CBM_Sigmoid_extra_dims_{extra_dims}_sampling_{dataset_config[sampling_percent]}_cwl_{concept_loss_weight}"
+    extra_dims: [168, 420, 840, 1260, 1512, 1680]
+    training_intervention_prob: 0
+    embedding_activation: "leakyrelu"
+    sigmoidal_prob: True
+    grid_variables:
+      - extra_dims
+      - dataset_config.sampling_percent
+    grid_search_mode: paired
+
+  - architecture: 'ConceptBottleneckModel'
+    run_name: "Hybrid-CBM_Sigmoid_extra_dims_{extra_dims}_sampling_{dataset_config[sampling_percent]}_cwl_{concept_loss_weight}"
+    extra_dims: [168, 420, 840, 1260, 1512, 1680]
+    training_intervention_prob: 0
+    embedding_activation: "leakyrelu"
+    sigmoidal_prob: True
+    dataset_config:
+      dataset: "cub"
+      num_workers: 8
+      batch_size: 128
+
+      # DATASET VARIABLES
+      root_dir: /homes/me466/data/CUB200/
+      sampling_percent: [0.25, 0.5]
+      sampling_groups: False # True # DIFFERENCE!!!!
+      test_subsampling: 1
+      weight_loss: True
+    grid_variables:
+      - extra_dims
+      - dataset_config.sampling_percent
+    grid_search_mode: exhaustive
+
+  - architecture: 'ConceptBottleneckModel'
+    run_name: "DNN_extra_sampling_{dataset_config[sampling_percent]}_dims_{extra_dims}"
+    extra_dims: [168, 420, 840, 1260, 1512, 1680]
+    training_intervention_prob: 0
+    embedding_activation: "leakyrelu"
+    sigmoidal_prob: True
+    concept_loss_weight: 0
+    grid_variables:
+      - dataset_config.sampling_percent
+      - extra_dims
+    grid_search_mode: paired
+

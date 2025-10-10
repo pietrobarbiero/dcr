@@ -1,0 +1,274 @@
+trials: 2
+model_selection_trials: 1
+results_dir: /anfs/bigdisc/me466/mixcem_results/cub_incomplete_other_noise/
+
+num_load_workers: 0
+
+model_selection_groups:
+  - ["^(CEM_Baseline_).*$", "CEM (Baseline)"]
+  - ["^(IntCEM_).*$", "IntCEM (Baseline)"]
+  - [".*(MixCEM_Final).*$", "MixCEM Final All Sample (Baseline)"]
+  - ["^(ProbCBM_).*$", "ProbCBM (Baseline)"]
+
+model_selection_metrics:
+  - val_acc_y_random_group_level_True_use_prior_False_int_auc
+  - val_acc_y
+  - val_mixcem_sel_acc
+
+
+shared_params:
+  # Dataset Configuration
+  dataset_config:
+    dataset: "cub"
+    num_workers: 8
+    batch_size: 64
+
+    # DATASET VARIABLES
+    root_dir: /homes/me466/data/CUB200/
+    sampling_percent: 0.25  # [IMPORTANT] Select only a quarter of all concepts!
+    sampling_groups: True
+    test_subsampling: 1
+    weight_loss: True
+
+  # Intervention Parameters
+  intervention_config:
+    competence_levels: [1]
+    intervention_freq: 1
+    intervention_batch_size: 512 #256
+    val_intervention_policies:
+      - policy: "random"
+        group_level: True
+        use_prior: False
+    intervention_policies:
+      - policy: "random"
+        group_level: True
+        use_prior: False
+
+  # Representation metrics
+  # Change to False if you want representation metrics to be included in the
+  # evaluation (may significantly increase experiment times)
+  skip_repr_evaluation: True
+
+  max_epochs: 150
+  top_k_accuracy: null
+  save_model: True
+  patience: 15
+  emb_size: 16
+  extra_dims: 0
+  learning_rate: 0.01
+  weight_decay: 0.000004
+  weight_loss: True
+  c_extractor_arch: resnet18
+  optimizer: sgd
+  bool: False
+  early_stopping_monitor: val_loss
+  early_stopping_mode: min
+  early_stopping_delta: 0.0
+  momentum: 0.9
+  sigmoidal_prob: False
+  training_intervention_prob: 0
+  concept_loss_weight: [1, 5, 10]
+  grid_variables:
+    - concept_loss_weight
+  grid_search_mode: exhaustive
+
+  # Evaluation configuration
+  eval_config:
+    additional_metrics:
+      - name: mixcem_sel
+        include_list: ['.*(MixCEM_Final).*']
+
+    additional_test_sets:
+      - name: "OOD_harder_sap_0.05"
+        update_previous: True
+        dataset_config:
+         test_transformation_config:
+           post_generation: False
+           name: harder_salt_and_pepper
+           amount: 0.05
+           s_vs_p: 0.5
+
+      - name: "OOD_harder_sap_0.1"
+        update_previous: True
+        dataset_config:
+          test_transformation_config:
+            post_generation: False
+            name: harder_salt_and_pepper
+            amount: 0.1
+            s_vs_p: 0.5
+
+      - name: "OOD_harder_sap_0.25"
+        update_previous: True
+        dataset_config:
+          test_transformation_config:
+            post_generation: False
+            name: harder_salt_and_pepper
+            amount: 0.25
+            s_vs_p: 0.5
+
+      - name: "OOD_harder_sap_0.5"
+        update_previous: True
+        dataset_config:
+          test_transformation_config:
+            post_generation: False
+            name: harder_salt_and_pepper
+            amount: 0.5
+            s_vs_p: 0.5
+
+      - name: "OOD_gaussian_0.1"
+        update_previous: True
+        dataset_config:
+         test_transformation_config:
+           post_generation: False
+           name: gaussian_noise
+           sigma: 0.1
+
+
+      - name: "OOD_gaussian_0.5"
+        update_previous: True
+        dataset_config:
+         test_transformation_config:
+           post_generation: False
+           name: gaussian_noise
+           sigma: 0.5
+
+      - name: "OOD_gaussian_1"
+        update_previous: True
+        dataset_config:
+         test_transformation_config:
+           post_generation: False
+           name: gaussian_noise
+           sigma: 1
+
+      - name: "OOD_gaussian_2"
+        update_previous: True
+        dataset_config:
+         test_transformation_config:
+           post_generation: False
+           name: gaussian_noise
+           sigma: 2
+
+runs:
+  # For IntCEM we selected: IntCEM_emb_size_16_intervention_weight_1_intervention_task_discount_1.1_Baseline_cwl_1
+  - architecture: "IntAwareConceptEmbeddingModel"
+    run_name: "IntCEM_emb_size_{emb_size}_intervention_weight_{intervention_weight}_intervention_task_discount_{intervention_task_discount}_Baseline_cwl_{concept_loss_weight}"
+    concept_loss_weight: [1]
+    training_intervention_prob: 0.25
+    intervention_weight: [1]
+    intervention_task_discount: [1.1]
+    use_concept_groups: True
+    int_model_use_bn: True
+    int_model_layers: [128, 128, 64, 64]
+    embedding_activation: "leakyrelu"
+    max_horizon: 6
+    horizon_rate: 1.005
+    gradient_clip_val: 100
+    emb_size: [16]
+    grid_variables:
+        - concept_loss_weight
+        - intervention_task_discount
+        - intervention_weight
+        - emb_size
+    grid_search_mode: exhaustive
+
+  # For CEM we selected: CEM_Baseline_cwl_1
+  - architecture: 'ConceptEmbeddingModel'
+    run_name: "CEM_Baseline_cwl_{concept_loss_weight}"
+    sigmoidal_prob: True
+    training_intervention_prob: 0.25
+    concept_loss_weight: [1]
+    embedding_activation: "leakyrelu"
+    grid_variables:
+        - concept_loss_weight
+    grid_search_mode: exhaustive
+
+
+  # For ProbCBM we selected: ProbCBM_cwl_class_hidden_dim_64_hidden_dim_16_n_samples_inference_50_max_concept_epochs_70_max_task_epochs_75
+  - architecture: 'ProbabilisticConceptBottleneckModel'
+    run_name: "ProbCBM_cwl_class_hidden_dim_{class_hidden_dim}_hidden_dim_{hidden_dim}_n_samples_inference_{n_samples_inference}_max_concept_epochs_{max_concept_epochs}_max_task_epochs_{max_task_epochs}"
+    n_samples_inference: 50
+    use_neg_concept: True
+    pred_class: True
+    init_negative_scale: 5
+    init_shift: 5
+    pretrained: True
+    hidden_dim: [16]
+    class_hidden_dim: [64]
+    intervention_prob: 0.5
+    gradient_clip_val: 2.0
+    max_concept_epochs: 70
+    warmup_epochs: 5
+    max_task_epochs: 75
+    vib_beta: 0.00005
+    concept_loss_weight: 1
+    learning_rate: 0.001
+    lr_ratio: 10
+    weight_decay: 0
+    weight_loss: False
+    optimizer: adam
+    grid_variables:
+      - class_hidden_dim
+      - hidden_dim
+    grid_search_mode: exhaustive
+
+
+
+  # For MixCEM Final All Sample we selected: MixCEM_Final_t_1_r_1_concat_None_0_mpc_1_tmc_1_emc_50_cwc_False_ce_30_g_ood_0.1_emb_16_True_tip_0.25_itd_1_iw_0_cwl_1
+  - architecture: 'MCIntCEM'
+    run_name: "MixCEM_Final_t_{temperature}_r_{all_intervened_loss_weight}_{pooling_mode}_{uncerainty_threshold_percentile}_{global_epochs}_mpc_{mixed_probs_coeff}_tmc_{montecarlo_train_tries}_emc_{montecarlo_test_tries}_cwc_{class_wise_temperature}_ce_{calibration_epochs}_g_ood_{ood_dropout_prob}_emb_{emb_size}_{finetune_with_val}_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_cwl_{concept_loss_weight}"
+    load_path_name: "MixCEM_Final_t_{temperature}_r_{all_intervened_loss_weight}_{pooling_mode}_None_{global_epochs}_mpc_{mixed_probs_coeff}_tmc_{montecarlo_train_tries}_emc_0_cwc_{class_wise_temperature}_ce_0_g_ood_{ood_dropout_prob}_emb_{emb_size}_True_tip_{training_intervention_prob}_itd_{intervention_task_discount}_iw_{intervention_weight}_cwl_{concept_loss_weight}"
+
+    concept_loss_weight: [1]
+    emb_size: [16]
+    shared_emb_generator: True
+    montecarlo_train_tries: [1]
+    montecarlo_test_tries: [50]
+    ood_dropout_prob: [0.1]
+    pooling_mode: ['concat']
+    calibration_epochs: [30]
+    finetune_with_val: [True]
+    learnable_temps: False
+    class_wise_temperature: False
+    global_epochs: [0]
+    global_mixed_probs_coeff: 0
+    freeze_global_embeddings: False
+    max_epochs: 100 # CHANGE: used to be 100
+    uncerainty_threshold_percentile: [null]
+    inference_threshold: False
+    mixed_probs_coeff: [1]
+    all_intervened_loss_weight: [1]
+    calibrate_concept_probs: True
+    dynamic_confidence_scaling: True
+    temperature: [1]
+    scale_fn: entropy
+
+    ###############################################################################################
+
+    # IntCEM stuff
+    embedding_activation: null
+    training_intervention_prob: [0.25]
+    intervention_task_discount: [1]
+    use_concept_groups: True
+    int_model_use_bn: False
+    int_model_layers: []
+    max_horizon: 1
+    horizon_rate: 1
+    intervention_weight: [0]
+    grid_variables:
+      - training_intervention_prob
+      - intervention_task_discount
+      - ood_dropout_prob
+      - emb_size
+      - finetune_with_val
+      - concept_loss_weight
+      - pooling_mode
+      - intervention_weight
+      - global_epochs
+      - montecarlo_train_tries
+      - mixed_probs_coeff
+      - all_intervened_loss_weight
+      - temperature
+      - calibration_epochs
+      - uncerainty_threshold_percentile
+      - montecarlo_test_tries
+    grid_search_mode: exhaustive

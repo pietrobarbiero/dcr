@@ -1,31 +1,35 @@
-import os
-import numpy as np
-import torch
-import pytorch_lightning as pl
-import logging
-import joblib
+import copy
 import io
-from contextlib import redirect_stdout
+import joblib
+import logging
+import numpy as np
+import os
+import pytorch_lightning as pl
+import re
 import scipy.special
 import sklearn.metrics
-from scipy.special import expit
 import time
+import torch
+
+from contextlib import redirect_stdout
 from pytorch_lightning import seed_everything
+from scipy.special import expit
 from typing import Callable
 
-from cem.train.utils import load_call
-from cem.models.construction import load_trained_model
-from cem.interventions.random import IndependentRandomMaskIntPolicy
-from cem.interventions.random import IndependentRandomMaskIntPolicy
-from cem.interventions.uncertainty import UncertaintyMaximizerPolicy
-from cem.interventions.coop import CooP
-from cem.interventions.optimal import GreedyOptimal
+import cem.utils.data as data_utils
+
 from cem.interventions.behavioural_learning import BehavioralLearningPolicy
+from cem.interventions.coop import CooP
 from cem.interventions.global_policies import (
     GlobalValidationPolicy,
     GlobalValidationImprovementPolicy,
 )
-
+from cem.interventions.optimal import GreedyOptimal
+from cem.interventions.random import IndependentRandomMaskIntPolicy
+from cem.interventions.random import IndependentRandomMaskIntPolicy
+from cem.interventions.uncertainty import UncertaintyMaximizerPolicy
+from cem.models.construction import load_trained_model
+from cem.train.utils import load_call
 
 ################################################################################
 ## Global Variables
@@ -134,15 +138,14 @@ class AllInterventionPolicy(object):
         return mask, c
 
 def concepts_from_competencies(
-        c,
-        competencies,
-        use_concept_groups=False,
-        concept_map=None,
-        assume_mutually_exclusive=False,
-    ):
+    c,
+    competencies,
+    use_concept_groups=False,
+    concept_map=None,
+    assume_mutually_exclusive=False,
+):
     if concept_map is None:
         concept_map = {i : [i] for i in range(c.shape[-1])}
-
     if use_concept_groups:
         # Then we will have to generate one-hot labels for concept groups
         # one concept at a time
@@ -203,10 +206,13 @@ def concepts_from_competencies(
 
     else:
         # Else we assume we are given binary competencies
+        if isinstance(competencies, list):
+            competencies = np.array(competencies)
         if isinstance(competencies, np.ndarray):
-            competencies = torch.Tensor(competencies).to(c.device).type(
-                c.type()
-            )
+            competencies = torch.Tensor(competencies).to(c.device)
+        competencies = competencies.type(
+            c.type()
+        )
         correctly_selected = torch.bernoulli(competencies).to(c.device)
         c_updated = (
             c * correctly_selected +
@@ -219,7 +225,11 @@ def _default_competence_generator(
     y,
     c,
     concept_group_map,
+    use_sample_competence=False,
+    g=None,
 ):
+    if use_sample_competence and (g is not None):
+        return g
     return np.ones(c.shape)
 
 
@@ -259,13 +269,18 @@ def adversarial_intervene_in_cbm(
     x_test=None,
     y_test=None,
     c_test=None,
+    g_test=None,
     seed=None,
+    use_auc=False,
+    fast_intervention=False,
 ):
     def competence_generator(
         x,
         y,
         c,
         concept_group_map,
+        use_sample_competence=False,
+        g=None,
     ):
         return np.zeros(c.shape)
     return intervene_in_cbm(
@@ -293,7 +308,10 @@ def adversarial_intervene_in_cbm(
         x_test=x_test,
         y_test=y_test,
         c_test=c_test,
+        g_test=g_test,
         seed=seed,
+        use_auc=use_auc,
+        fast_intervention=fast_intervention,
     )
 
 def intervene_in_cbm(
@@ -323,8 +341,14 @@ def intervene_in_cbm(
     x_test=None,
     y_test=None,
     c_test=None,
+    g_test=None,
+    in_memory_dataset_cache=None, # Used for lazy in-memory dataset generation. Expected to have a single key 'loaded'.
     seed=None,
+    use_auc=False,
+    fast_intervention=False,
+    use_sample_competence=False,
 ):
+
     run_name = run_name or config.get('run_name', config['architecture'])
     if real_competence_generator is None:
         real_competence_generator = lambda x: x
@@ -348,7 +372,7 @@ def intervene_in_cbm(
     if (not rerun) and key_name:
         result_file = os.path.join(
             result_dir,
-            key_name + f"_fold_{split}.npy",
+            key_name + f"_{run_name}_fold_{split}.npy",
         )
         if os.path.exists(result_file):
             result = np.load(result_file)
@@ -372,6 +396,9 @@ def intervene_in_cbm(
             else:
                 construct_time = 0
             return result, avg_time, construct_time
+        else:
+            print("We could not find:", result_file)
+
 
     model = load_trained_model(
         config=config,
@@ -404,32 +431,31 @@ def intervene_in_cbm(
     if (
         (x_test is None) or
         (y_test is None) or
-        (c_test is None)
+        (c_test is None) or
+        (g_test is None)
     ):
-        if hasattr(test_dl.dataset, 'tensors'):
-            x_test, y_test, c_test = test_dl.dataset.tensors
+        if in_memory_dataset_cache is not None:
+            if 'loaded' not in in_memory_dataset_cache:
+                in_memory_dataset_cache['loaded'] = data_utils.daloader_to_memory(
+                    test_dl,
+                    as_torch=True,
+                    output_groups=True,
+                    num_workers=config.get(
+                        'num_load_workers',
+                        config.get('num_workers', 1),
+                    ),
+                )
+            x_test, y_test, c_test, g_test = in_memory_dataset_cache['loaded']
         else:
-            x_test, y_test, c_test = [], [], []
-            for data in test_dl:
-                if len(data) == 2:
-                    x, (y, c) = data
-                else:
-                    (x, y, c) = data
-                x_type = x.type()
-                y_type = y.type()
-                c_type = c.type()
-                x_test.append(x)
-                y_test.append(y)
-                c_test.append(c)
-            x_test = torch.FloatTensor(
-                np.concatenate(x_test, axis=0)
-            ).type(x_type)
-            y_test = torch.FloatTensor(
-                np.concatenate(y_test, axis=0)
-            ).type(y_type)
-            c_test = torch.FloatTensor(
-                np.concatenate(c_test, axis=0)
-            ).type(c_type)
+            x_test, y_test, c_test, g_test = data_utils.daloader_to_memory(
+                test_dl,
+                as_torch=True,
+                output_groups=True,
+                num_workers=config.get(
+                    'num_load_workers',
+                    config.get('num_workers', 1)
+                ),
+            )
     np.random.seed(42)
     indices = np.random.permutation(x_test.shape[0])[
         :int(np.ceil(x_test.shape[0]*test_subsampling))
@@ -441,7 +467,9 @@ def intervene_in_cbm(
         x=x_test,
         y=y_test,
         c=c_test,
+        g=g_test,
         concept_group_map=concept_group_map,
+        use_sample_competence=use_sample_competence,
     )
     c_test = concepts_from_competencies(
         c=c_test,
@@ -449,12 +477,15 @@ def intervene_in_cbm(
         use_concept_groups=group_level_competencies,
         concept_map=concept_group_map,
     )
-    competencies_test = torch.FloatTensor(competencies_test)
+
+    if not isinstance(competencies_test, torch.FloatTensor):
+        competencies_test = torch.FloatTensor(competencies_test)
     test_dl = torch.utils.data.DataLoader(
         dataset=torch.utils.data.TensorDataset(
             x_test,
             y_test,
             c_test,
+            g_test,
             competencies_test,
         ),
         batch_size=test_dl.batch_size,
@@ -508,35 +539,47 @@ def intervene_in_cbm(
                 x_test.shape[0] * (coeff if coeff != 0 else 1)
             )
         )
-        y_pred = np.concatenate(
+        y_logits = np.concatenate(
             list(map(lambda x: x[2].detach().cpu().numpy(), test_batch_results)),
             axis=0,
         )
-        if y_pred.shape[-1] > 1:
-            y_pred = np.argmax(y_pred, axis=-1)
+        if y_logits.shape[-1] > 1:
+            y_probs = scipy.special.softmax(y_logits, axis=-1)
+            if use_auc and (y_probs.shape[-1] == 2):
+                y_probs = y_probs[:, -1]
+                y_pred =(y_probs >= 0.5).astype(np.int32)
+            else:
+                y_pred = np.argmax(y_probs, axis=-1)
         else:
-            y_pred = np.squeeze((expit(y_pred) >= 0.5).astype(np.int32), axis=-1)
+            y_probs = expit(y_logits)
+            y_pred = np.squeeze(
+                (y_probs >= 0.5).astype(np.int32),
+                axis=-1,
+            )
         prev_interventions = np.concatenate(
             list(map(lambda x: x[3].detach().cpu().numpy(), test_batch_results)),
             axis=0,
         )
-        if n_tasks > 1:
+        if (not use_auc) and (n_tasks > 1):
             acc = np.mean(y_pred == y_test.detach().cpu().numpy())
             logging.debug(
-                f"\tTest accuracy when intervening "
+                f"\tAccuracy when intervening "
                 f"with {num_groups_intervened} "
                 f"concept groups is {acc * 100:.2f}%."
             )
         else:
-            if int(os.environ.get("VERBOSE_INTERVENTIONS", "0")):
-                [test_results] = trainer.test(model, test_dl)
-            else:
-                f = io.StringIO()
-                with redirect_stdout(f):
-                    [test_results] = trainer.test(model, test_dl)
-            acc = test_results['test_y_auc']
+            try:
+                acc = sklearn.metrics.roc_auc_score(
+                    y_test.detach().cpu().numpy(),
+                    y_probs,
+                    multi_class='ovo',
+                )
+            except Exception as e:
+                # If there is only one class in the true labels, then we resort
+                # to plain accuracy
+                acc = np.mean(y_pred == y_test.detach().cpu().numpy())
             logging.debug(
-                f"\tTest AUC when intervening with {num_groups_intervened} "
+                f"\tAUC when intervening with {num_groups_intervened} "
                 f"concept groups is {acc * 100:.2f}% (accuracy "
                 f"is {np.mean(y_pred == y_test.detach().cpu().numpy()) * 100:.2f}%)."
             )
@@ -550,6 +593,7 @@ def intervene_in_cbm(
                 x_test,
                 y_test,
                 c_test,
+                g_test,
                 competencies_test,
                 torch.IntTensor(prev_interventions),
             ),
@@ -580,7 +624,6 @@ def intervene_in_cbm(
         )
         np.save(result_file, np.array([construct_time]))
     return intervention_accs, avg_time, construct_time
-
 
 ##########################
 ## CooP Fine-tuning
@@ -789,18 +832,11 @@ def generate_policy_training_data(
         train_dl=train_dl,
     )
     batch_size = batch_size or train_dl.batch_size
-    x_train, y_train, c_train = [], [], []
-    for ds_data in train_dl:
-        if len(ds_data) == 2:
-            x, (y, c) = ds_data
-        else:
-            (x, y, c) = ds_data
-        x_train.append(x)
-        y_train.append(y)
-        c_train.append(c)
-    x_train = torch.FloatTensor(np.concatenate(x_train, axis=0))
-    y_train = torch.FloatTensor(np.concatenate(y_train, axis=0))
-    c_train = torch.FloatTensor(np.concatenate(c_train, axis=0))
+    x_train, y_train, c_train = data_utils.daloader_to_memory(
+        train_dl,
+        as_torch=True,
+        num_workers=config.get('num_load_workers', config.get('num_workers', 1)),
+    )
     unshuffle_dl = torch.utils.data.DataLoader(
         dataset=torch.utils.data.TensorDataset(x_train, y_train, c_train),
         batch_size=batch_size,
@@ -841,14 +877,10 @@ def generate_policy_training_data(
             list(map(lambda x: x[0].detach().cpu().numpy(), val_batch_results)),
             axis=0,
         )
-        val_c_true = []
-        for data in val_dl:
-            if len(data) == 2:
-                x, (y, c) = data
-            else:
-                (x, y, c) = data
-            val_c_true.append(c)
-        val_c_true = np.concatenate(val_c_true, axis=0)
+        _, _, val_c_true = data_utils.daloader_to_memory(
+            val_dl,
+            num_workers=config.get('num_load_workers', config.get('num_workers', 1)),
+        )
         for concept_idx in range(n_concepts):
             if (
                 (len(np.unique(val_c_true[:, concept_idx] >= 0.5)) == 1) or
@@ -1085,8 +1117,10 @@ def get_int_policy(
                 config["emb_size"] if config["architecture"] in [
                     "CEM",
                     "ConceptEmbeddingModel",
-                    "IntAwareConceptEmbeddingModel",
                     "IntCEM",
+                    "IntAwareConceptEmbeddingModel",
+                    "H-CEM",
+                    "HybridConceptEmbeddingModel",
                 ]
                 else 1
             )
@@ -1173,6 +1207,112 @@ def _rerun_policy(
                 return True
     return False
 
+
+def _evaluate_intervention_auc(
+    results,
+    config,
+    competence_levels=[1.0],
+    extra_suffix="",
+    real_competence_level="same",
+    group_level_competencies=False,
+    dl_name="test",
+    run_name="",
+):
+    intervention_config = config.get('intervention_config', {})
+    use_auc = intervention_config.get('use_auc', False)
+    if f'{dl_name}_intervention_policies' in intervention_config:
+        used_policies = intervention_config[f'{dl_name}_intervention_policies']
+    else:
+        used_policies = intervention_config.get(
+            'intervention_policies',
+            DEFAULT_POLICIES,
+        )
+    for competence_level in competence_levels:
+
+        if competence_level == 1:
+            currently_used_policies = used_policies
+        else:
+            currently_used_policies = intervention_config.get(
+                f'{dl_name}_incompetence_intervention_policies',
+                used_policies,
+            )
+        for policy_args in currently_used_policies:
+            useful_args = copy.deepcopy(policy_args)
+            useful_args.pop('include_run_names', None)
+            useful_args.pop('exclude_run_names', None)
+            key_policy_name = policy_args["policy"] + "_" + "_".join([
+                f'{key}_{policy_args[key]}'
+                for key in sorted(useful_args.keys())
+                if key != 'policy'
+            ])
+            if (
+                os.environ.get(
+                    f"IGNORE_INTERVENTION_{key_policy_name.upper()}",
+                    "0"
+                ) == "1"
+            ):
+                continue
+            # We give the option for some policies to be ran only for certain
+            # methods
+            included = policy_args.get('include_run_names', None) is None
+            for include_regex in policy_args.get('include_run_names', []):
+                if re.search(include_regex, run_name):
+                    # Then time to included it!
+                    included = True
+                    break
+            if not included:
+                logging.debug(
+                    f'Skipping policy {key_policy_name} for run {run_name} '
+                    f'after it did not match any of the include_run_names.'
+                )
+                continue
+            included = True
+            for skip_regex in policy_args.get('exclude_run_names', []):
+                if re.search(skip_regex, run_name):
+                    # Then time to skip it!
+                    logging.debug(
+                        f'Skipping policy {key_policy_name} for run {run_name} '
+                        f'after it matched with skip regex "{skip_regex}".'
+                    )
+                    included = False
+                    break
+            if not included:
+                continue
+            if competence_level == 1:
+                int_results_key = f'{dl_name}_{"auc" if use_auc else "acc"}_y_{key_policy_name}_ints'
+                int_auc_key = f'{dl_name}_{"auc" if use_auc else "acc"}_y_{key_policy_name}_int_auc'
+            else:
+                extra_suffix = (
+                    ("_"  + extra_suffix) if extra_suffix else extra_suffix
+                )
+                if group_level_competencies:
+                    int_results_key = (
+                        f'{dl_name}_{"auc" if use_auc else "acc"}_y_{key_policy_name}_ints'
+                        f'_co_{competence_level}_gl{extra_suffix}'
+                    )
+                    int_auc_key = (
+                        f'{dl_name}_{"auc" if use_auc else "acc"}_y_{key_policy_name}_int_auc_'
+                        f'co_{competence_level}_gl{extra_suffix}'
+                    )
+                else:
+                    int_results_key = (
+                        f'{dl_name}_{"auc" if use_auc else "acc"}_y_{key_policy_name}_ints'
+                        f'_co_{competence_level}{extra_suffix}'
+                    )
+                    int_auc_key = (
+                        f'{dl_name}_{"auc" if use_auc else "acc"}_y_{key_policy_name}_int_auc'
+                        f'_co_{competence_level}{extra_suffix}'
+                    )
+            int_results = results[int_results_key]
+            int_auc = np.sum(int_results)
+            results[int_auc_key] = int_auc
+            logging.info(
+                f"\t\t{dl_name} area under the intervention accuracy curve with "
+                f"policy {key_policy_name}, claimed "
+                f"competence {competence_level}, and real competence "
+                f"{real_competence_level} is {int_auc * 100:.2f}%."
+            )
+
 def test_interventions(
     run_name,
     train_dl,
@@ -1185,10 +1325,10 @@ def test_interventions(
     acquisition_costs,
     result_dir,
     concept_map,
-    intervened_groups,
+    intervention_freq=1,
     used_policies=None,
     intervention_batch_size=1024,
-    competence_levels=[1],
+    competence_levels=[1.0],
     real_competence_generator=None,
     extra_suffix="",
     real_competence_level="same",
@@ -1199,42 +1339,31 @@ def test_interventions(
     rerun=False,
     old_results=None,
     task_class_weights=None,
+    dl_name='test',
+    fast_intervention=False,
+    intervention_config=None,
+    use_sample_competence=False,
 ):
-    intervention_config = config.get('intervention_config', {})
-    used_policies = intervention_config.get(
-        'intervention_policies',
-        DEFAULT_POLICIES,
-    )
+    if intervention_config is None:
+        intervention_config = config.get(
+            'intervention_config',
+            {},
+        )
+    use_auc = intervention_config.get('use_auc', False)
+    if f'{dl_name}_intervention_policies' in intervention_config:
+        used_policies = intervention_config[f'{dl_name}_intervention_policies']
+    else:
+        used_policies = intervention_config.get(
+            'intervention_policies',
+            DEFAULT_POLICIES,
+        )
     intervention_batch_size = intervention_config.get(
         "intervention_batch_size",
         int(os.environ.get(f"INT_BATCH_SIZE", intervention_batch_size)),
     )
     results = {}
-    if hasattr(test_dl.dataset, 'tensors'):
-        x_test, y_test, c_test = test_dl.dataset.tensors
-    else:
-        x_test, y_test, c_test = [], [], []
-        for ds_data in test_dl:
-            if len(ds_data) == 2:
-                x, (y, c) = ds_data
-            else:
-                (x, y, c) = ds_data
-            x_type = x.type()
-            y_type = y.type()
-            c_type = c.type()
-            x_test.append(x)
-            y_test.append(y)
-            c_test.append(c)
-        x_test = torch.FloatTensor(
-            np.concatenate(x_test, axis=0)
-        ).type(x_type)
-        y_test = torch.FloatTensor(
-            np.concatenate(y_test, axis=0)
-        ).type(y_type)
-        c_test = torch.FloatTensor(
-            np.concatenate(c_test, axis=0)
-        ).type(c_type)
 
+    in_memory_dataset_cache = {}
 
     for competence_level in competence_levels:
         def competence_generator(
@@ -1242,7 +1371,11 @@ def test_interventions(
             y,
             c,
             concept_group_map,
+            use_sample_competence=False,
+            g=None,
         ):
+            if use_sample_competence and (g is not None):
+                return g
             if group_level_competencies:
                 # Then we will operate at a group level, so we need to make
                 # sure we distribute competence correctly across different
@@ -1285,13 +1418,46 @@ def test_interventions(
             currently_used_policies = used_policies
         else:
             currently_used_policies = intervention_config.get(
-                'incompetence_intervention_policies',
+                f'{dl_name}_incompetence_intervention_policies',
                 used_policies,
             )
         for policy_args in currently_used_policies:
+            if policy_args.get('group_level', True) and (
+                concept_map is not None
+            ):
+                intervened_groups = list(
+                    range(
+                        0,
+                        len(concept_map) + 1,
+                        policy_args.get(
+                            'intervention_freq',
+                            intervention_freq,
+                        ),
+                    )
+                )
+                used_concept_map = concept_map
+            else:
+                intervened_groups = list(
+                    range(
+                        0,
+                        n_concepts + 1,
+                        policy_args.get(
+                            'intervention_freq',
+                            intervention_freq,
+                        ),
+                    )
+                )
+                used_concept_map = None
+            sample_competence = policy_args.get(
+                'use_sample_competence',
+                use_sample_competence,
+            )
+            useful_args = copy.deepcopy(policy_args)
+            useful_args.pop('include_run_names', None)
+            useful_args.pop('exclude_run_names', None)
             key_policy_name = policy_args["policy"] + "_" + "_".join([
                 f'{key}_{policy_args[key]}'
-                for key in sorted(policy_args.keys())
+                for key in sorted(useful_args.keys())
                 if key != 'policy'
             ])
             if (
@@ -1301,6 +1467,33 @@ def test_interventions(
                 ) == "1"
             ):
                 continue
+            # We give the option for some policies to be ran only for certain
+            # methods
+            included = policy_args.get('include_run_names', None) is None
+            for include_regex in policy_args.get('include_run_names', []):
+                if re.search(include_regex, run_name):
+                    # Then time to included it!
+                    included = True
+                    break
+            if not included:
+                logging.debug(
+                    f'Skipping policy {key_policy_name} for run {run_name} '
+                    f'after it did not match any of the include_run_names.'
+                )
+                continue
+            included = True
+            for skip_regex in policy_args.get('exclude_run_names', []):
+                if re.search(skip_regex, run_name):
+                    # Then time to skip it!
+                    logging.debug(
+                        f'Skipping policy {key_policy_name} for run {run_name} '
+                        f'after it matched with skip regex "{skip_regex}".'
+                    )
+                    included = False
+                    break
+            if not included:
+                continue
+
             policy_params_fn, concept_selection_policy = get_int_policy(
                 policy_args=policy_args,
                 config=config,
@@ -1310,7 +1503,7 @@ def test_interventions(
                 run_name=run_name,
                 result_dir=result_dir,
                 tune_params=intervention_config.get('tune_params', True),
-                concept_group_map=concept_map,
+                concept_group_map=used_concept_map,
                 intervened_groups=intervention_config.get(
                     'tune_intervened_groups',
                     None,
@@ -1331,11 +1524,14 @@ def test_interventions(
                 task_class_weights=task_class_weights,
             )
             print(
-                f"\tIntervening in {run_name} with policy {key_policy_name} and "
-                f"competence {competence_level}"
+                f"\tIntervening in {run_name} with dataset '{dl_name}', "
+                f"policy {key_policy_name}, and competence {competence_level}"
             )
             if competence_level == 1:
-                key = f'test_acc_y_{key_policy_name}_ints'
+                key = (
+                    f'{dl_name}_{"auc" if use_auc else "acc"}_y_'
+                    f'{key_policy_name}_ints'
+                )
                 int_time_key = f'avg_int_time_{key_policy_name}_ints'
                 construction_times_key = (
                     f'construction_time_{key_policy_name}_ints'
@@ -1346,29 +1542,31 @@ def test_interventions(
                 )
                 if group_level_competencies:
                     key = (
-                        f'test_acc_y_{key_policy_name}_ints_co_{competence_level}'
-                        f'_gl{extra_suffix}'
+                        f'{dl_name}_{"auc" if use_auc else "acc"}_y_'
+                        f'{key_policy_name}_ints_'
+                        f'co_{competence_level}_gl{extra_suffix}'
                     )
                     int_time_key = (
-                        f'avg_int_time_{key_policy_name}_ints_co_{competence_level}'
-                        f'_gl{extra_suffix}'
+                        f'{dl_name}_avg_int_time_{key_policy_name}_ints_'
+                        f'co_{competence_level}_gl{extra_suffix}'
                     )
                     construction_times_key = (
-                        f'construction_time_{key_policy_name}_ints_'
+                        f'{dl_name}_construction_time_{key_policy_name}_ints_'
                         f'co_{competence_level}_gl_{extra_suffix}'
                     )
                 else:
                     key = (
-                        f'test_acc_y_{key_policy_name}_ints_co_{competence_level}'
-                        f'{extra_suffix}'
+                        f'{dl_name}_{"auc" if use_auc else "acc"}_y_'
+                        f'{key_policy_name}_ints_'
+                        f'co_{competence_level}{extra_suffix}'
                     )
                     int_time_key = (
-                        f'avg_int_time_{key_policy_name}_ints_co_{competence_level}'
-                        f'{extra_suffix}'
+                        f'{dl_name}_avg_int_time_{key_policy_name}_ints_'
+                        f'co_{competence_level}{extra_suffix}'
                     )
                     construction_times_key = (
-                        f'construction_time_{key_policy_name}_ints_co_{competence_level}'
-                        f'{extra_suffix}'
+                        f'{dl_name}_construction_time_{key_policy_name}_ints_'
+                        f'co_{competence_level}{extra_suffix}'
                     )
             dataset_config = config['dataset_config']
             (int_results, avg_time, constr_time), loaded = load_call(
@@ -1387,7 +1585,7 @@ def test_interventions(
                     run_name=run_name,
                     concept_selection_policy=concept_selection_policy,
                     policy_params=policy_params_fn,
-                    concept_group_map=concept_map,
+                    concept_group_map=used_concept_map,
                     intervened_groups=intervened_groups,
                     accelerator=accelerator,
                     devices=devices,
@@ -1411,12 +1609,16 @@ def test_interventions(
                     competence_generator=competence_generator,
                     real_competence_generator=real_competence_generator,
                     group_level_competencies=group_level_competencies,
-                    x_test=x_test,
-                    y_test=y_test,
-                    c_test=c_test,
-                    test_subsampling=dataset_config.get('test_subsampling', 1),
+                    in_memory_dataset_cache=in_memory_dataset_cache,
+                    test_subsampling=dataset_config.get(
+                        f'{dl_name}_subsampling',
+                        1,
+                    ),
                     seed=(42 + split),
                     task_class_weights=task_class_weights,
+                    use_auc=use_auc,
+                    fast_intervention=fast_intervention,
+                    use_sample_competence=sample_competence,
                 ),
             )
             results[key] = int_results
@@ -1430,9 +1632,9 @@ def test_interventions(
             else:
                 extra = ""
             for num_groups_intervened, val in enumerate(int_results):
-                if n_tasks > 1:
+                if not use_auc:
                     logging.info(
-                        f"\t\tTest accuracy when intervening "
+                        f"\t\t{dl_name} accuracy when intervening "
                         f"with {num_groups_intervened} "
                         f"concept groups with claimed competence "
                         f"{competence_level} and real competence "
@@ -1440,10 +1642,56 @@ def test_interventions(
                     )
                 else:
                     logging.info(
-                        f"\t\tTest AUC when intervening "
+                        f"\t\t{dl_name} AUC when intervening "
                         f"with {num_groups_intervened} "
                         f"concept groups with claimed competence "
                         f"{competence_level} and real competence "
                         f"{real_competence_level} is {val * 100:.2f}%{extra}."
                     )
+    _evaluate_intervention_auc(
+        results=results,
+        config=config,
+        competence_levels=competence_levels,
+        extra_suffix=extra_suffix,
+        real_competence_level=real_competence_level,
+        group_level_competencies=group_level_competencies,
+        dl_name=dl_name,
+        run_name=run_name,
+    )
+    if use_auc:
+        # Then rerun this but without AUC so that we also collect metrics
+        # for accuracy
+        intervention_config['use_auc'] = False
+        test_interventions(
+            run_name=run_name,
+            train_dl=train_dl,
+            val_dl=val_dl,
+            test_dl=test_dl,
+            imbalance=imbalance,
+            config=config,
+            n_tasks=n_tasks,
+            n_concepts=n_concepts,
+            acquisition_costs=acquisition_costs,
+            result_dir=result_dir,
+            concept_map=concept_map,
+            intervention_freq=intervention_freq,
+            used_policies=used_policies,
+            intervention_batch_size=intervention_batch_size,
+            competence_levels=competence_levels,
+            real_competence_generator=real_competence_generator,
+            extra_suffix=extra_suffix,
+            real_competence_level=real_competence_level,
+            group_level_competencies=group_level_competencies,
+            accelerator=accelerator,
+            devices=devices,
+            split=split,
+            rerun=rerun,
+            old_results=old_results,
+            task_class_weights=task_class_weights,
+            dl_name=dl_name,
+            fast_intervention=fast_intervention,
+            intervention_config=intervention_config,
+            use_sample_competence=use_sample_competence,
+        )
+        intervention_config['use_auc'] = True
     return results

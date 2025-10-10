@@ -40,10 +40,12 @@ shared_params:
     intervention_policies:
       - policy: "random"
         group_level: True
-        use_prior: True  # This will make the random policy use the learnt IntCEM prior!!!
+        use_prior: False
+      # Remove the following if you are only interested in random interventions
       - policy: "random"
         group_level: True
-        use_prior: False
+        use_prior: True
+        include_run_names: [".*(IntCEM).*"]
       - policy: "coop"
         group_level: True
         use_prior: False
@@ -59,6 +61,7 @@ shared_params:
       - policy: "global_val_improvement"
         group_level: True
         use_prior: False
+      ##########################################################################
 
   # Representation metrics
   # Change to False if you want representation metrics to be included in the

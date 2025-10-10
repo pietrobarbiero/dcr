@@ -51,9 +51,6 @@ def concept_alignment_score(
         c_vec.shape[0],
         step,
     ).astype(int)
-    print("in cas c_vec shape is", c_vec.shape)
-    print("n_clusters is", n_clusters)
-    print("step is", step)
     max_auc = np.trapz(np.ones(len(n_clusters)))
 
     # for each concept:

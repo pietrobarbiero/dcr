@@ -3,6 +3,8 @@ import torch
 
 from pytorch_lightning import seed_everything
 
+from cem.data.utils import LambdaDataset
+
 def generate_xor_data(size):
     # sample from normal distribution
     x = np.random.uniform(0, 1, (size, 2))
@@ -93,6 +95,9 @@ class SyntheticGenerator(object):
             root_dir=None,
             seed=42,
             output_dataset_vars=False,
+            train_sample_transform=None,
+            test_sample_transform=None,
+            val_sample_transform=None,
         ):
             seed_everything(seed)
 
@@ -100,6 +105,10 @@ class SyntheticGenerator(object):
             batch_size = config["batch_size"]
             x, c, y = generate_data(int(dataset_size * 0.7))
             train_data = torch.utils.data.TensorDataset(x, y, c)
+            train_data = LambdaDataset(
+                train_data,
+                transform=train_sample_transform,
+            )
             train_dl = torch.utils.data.DataLoader(
                 train_data,
                 batch_size=batch_size,
@@ -107,6 +116,10 @@ class SyntheticGenerator(object):
 
             x_test, c_test, y_test = generate_data(int(dataset_size * 0.2))
             test_data = torch.utils.data.TensorDataset(x_test, y_test, c_test)
+            test_data = LambdaDataset(
+                test_data,
+                transform=test_sample_transform,
+            )
             test_dl = torch.utils.data.DataLoader(
                 test_data,
                 batch_size=batch_size,
@@ -114,6 +127,10 @@ class SyntheticGenerator(object):
 
             x_val, c_val, y_val = generate_data(int(dataset_size * 0.1))
             val_data = torch.utils.data.TensorDataset(x_val, y_val, c_val)
+            val_data = LambdaDataset(
+                val_data,
+                transform=val_sample_transform,
+            )
             val_dl = torch.utils.data.DataLoader(
                 val_data,
                 batch_size=batch_size,

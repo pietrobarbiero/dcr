@@ -4,14 +4,13 @@ import torch
 
 from torchvision.models import resnet50
 
-from cem.metrics.accs import compute_accuracy
 from cem.models.cbm import ConceptBottleneckModel
 import cem.train.utils as utils
 
 
 
 ################################################################################
-## OUR MODEL
+## Concept Embedding Models
 ################################################################################
 
 
@@ -36,15 +35,18 @@ class ConceptEmbeddingModel(ConceptBottleneckModel):
         momentum=0.9,
         learning_rate=0.01,
         weight_decay=4e-05,
+        lr_scheduler_factor=0.1,
+        lr_scheduler_patience=10,
         weight_loss=None,
         task_class_weights=None,
-        tau=1,
 
         active_intervention_values=None,
         inactive_intervention_values=None,
         intervention_policy=None,
         output_interventions=False,
         use_concept_groups=False,
+
+        context_gen_out_size=None,
 
         top_k_accuracy=None,
     ):
@@ -129,9 +131,11 @@ class ConceptEmbeddingModel(ConceptBottleneckModel):
         self.n_concepts = n_concepts
         self.output_interventions = output_interventions
         self.intervention_policy = intervention_policy
-        self.pre_concept_model = c_extractor_arch(output_dim=None)
         self.training_intervention_prob = training_intervention_prob
         self.output_latent = output_latent
+        context_gen_out_size = context_gen_out_size or (2 * emb_size)
+        self.pre_concept_model = c_extractor_arch(output_dim=None)
+        self._intervention_idxs = None
         if self.training_intervention_prob != 0:
             self.ones = torch.ones(n_concepts)
 
@@ -154,60 +158,29 @@ class ConceptEmbeddingModel(ConceptBottleneckModel):
         self.top_k_accuracy = top_k_accuracy
         for i in range(n_concepts):
             if embedding_activation is None:
-                self.concept_context_generators.append(
-                    torch.nn.Sequential(*[
-                        torch.nn.Linear(
-                            list(
-                                self.pre_concept_model.modules()
-                            )[-1].out_features,
-                            # Two as each concept will have a positive and a
-                            # negative embedding portion which are later mixed
-                            2 * emb_size,
-                        ),
-                    ])
-                )
+                act_to_use = []
             elif embedding_activation == "sigmoid":
-                self.concept_context_generators.append(
-                    torch.nn.Sequential(*[
-                        torch.nn.Linear(
-                            list(
-                                self.pre_concept_model.modules()
-                            )[-1].out_features,
-                            # Two as each concept will have a positive and a
-                            # negative embedding portion which are later mixed
-                            2 * emb_size,
-                        ),
-                        torch.nn.Sigmoid(),
-                    ])
-                )
+                act_to_use = [torch.nn.Sigmoid()]
             elif embedding_activation == "leakyrelu":
-                self.concept_context_generators.append(
-                    torch.nn.Sequential(*[
-                        torch.nn.Linear(
-                            list(
-                                self.pre_concept_model.modules()
-                            )[-1].out_features,
-                            # Two as each concept will have a positive and a
-                            # negative embedding portion which are later mixed
-                            2 * emb_size,
-                        ),
-                        torch.nn.LeakyReLU(),
-                    ])
-                )
+                act_to_use = [torch.nn.LeakyReLU()]
             elif embedding_activation == "relu":
-                self.concept_context_generators.append(
-                    torch.nn.Sequential(*[
-                        torch.nn.Linear(
-                            list(
-                                self.pre_concept_model.modules()
-                            )[-1].out_features,
-                            # Two as each concept will have a positive and a
-                            # negative embedding portion which are later mixed
-                            2 * emb_size,
-                        ),
-                        torch.nn.ReLU(),
-                    ])
+                act_to_use = [torch.nn.ReLU()]
+            else:
+                raise ValueError(
+                    f'Unsupported embedding activation "{embedding_activation}"'
                 )
+            self.concept_context_generators.append(
+                torch.nn.Sequential(*([
+                    torch.nn.Linear(
+                        list(
+                            self.pre_concept_model.modules()
+                        )[-1].out_features,
+                        # Two as each concept will have a positive and a
+                        # negative embedding portion which are later mixed
+                        context_gen_out_size,
+                    ),
+                ] + act_to_use))
+            )
             if self.shared_prob_gen and (
                 len(self.concept_prob_generators) == 0
             ):
@@ -223,19 +196,20 @@ class ConceptEmbeddingModel(ConceptBottleneckModel):
                     2 * emb_size,
                     1,
                 ))
-        if c2y_model is None:
-            # Else we construct it here directly
-            units = [
-                n_concepts * emb_size
-            ] + (c2y_layers or []) + [n_tasks]
-            layers = []
-            for i in range(1, len(units)):
-                layers.append(torch.nn.Linear(units[i-1], units[i]))
-                if i != len(units) - 1:
-                    layers.append(torch.nn.LeakyReLU())
-            self.c2y_model = torch.nn.Sequential(*layers)
-        else:
-            self.c2y_model = c2y_model
+        if getattr(self, '_construct_c2y_model', True):
+            if c2y_model is None:
+                # Else we construct it here directly
+                units = [
+                    n_concepts * emb_size
+                ] + (c2y_layers or []) + [n_tasks]
+                layers = []
+                for i in range(1, len(units)):
+                    layers.append(torch.nn.Linear(units[i-1], units[i]))
+                    if i != len(units) - 1:
+                        layers.append(torch.nn.LeakyReLU())
+                self.c2y_model = torch.nn.Sequential(*layers)
+            else:
+                self.c2y_model = c2y_model
         self.sig = torch.nn.Sigmoid()
 
         self.loss_concept = torch.nn.BCELoss(weight=weight_loss)
@@ -250,9 +224,10 @@ class ConceptEmbeddingModel(ConceptBottleneckModel):
         self.learning_rate = learning_rate
         self.weight_decay = weight_decay
         self.optimizer_name = optimizer
+        self.lr_scheduler_factor = lr_scheduler_factor
+        self.lr_scheduler_patience = lr_scheduler_patience
         self.n_tasks = n_tasks
         self.emb_size = emb_size
-        self.tau = tau
         self.use_concept_groups = use_concept_groups
 
 
@@ -265,6 +240,7 @@ class ConceptEmbeddingModel(ConceptBottleneckModel):
         c_true=None,
         train=False,
         competencies=None,
+        **kwargs
     ):
         if train and (self.training_intervention_prob != 0) and (
             (c_true is not None) and
@@ -279,10 +255,87 @@ class ConceptEmbeddingModel(ConceptBottleneckModel):
                 (c_true.shape[0], 1),
             )
         if (c_true is None) or (intervention_idxs is None):
-            return prob, intervention_idxs
+            # Then time to mix!
+            bottleneck = (
+                pos_embeddings * torch.unsqueeze(prob, dim=-1) +
+                neg_embeddings * (1 - torch.unsqueeze(prob, dim=-1))
+            )
+            return prob, intervention_idxs, bottleneck
         intervention_idxs = intervention_idxs.type(torch.FloatTensor)
         intervention_idxs = intervention_idxs.to(prob.device)
-        return prob * (1 - intervention_idxs) + intervention_idxs * c_true, intervention_idxs
+        output = prob * (1 - intervention_idxs) + intervention_idxs * c_true
+        # Then time to mix!
+        bottleneck = self._construct_c2y_input(
+            pos_embeddings=pos_embeddings,
+            neg_embeddings=neg_embeddings,
+            probs=output,
+            **kwargs,
+        )
+        return output, intervention_idxs, bottleneck
+
+    def _predict_labels(self, bottleneck, **task_loss_kwargs):
+        return self.c2y_model(torch.flatten(bottleneck, start_dim=1, end_dim=-1))
+
+    def _construct_c2y_input(
+        self,
+        pos_embeddings,
+        neg_embeddings,
+        probs,
+        **task_loss_kwargs,
+    ):
+        bottleneck = (
+            pos_embeddings * torch.unsqueeze(probs, dim=-1) + (
+                neg_embeddings * (
+                    1 - torch.unsqueeze(probs, dim=-1)
+                )
+            )
+        )
+        bottleneck = bottleneck.view(
+            (-1, self.n_concepts * self.emb_size)
+        )
+        return bottleneck
+
+    def _generate_concept_embeddings(
+        self,
+        x,
+        latent=None,
+        training=False,
+    ):
+        if latent is None:
+            pre_c = self.pre_concept_model(x)
+            contexts = []
+            c_sem = []
+
+            # First predict all the concept probabilities
+            for i, context_gen in enumerate(self.concept_context_generators):
+                if self.shared_prob_gen:
+                    prob_gen = self.concept_prob_generators[0]
+                else:
+                    prob_gen = self.concept_prob_generators[i]
+                context = context_gen(pre_c)
+                prob = prob_gen(context)
+                contexts.append(torch.unsqueeze(context, dim=1))
+                c_sem.append(self.sig(prob))
+            c_sem = torch.cat(c_sem, axis=-1)
+            contexts = torch.cat(contexts, axis=1)
+            latent = contexts, c_sem
+        else:
+            contexts, c_sem = latent
+
+        pos_embeddings = contexts[:, :, :self.emb_size]
+        neg_embeddings = contexts[:, :, self.emb_size:]
+        return c_sem, pos_embeddings, neg_embeddings, {}
+
+    def _new_tail_results(
+        self,
+        x=None,
+        c=None,
+        y=None,
+        c_sem=None,
+        bottleneck=None,
+        y_pred=None,
+    ):
+        return []
 
     def _forward(
         self,
@@ -306,26 +359,12 @@ class ConceptEmbeddingModel(ConceptBottleneckModel):
             output_latent if output_latent is not None
             else self.output_latent
         )
-        if latent is None:
-            pre_c = self.pre_concept_model(x)
-            contexts = []
-            c_sem = []
 
-            # First predict all the concept probabilities
-            for i, context_gen in enumerate(self.concept_context_generators):
-                if self.shared_prob_gen:
-                    prob_gen = self.concept_prob_generators[0]
-                else:
-                    prob_gen = self.concept_prob_generators[i]
-                context = context_gen(pre_c)
-                prob = prob_gen(context)
-                contexts.append(torch.unsqueeze(context, dim=1))
-                c_sem.append(self.sig(prob))
-            c_sem = torch.cat(c_sem, axis=-1)
-            contexts = torch.cat(contexts, axis=1)
-            latent = contexts, c_sem
-        else:
-            contexts, c_sem = latent
+        c_sem, pos_embs, neg_embs, out_kwargs = self._generate_concept_embeddings(
+            x=x,
+            latent=latent,
+            training=train,
+        )
 
         # Now include any interventions that we may want to perform!
         if (intervention_idxs is None) and (c is not None) and (
@@ -336,8 +375,8 @@ class ConceptEmbeddingModel(ConceptBottleneckModel):
                 horizon = self.intervention_policy.horizon
             prior_distribution = self._prior_int_distribution(
                 prob=c_sem,
-                pos_embeddings=contexts[:, :, :self.emb_size],
-                neg_embeddings=contexts[:, :, self.emb_size:],
+                pos_embeddings=pos_embs,
+                neg_embeddings=neg_embs,
                 competencies=competencies,
                 prev_interventions=prev_interventions,
                 c=c,
@@ -360,26 +399,24 @@ class ConceptEmbeddingModel(ConceptBottleneckModel):
             intervention_idxs = self._standardize_indices(
                 intervention_idxs=intervention_idxs,
                 batch_size=x.shape[0],
+                device=x.device,
             )
 
         # Then, time to do the mixing between the positive and the
         # negative embeddings
-        probs, intervention_idxs = self._after_interventions(
+        probs, intervention_idxs, bottleneck = self._after_interventions(
             c_sem,
-            pos_embeddings=contexts[:, :, :self.emb_size],
-            neg_embeddings=contexts[:, :, self.emb_size:],
+            pos_embeddings=pos_embs,
+            neg_embeddings=neg_embs,
             intervention_idxs=intervention_idxs,
             c_true=c_int,
             train=train,
             competencies=competencies,
+            **out_kwargs
         )
-        # Then time to mix!
-        c_pred = (
-            contexts[:, :, :self.emb_size] * torch.unsqueeze(probs, dim=-1) +
-            contexts[:, :, self.emb_size:] * (1 - torch.unsqueeze(probs, dim=-1))
-        )
-        c_pred = c_pred.view((-1, self.emb_size * self.n_concepts))
-        y = self.c2y_model(c_pred)
+        self._intervention_idxs = intervention_idxs
+
+        y_pred = self._predict_labels(bottleneck=bottleneck)
         tail_results = []
         if output_interventions:
             if (
@@ -391,8 +428,268 @@ class ConceptEmbeddingModel(ConceptBottleneckModel):
                 ).to(x.device)
             tail_results.append(intervention_idxs)
         if output_latent:
+            if "latent" in out_kwargs:
+                latent = (latent or tuple([])) + out_kwargs['latent']
             tail_results.append(latent)
-        if output_embeddings:
-            tail_results.append(contexts[:, :, :self.emb_size])
-            tail_results.append(contexts[:, :, self.emb_size:])
-        return tuple([c_sem, c_pred, y] + tail_results)
+        if output_embeddings and (not pos_embs is None) and (
+            not neg_embs is None
+        ):
+            tail_results.append(pos_embs)
+            tail_results.append(neg_embs)
+
+        tail_results += self._new_tail_results(
+            x=x,
+            c=c,
+            y=y,
+            c_sem=c_sem,
+            bottleneck=bottleneck,
+            y_pred=y_pred,
+        )
+        return tuple([c_sem, bottleneck, y_pred] + tail_results)
+
+
+
+################################################################################
+## Fixed Embedding Version
+################################################################################
+
+
+class FixedEmbConceptEmbeddingModel(ConceptEmbeddingModel):
+    def __init__(
+        self,
+        n_concepts,
+        n_tasks,
+        emb_size=16,
+        training_intervention_prob=0.25,
+        embedding_activation="leakyrelu",
+        shared_prob_gen=True,
+        concept_loss_weight=1,
+        task_loss_weight=1,
+
+        c2y_model=None,
+        c2y_layers=None,
+        c_extractor_arch=utils.wrap_pretrained_model(resnet50),
+        output_latent=False,
+
+        optimizer="adam",
+        momentum=0.9,
+        learning_rate=0.01,
+        weight_decay=4e-05,
+        lr_scheduler_factor=0.1,
+        lr_scheduler_patience=10,
+        weight_loss=None,
+        task_class_weights=None,
+
+        active_intervention_values=None,
+        inactive_intervention_values=None,
+        intervention_policy=None,
+        output_interventions=False,
+        use_concept_groups=False,
+
+        context_gen_out_size=None,
+
+        top_k_accuracy=None,
+
+        # New parameters
+        fixed_embeddings=True,
+        initial_concept_embeddings=None,
+        fixed_embeddings_always=True,
+    ):
+        """
+        Same as a CEM but it has a set of learnable global embeddings
+        to use for each concept. Useful if you want the interventions
+        to be done using a global set of embeddings.
+        """
+
+        super(FixedEmbConceptEmbeddingModel, self).__init__(
+            n_concepts=n_concepts,
+            n_tasks=n_tasks,
+            emb_size=emb_size,
+            training_intervention_prob=training_intervention_prob,
+            embedding_activation=embedding_activation,
+            shared_prob_gen=shared_prob_gen,
+            concept_loss_weight=concept_loss_weight,
+            task_loss_weight=task_loss_weight,
+            c2y_model=c2y_model,
+            c2y_layers=c2y_layers,
+            c_extractor_arch=c_extractor_arch,
+            output_latent=output_latent,
+            optimizer=optimizer,
+            momentum=momentum,
+            learning_rate=learning_rate,
+            weight_decay=weight_decay,
+            lr_scheduler_factor=lr_scheduler_factor,
+            lr_scheduler_patience=lr_scheduler_patience,
+            weight_loss=weight_loss,
+            task_class_weights=task_class_weights,
+            active_intervention_values=None, # KEY!!!!
+            inactive_intervention_values=None, # KEY!!!!
+            intervention_policy=intervention_policy,
+            output_interventions=output_interventions,
+            use_concept_groups=use_concept_groups,
+            context_gen_out_size=context_gen_out_size,
+            top_k_accuracy=top_k_accuracy,
+        )
+
+        # Let's generate the global embeddings we will use
+        if (
+            (initial_concept_embeddings is None) and
+            (active_intervention_values is not None) and
+            (inactive_intervention_values is not None)
+        ):
+            active_intervention_values = torch.tensor(
+                active_intervention_values
+            )
+            inactive_intervention_values = torch.tensor(
+                inactive_intervention_values
+            )
+
+            initial_concept_embeddings = torch.concat(
+                [
+                    active_intervention_values.unsqueeze(1),
+                    inactive_intervention_values.unsqueeze(1),
+                ],
+                dim=1,
+            )
+        self.fixed_embeddings_always = fixed_embeddings_always
+        self._set_embeddings = True
+        if (initial_concept_embeddings is False) or (
+            initial_concept_embeddings is None
+        ):
+            initial_concept_embeddings = torch.normal(
+                torch.zeros(self.n_concepts, 2, emb_size),
+                torch.ones(self.n_concepts, 2, emb_size),
+            )
+        else:
+            if isinstance(initial_concept_embeddings, np.ndarray):
+                initial_concept_embeddings = torch.FloatTensor(
+                    initial_concept_embeddings
+                )
+        self.concept_embeddings = torch.nn.Parameter(
+            initial_concept_embeddings,
+            requires_grad=(not fixed_embeddings),
+        )
+
+    def _generate_concept_embeddings(
+        self,
+        x,
+        latent=None,
+        training=False,
+    ):
+        if not self._set_embeddings:
+            # Then run the standard CEM pathway
+            return ConceptEmbeddingModel._generate_concept_embeddings(
+                self=self,
+                x=x,
+                latent=latent,
+                training=training,
+            )
+        if latent is None:
+            pre_c = self.pre_concept_model(x)
+            contexts = []
+            c_sem = []
+
+            # First predict all the concept probabilities
+            for i, context_gen in enumerate(self.concept_context_generators):
+                if self.shared_prob_gen:
+                    prob_gen = self.concept_prob_generators[0]
+                else:
+                    prob_gen = self.concept_prob_generators[i]
+                context = context_gen(pre_c)
+                prob = prob_gen(context)
+                contexts.append(torch.unsqueeze(context, dim=1))
+                c_sem.append(self.sig(prob))
+            c_sem = torch.cat(c_sem, axis=-1)
+            contexts = torch.cat(contexts, axis=1)
+            latent = contexts, c_sem
+        else:
+            contexts, c_sem = latent
+        if self.fixed_embeddings_always:
+            pos_embeddings = self.concept_embeddings[:, 0, :].unsqueeze(0).expand(
+                x.shape[0],
+                -1,
+                -1,
+            )
+            neg_embeddings = self.concept_embeddings[:, 1, :].unsqueeze(0).expand(
+                x.shape[0],
+                -1,
+                -1,
+            )
+        else:
+            # Else we only use fixed embeddings for interventions
+            pos_embeddings = contexts[:, :, :self.emb_size]
+            neg_embeddings = contexts[:, :, self.emb_size:]
+        return c_sem, pos_embeddings, neg_embeddings, {}
+
+
+    def _after_interventions(
+        self,
+        prob,
+        pos_embeddings,
+        neg_embeddings,
+        intervention_idxs=None,
+        c_true=None,
+        train=False,
+        competencies=None,
+        **kwargs
+    ):
+        if self.fixed_embeddings_always:
+            # Then simply use the CEM pathway
+            return ConceptEmbeddingModel._after_interventions(
+                self=self,
+                prob=prob,
+                pos_embeddings=pos_embeddings,
+                neg_embeddings=neg_embeddings,
+                intervention_idxs=intervention_idxs,
+                c_true=c_true,
+                train=train,
+                competencies=competencies,
+                **kwargs
+            )
+        if train and (self.training_intervention_prob != 0) and (
+            (c_true is not None) and
+            (intervention_idxs is None)
+        ):
+            # Then we will probabilistically intervene in some concepts
+            mask = torch.bernoulli(
+                self.ones * self.training_intervention_prob,
+            )
+            intervention_idxs = torch.tile(
+                mask,
+                (c_true.shape[0], 1),
+            )
+        if (c_true is None) or (intervention_idxs is None):
+            # Then time to mix!
+            bottleneck = (
+                pos_embeddings * torch.unsqueeze(prob, dim=-1) +
+                neg_embeddings * (1 - torch.unsqueeze(prob, dim=-1))
+            )
+            return prob, intervention_idxs, bottleneck
+        intervention_idxs = intervention_idxs.type(torch.FloatTensor)
+        intervention_idxs = intervention_idxs.to(prob.device)
+        output = prob * (1 - intervention_idxs) + intervention_idxs * c_true
+        # Use the fixed embeddings for the intervened concepts
+        global_pos_embs = self.concept_embeddings[:, 0, :].unsqueeze(0).expand(
+            intervention_idxs.shape[0],
+            -1,
+            -1,
+        )
+        global_neg_embs = self.concept_embeddings[:, 1, :].unsqueeze(0).expand(
+            intervention_idxs.shape[0],
+            -1,
+            -1,
+        )
+        pos_embeddings = pos_embeddings * (1 - intervention_idxs.unsqueeze(-1)) + (
+            intervention_idxs.unsqueeze(-1) * global_pos_embs
+        )
+        neg_embeddings = neg_embeddings * (1 - intervention_idxs.unsqueeze(-1)) + (
+            intervention_idxs.unsqueeze(-1) * global_neg_embs
+        )
+        # Then time to mix!
+        bottleneck = self._construct_c2y_input(
+            pos_embeddings=pos_embeddings,
+            neg_embeddings=neg_embeddings,
+            probs=output,
+            **kwargs,
+        )
+        return output, intervention_idxs, bottleneck

@@ -1,7 +1,7 @@
 import sklearn.metrics
 import torch
 import pytorch_lightning as pl
-from torchvision.models import resnet50, densenet121
+from torchvision.models import resnet50
 import numpy as np
 
 import cem.train.utils as utils
@@ -36,6 +36,8 @@ class ConceptBottleneckModel(pl.LightningModule):
         momentum=0.9,
         learning_rate=0.01,
         weight_decay=4e-05,
+        lr_scheduler_factor=0.1,
+        lr_scheduler_patience=10,
         weight_loss=None,
         task_class_weights=None,
 
@@ -148,6 +150,8 @@ class ConceptBottleneckModel(pl.LightningModule):
         self.intervention_policy = intervention_policy
         self.output_latent = output_latent
         self.output_interventions = output_interventions
+        self.lr_scheduler_patience = lr_scheduler_patience
+        self.lr_scheduler_factor = lr_scheduler_factor
         if x2c_model is not None:
             # Then this is assumed to be a module already provided as
             # the input to concepts method
@@ -170,7 +174,6 @@ class ConceptBottleneckModel(pl.LightningModule):
                 if i != len(units) - 1:
                     layers.append(torch.nn.LeakyReLU())
             self.c2y_model = torch.nn.Sequential(*layers)
-
         # Intervention-specific fields/handlers:
         if active_intervention_values is not None:
             self.active_intervention_values = torch.FloatTensor(
@@ -244,20 +247,30 @@ class ConceptBottleneckModel(pl.LightningModule):
     def _unpack_batch(self, batch):
         x = batch[0]
         if isinstance(batch[1], list):
+            offset = 2
             y, c = batch[1]
         else:
+            offset = 3
             y, c = batch[1], batch[2]
-        if len(batch) > 3:
-            competencies = batch[3]
+        if len(batch) > (offset):
+            g = batch[offset]
+        else:
+            g = None
+        if len(batch) > (offset + 1):
+            competencies = batch[offset + 1]
         else:
             competencies = None
-        if len(batch) > 4:
-            prev_interventions = batch[4]
+        if len(batch) > (offset + 2):
+            prev_interventions = batch[offset + 2]
         else:
             prev_interventions = None
-        return x, y, (c, competencies, prev_interventions)
+        return x, y, (c, g, competencies, prev_interventions)
 
-    def _standardize_indices(self, intervention_idxs, batch_size):
+    def _standardize_indices(self, intervention_idxs, batch_size, device='cuda'):
+        if getattr(self, 'force_all_interventions', False):
+            intervention_idxs = torch.ones(
+                (batch_size, self.n_concepts)
+            ).to(device)
         if isinstance(intervention_idxs, list):
             intervention_idxs = np.array(intervention_idxs)
         if isinstance(intervention_idxs, np.ndarray):
@@ -360,6 +373,7 @@ class ConceptBottleneckModel(pl.LightningModule):
         intervention_idxs = self._standardize_indices(
             intervention_idxs=intervention_idxs,
             batch_size=c_pred.shape[0],
+            device=c_pred.device,
         )
         intervention_idxs = intervention_idxs.to(c_pred.device)
         # Check whether the mask needs to be extended because of
@@ -385,7 +399,7 @@ class ConceptBottleneckModel(pl.LightningModule):
             inactive_intervention_values = self.inactive_intervention_values.to(
                 c_pred.device
             )
-            batched_inactive_intervention_values =  torch.tile(
+            batched_inactive_intervention_values = torch.tile(
                 torch.unsqueeze(inactive_intervention_values, 0),
                 (c_pred.shape[0], 1),
             ).to(c_true.device)
@@ -516,9 +530,9 @@ class ConceptBottleneckModel(pl.LightningModule):
             c_true=c_int,
         )
         if self.bool:
-            y = self.c2y_model((c_pred > 0.5).float())
+            y_pred = self.c2y_model((c_pred > 0.5).float())
         else:
-            y = self.c2y_model(c_pred)
+            y_pred = self.c2y_model(c_pred)
         tail_results = []
         if output_interventions:
             if intervention_idxs is None:
@@ -533,7 +547,26 @@ class ConceptBottleneckModel(pl.LightningModule):
         if output_embeddings:
             tail_results.append(pos_embeddings)
             tail_results.append(neg_embeddings)
-        return tuple([c_sem, c_pred, y] + tail_results)
+        tail_results += self._extra_tail_results(
+            x=x,
+            y=y,
+            c=c,
+            c_sem=c_sem,
+            competencies=competencies,
+            prev_interventions=prev_interventions,
+        )
+        return tuple([c_sem, c_pred, y_pred] + tail_results)
+
+    def _extra_tail_results(
+        self,
+        x,
+        y,
+        c,
+        c_sem,
+        competencies,
+        prev_interventions,
+    ):
+        return []
 
     def forward(
         self,
@@ -544,6 +577,7 @@ class ConceptBottleneckModel(pl.LightningModule):
         intervention_idxs=None,
         competencies=None,
         prev_interventions=None,
+        **kwargs
     ):
         return self._forward(
             x,
@@ -554,6 +588,7 @@ class ConceptBottleneckModel(pl.LightningModule):
             prev_interventions=prev_interventions,
             intervention_idxs=intervention_idxs,
             latent=latent,
+            **kwargs
         )
 
     def predict_step(
@@ -563,7 +598,9 @@ class ConceptBottleneckModel(pl.LightningModule):
         intervention_idxs=None,
         dataloader_idx=0,
     ):
-        x, y, (c, competencies, prev_interventions) = self._unpack_batch(batch)
+        x, y, (c, g, competencies, prev_interventions) = self._unpack_batch(
+            batch
+        )
         return self._forward(
             x,
             intervention_idxs=intervention_idxs,
@@ -572,6 +609,7 @@ class ConceptBottleneckModel(pl.LightningModule):
             train=False,
             competencies=competencies,
             prev_interventions=prev_interventions,
+            output_embeddings=getattr(self, 'output_embeddings', False),
         )
 
     def _run_step(
@@ -581,7 +619,9 @@ class ConceptBottleneckModel(pl.LightningModule):
         train=False,
         intervention_idxs=None,
     ):
-        x, y, (c, competencies, prev_interventions) = self._unpack_batch(batch)
+        x, y, (c, g, competencies, prev_interventions) = self._unpack_batch(
+            batch
+        )
         outputs = self._forward(
             x,
             intervention_idxs=intervention_idxs,
@@ -598,6 +638,7 @@ class ConceptBottleneckModel(pl.LightningModule):
                 y,
             )
             task_loss_scalar = task_loss.detach()
+            # print("task_loss_scalar =", task_loss_scalar)
         else:
             task_loss = 0
             task_loss_scalar = 0
@@ -609,6 +650,7 @@ class ConceptBottleneckModel(pl.LightningModule):
             # values are fully given
             concept_loss = self.loss_concept(c_sem, c)
             concept_loss_scalar = concept_loss.detach()
+            # print("concept_loss_scalar =", concept_loss_scalar)
             loss = self.concept_loss_weight * concept_loss + task_loss + \
                 self._extra_losses(
                     x=x,
@@ -679,7 +721,9 @@ class ConceptBottleneckModel(pl.LightningModule):
                     ("auc" in name) or
                     ("mask_accuracy" in name) or
                     ("current_steps" in name) or
-                    ("num_rollouts" in name)
+                    ("num_rollouts" in name) or
+                    ("mode" in name) or
+                    ("adv" in name)
                 )
             else:
                 prog_bar = (
@@ -687,23 +731,25 @@ class ConceptBottleneckModel(pl.LightningModule):
                     ("y_accuracy" in name) or
                     ("mask_accuracy" in name) or
                     ("current_steps" in name) or
-                    ("num_rollouts" in name)
+                    ("num_rollouts" in name) or
+                    ("mode" in name) or
+                    ("adv" in name)
 
                 )
             self.log(name, val, prog_bar=prog_bar)
         return {
             "loss": loss,
             "log": {
-                "c_accuracy": result['c_accuracy'],
-                "c_auc": result['c_auc'],
-                "c_f1": result['c_f1'],
-                "y_accuracy": result['y_accuracy'],
-                "y_auc": result['y_auc'],
-                "y_f1": result['y_f1'],
-                "concept_loss": result['concept_loss'],
-                "task_loss": result['task_loss'],
-                "loss": result['loss'],
-                "avg_c_y_acc": result['avg_c_y_acc'],
+                "c_accuracy": result.get('c_accuracy', 0),
+                "c_auc": result.get('c_auc', 0),
+                "c_f1": result.get('c_f1', 0),
+                "y_accuracy": result.get('y_accuracy', 0),
+                "y_auc": result.get('y_auc', 0),
+                "y_f1": result.get('y_f1', 0),
+                "concept_loss": result.get('concept_loss', 0),
+                "task_loss": result.get('task_loss', 0),
+                "loss": result.get('loss', 0),
+                "avg_c_y_acc": result.get('avg_c_y_acc', 0),
             },
         }
 
@@ -741,12 +787,20 @@ class ConceptBottleneckModel(pl.LightningModule):
                 momentum=self.momentum,
                 weight_decay=self.weight_decay,
             )
-        lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-            optimizer,
-            verbose=True,
-        )
+        if self.lr_scheduler_patience != 0:
+            lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+                optimizer,
+                verbose=True,
+                patience=self.lr_scheduler_patience,
+                factor=self.lr_scheduler_factor,
+                min_lr=getattr(self, 'min_lr', 1e-5),
+            )
+            return {
+                "optimizer": optimizer,
+                "lr_scheduler": lr_scheduler,
+                "monitor": "loss",
+            }
         return {
             "optimizer": optimizer,
-            "lr_scheduler": lr_scheduler,
             "monitor": "loss",
         }

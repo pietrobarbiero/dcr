@@ -172,6 +172,8 @@ def compute_accuracy(
 
 def wrap_pretrained_model(c_extractor_arch, pretrain_model=True):
     def _result_x2c_fun(output_dim):
+        if c_extractor_arch == "identity":
+            return "identity"
         try:
             model = c_extractor_arch(pretrained=pretrain_model)
             if output_dim:
@@ -295,6 +297,8 @@ class WrapperModule(pl.LightningModule):
         learning_rate=0.01,
         weight_decay=4e-05,
         optimizer="sgd",
+        lr_scheduler_factor=0.1,
+        lr_scheduler_patience=10,
         top_k_accuracy=2,
         binary_output=False,
         weight_loss=None,
@@ -313,6 +317,8 @@ class WrapperModule(pl.LightningModule):
         self.momentum = momentum
         self.learning_rate = learning_rate
         self.optimizer_name = optimizer
+        self.lr_scheduler_factor = lr_scheduler_factor
+        self.lr_scheduler_patience = lr_scheduler_patience
         self.weight_decay = weight_decay
         if (not isinstance(top_k_accuracy, list)) and top_k_accuracy:
             top_k_accuracy = [top_k_accuracy]
@@ -414,9 +420,19 @@ class WrapperModule(pl.LightningModule):
                 momentum=self.momentum,
                 weight_decay=self.weight_decay,
             )
-        lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer)
+        if self.lr_scheduler_patience != 0:
+            lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
+                optimizer,
+                verbose=True,
+                patience=self.lr_scheduler_patience,
+                factor=self.lr_scheduler_factor,
+            )
+            return {
+                "optimizer": optimizer,
+                "lr_scheduler": lr_scheduler,
+                "monitor": "loss",
+            }
         return {
             "optimizer": optimizer,
-            "lr_scheduler": lr_scheduler,
             "monitor": "loss",
         }

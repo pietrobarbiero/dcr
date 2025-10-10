@@ -25,6 +25,11 @@ shared_params:
   # Change to False if you want representation metrics to be included in the
   # evaluation (may significantly increase experiment times)
   skip_repr_evaluation: True
+  run_ois: False
+  run_repr_avg_pred: False
+  run_nis: False
+  run_cas: True
+
   top_k_accuracy: null
   save_model: True
   patience: 15
@@ -35,7 +40,11 @@ shared_params:
   scheduler_step: 20
   weight_decay: 0
   weight_loss: False
-  c_extractor_arch: synth_extractor
+
+  # c_extractor_arch: synth_extractor
+  c_extractor_arch: mlp
+  c_extractor_arch_layers: [128, 128, 128]
+
   max_epochs: 500
   optimizer: adam
   bool: False

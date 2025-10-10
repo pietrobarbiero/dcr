@@ -34,17 +34,37 @@ def determine_rerun(
             return True
     return False
 
-def get_mnist_extractor_arch(input_shape, num_operands):
+def get_mnist_extractor_arch(input_shape, in_channels):
     def c_extractor_arch(output_dim):
         intermediate_maps = 16
         output_dim = output_dim or 128
+        first_dim_out = ((input_shape[2] - (2-1) - 1) // 2) + 1
+        first_dim_out = ((first_dim_out - (2-1) - 1) // 2) + 1
+        first_dim_out = ((first_dim_out - (2-1) - 1) // 2) + 1
+        first_dim_out = ((first_dim_out - (3-1) - 1) // 3) + 1
+
+        second_dim_out = ((input_shape[3] - (2-1) - 1) // 2) + 1
+        second_dim_out = ((second_dim_out - (2-1) - 1) // 2) + 1
+        second_dim_out = ((second_dim_out - (2-1) - 1) // 2) + 1
+        second_dim_out = ((second_dim_out - (3-1) - 1) // 3) + 1
+        out_shape = (first_dim_out, second_dim_out)
         return torch.nn.Sequential(*[
             torch.nn.Conv2d(
-                in_channels=num_operands,
+                in_channels=in_channels,
                 out_channels=intermediate_maps,
                 kernel_size=(3,3),
                 padding='same',
             ),
+            torch.nn.BatchNorm2d(num_features=intermediate_maps),
+            torch.nn.LeakyReLU(),
+            torch.nn.MaxPool2d((2, 2)),
+            torch.nn.Conv2d(
+                in_channels=intermediate_maps,
+                out_channels=intermediate_maps,
+                kernel_size=(3,3),
+                padding='same',
+            ),
+            torch.nn.MaxPool2d((2, 2)),
             torch.nn.BatchNorm2d(num_features=intermediate_maps),
             torch.nn.LeakyReLU(),
             torch.nn.Conv2d(
@@ -55,6 +75,7 @@ def get_mnist_extractor_arch(input_shape, num_operands):
             ),
             torch.nn.BatchNorm2d(num_features=intermediate_maps),
             torch.nn.LeakyReLU(),
+            torch.nn.MaxPool2d((2, 2)),
             torch.nn.Conv2d(
                 in_channels=intermediate_maps,
                 out_channels=intermediate_maps,
@@ -63,17 +84,10 @@ def get_mnist_extractor_arch(input_shape, num_operands):
             ),
             torch.nn.BatchNorm2d(num_features=intermediate_maps),
             torch.nn.LeakyReLU(),
-            torch.nn.Conv2d(
-                in_channels=intermediate_maps,
-                out_channels=intermediate_maps,
-                kernel_size=(3,3),
-                padding='same',
-            ),
-            torch.nn.BatchNorm2d(num_features=intermediate_maps),
-            torch.nn.LeakyReLU(),
+            torch.nn.MaxPool2d((3, 3)),
             torch.nn.Flatten(),
             torch.nn.Linear(
-                int(np.prod(input_shape[2:]))*intermediate_maps,
+                np.prod(out_shape) * intermediate_maps,
                 output_dim,
             ),
         ])
@@ -95,9 +109,15 @@ def perform_model_selection(
     model_groupings,
     selection_metric,
     name_filters=None,
+    included_models=None,
 ):
     name_filters = name_filters or []
-    un_select_method = lambda x: np.any([
+    if included_models:
+        exclude_model_filter = lambda x: x not in included_models
+    else:
+        exclude_model_filter = lambda x: False
+
+    un_select_method = lambda x: np.any([exclude_model_filter(x)] + [
         re.search(reg, x) for reg in name_filters
     ])
     new_results = defaultdict(lambda: defaultdict(dict))
@@ -127,6 +147,11 @@ def perform_model_selection(
                 ),
             )
             for method_name in selected_methods
+        ]
+        selected_values = [
+            (method_name, vals)
+            for (method_name, vals) in selected_values
+            if not np.isnan(vals)
         ]
         if selected_values:
             selected_values.sort(key=lambda x: -x[1])
@@ -190,24 +215,21 @@ def print_table(
     sort_key="model",
     config=None,
     save_name="output_table",
+    use_auc=False,
+    use_int_auc=False,
 ):
     config = config or {}
     # Initialise output table
     results_table = PrettyTable()
     field_names = [
         "Method",
-        "Task Accuracy",
+        "ROC-AUC" if use_auc else "Task Accuracy",
 
     ]
     result_table_fields_keys = [
-        "test_acc_y",
+        "test_auc_y" if use_auc else "test_acc_y",
     ]
 
-    # Add AUC only when it is a binary class
-    shared_params = config.get("shared_params", {})
-    if shared_params.get("n_tasks", 3) <= 2:
-        field_names.append("Task AUC")
-        result_table_fields_keys.append("test_auc_y")
 
     # Now add concept evaluation metrics
     field_names.extend([
@@ -219,8 +241,10 @@ def print_table(
         "test_auc_c",
     ])
 
+
     # CAS, if we chose to compute it (off by default as it may be
     # computationally expensive)
+    shared_params = config.get("shared_params", {})
     if (
         (not shared_params.get("skip_repr_evaluation", False)) and
         shared_params.get("run_cas", True)
@@ -230,18 +254,33 @@ def print_table(
 
     # And intervention summaries if we chose to also include them
     if len(shared_params.get("intervention_config", {}).get("intervention_policies", [])) > 0:
-        field_names.extend([
-            "25% Int Acc",
-            "50% Int Acc",
-            "75% Int Acc",
-            "100% Int Acc",
-        ])
-        result_table_fields_keys.extend([
-            "test_acc_y_random_group_level_True_use_prior_False_ints_25%",
-            "test_acc_y_random_group_level_True_use_prior_False_ints_50%",
-            "test_acc_y_random_group_level_True_use_prior_False_ints_75%",
-            "test_acc_y_random_group_level_True_use_prior_False_ints_100%",
-        ])
+        policy_config = shared_params['intervention_config']['intervention_policies'][0]
+        # Then add the first policy we see as the default thing we print
+        if policy_config['policy'] == 'random':
+            useful_args = copy.deepcopy(policy_config)
+            useful_args.pop('include_run_names', None)
+            useful_args.pop('exclude_run_names', None)
+            policy_arg_name = policy_config["policy"] + "_" + "_".join([
+                f'{key}_{policy_config[key]}'
+                for key in sorted(useful_args.keys())
+                if key != 'policy'
+            ])
+            field_names.extend([
+                "25% Int ROC-AUC" if use_int_auc else "25% Int Acc",
+                "50% Int ROC-AUC" if use_int_auc else "50% Int Acc",
+                "75% Int ROC-AUC" if use_int_auc else "75% Int Acc",
+                "100% Int ROC-AUC" if use_int_auc else "100% Int Acc",
+                "Val Int AUC",
+                "Test Int AUC",
+            ])
+            result_table_fields_keys.extend([
+                f"test_{'auc' if use_int_auc else 'acc'}_y_{policy_arg_name}_ints_25%",
+                f"test_{'auc' if use_int_auc else 'acc'}_y_{policy_arg_name}_ints_50%",
+                f"test_{'auc' if use_int_auc else 'acc'}_y_{policy_arg_name}_ints_75%",
+                f"test_{'auc' if use_int_auc else 'acc'}_y_{policy_arg_name}_ints_100%",
+                f"val_{'auc' if use_int_auc else 'acc'}_y_{policy_arg_name}_int_auc",
+                f"test_{'auc' if use_int_auc else 'acc'}_y_{policy_arg_name}_int_auc",
+            ])
 
     if summary_table_metrics is not None:
         for field in summary_table_metrics:
@@ -261,7 +300,10 @@ def print_table(
             for metric_name, vals in metric_vals.items():
                 for desired_metric in result_table_fields_keys:
                     real_name = desired_metric
-                    if desired_metric.startswith("test_acc_y_") and (
+                    if (
+                        ("_acc_y_" in desired_metric) or
+                        ("_auc_y_" in desired_metric)
+                    ) and (
                         ("_ints_" in desired_metric) and
                         (desired_metric[-1] == "%")
                     ):
@@ -316,6 +358,8 @@ def print_table(
         for i, (mean, std) in enumerate(row):
             if mean is None or std is None:
                 row[i] = "N/A"
+            elif mean != mean: # Nan!
+                row[i] = f'{mean} ± {std}'
             elif int(mean) == float(mean):
                 row[i] = f'{mean} ± {std:}'
             else:
@@ -344,10 +388,10 @@ def filter_results(results, run_name, cut=False):
     return output
 
 def evaluate_expressions(config, parent_config=None, soft=False):
-     parent_config = parent_config or config
-     for key, val in config.items():
-         if isinstance(val, (str,)):
-             if len(val) >= 4 and (
+    parent_config = parent_config or config
+    for key, val in config.items():
+        if isinstance(val, (str,)):
+            if len(val) >= 4 and (
                  val[0:2] == "{{" and val[-2:] == "}}"
              ):
                 # Then do a simple substitution here
@@ -361,9 +405,9 @@ def evaluate_expressions(config, parent_config=None, soft=False):
                     else:
                         # otherwise we just simply raise it again!
                         raise e
-             else:
-                 config[key] = val.format(**parent_config)
-         elif isinstance(val, dict):
+            else:
+                config[key] = val.format(**parent_config)
+        elif isinstance(val, dict):
              # Then we progress recursively
              evaluate_expressions(val, parent_config=parent_config)
 
@@ -384,7 +428,58 @@ def initialize_result_directory(results_dir):
     ).mkdir(parents=True, exist_ok=True)
 
 
-def generate_hyperatemer_configs(config):
+def has_hierarchical_key(key, dictionary):
+    for subkey in key.split("."):
+        if subkey not in dictionary:
+            return False
+            # raise ValueError(
+            #     f"Failed to find subkey {subkey} when looking for "
+            #     f"hierarchical key {key}."
+            # )
+        dictionary = dictionary[subkey]
+    # If we reached this point, then the key must be present
+    return True
+
+def get_hierarchical_key(key, dictionary):
+    for subkey in key.split("."):
+        if subkey not in dictionary:
+            raise ValueError(
+                f"Failed to find subkey {subkey} when looking for "
+                f"hierarchical key {key}."
+            )
+        dictionary = dictionary[subkey]
+    # If we reached this point, then the variable dictionary must have the
+    # drones we are looking for
+    return dictionary
+
+def flatten_dictionary(dictionary, current_result=None, prefix="", sep="."):
+    current_result = current_result or {}
+    for key, val in dictionary.items():
+        if isinstance(val, dict):
+            flatten_dictionary(
+                dictionary=val,
+                current_result=current_result,
+                prefix=prefix + key + sep,
+                sep=sep,
+            )
+        else:
+            current_result[prefix + key] = val
+    return current_result
+
+def nested_dictionary_set(dictionary, key, val):
+    atoms = key.split(".")
+    for idx, subkey in enumerate(atoms):
+        if idx == (len(atoms) - 1):
+            dictionary[subkey] = val
+        elif subkey not in dictionary:
+            raise ValueError(
+                f"Failed to find subkey {subkey} when looking for "
+                f"hierarchical key {key}."
+            )
+        else:
+            dictionary = dictionary[subkey]
+
+def generate_hyperparameter_configs(config):
     if "grid_variables" not in config:
         # Then nothing to see here so we will return
         # a singleton set with this config in it
@@ -393,19 +488,20 @@ def generate_hyperatemer_configs(config):
     vars = config["grid_variables"]
     options = []
     for var in vars:
-        if var not in config:
+        if not has_hierarchical_key(var, config):
             raise ValueError(
                 f'All variable names in "grid_variables" must be exhisting '
-                f'fields in the config. However, we could not find any field '
-                f'with name "{var}".'
+                f'fields in the config. However, we could not find any '
+                f'(nested) field with name "{var}".'
             )
-        if not isinstance(config[var], list):
+        val = get_hierarchical_key(var, config)
+        if not isinstance(val, list):
             raise ValueError(
-                f'If we are doing a hyperparamter search over variable '
-                f'"{var}", we expect it to be a list of values. Instead '
-                f'we got {config[var]}.'
+                f'If we are doing a hyperparameter search over (nested) '
+                f'variable "{var}", we expect it to be a list of values. '
+                f'Instead we got {val}.'
             )
-        options.append(config[var])
+        options.append(val)
     mode = config.get('grid_search_mode', "exhaustive").lower().strip()
     if mode in ["grid", "exhaustive"]:
         iterator = itertools.product(*options)
@@ -421,6 +517,6 @@ def generate_hyperatemer_configs(config):
     for specific_vals in iterator:
         current = copy.deepcopy(config)
         for var_name, new_val in zip(vars, specific_vals):
-            current[var_name] = new_val
+            nested_dictionary_set(current, var_name, new_val)
         result.append(current)
     return result

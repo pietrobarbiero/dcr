@@ -1,13 +1,16 @@
 """
-$ python run_experiments.py --help
 usage: run_experiments.py [-h] [--config config.yaml] [--project_name name]
                           [--output_dir path] [--rerun] [--num_workers N] [-d]
-                          [--force_cpu] [-p param_name=value param_name=value]
-                          [--activation_freq N] [--filter_out regex]
-                          [--filter_in regex] [--model_selection_metrics metric_name]
+                          [--force_cpu] [-p param_name value]
+                          [--filter_out regex] [--filter_in regex]
+                          [--filter_in_file model_selection_file.joblib]
+                          [--extra_datasets_filter_in_file model_selection_file.joblib]
+                          [--only_previously_selected] [--model_selection_metrics metric_name]
                           [--summary_table_metrics metric_name pretty_name metric_name pretty_name]
                           [-m group_pattern_regex group_name group_pattern_regex group_name]
-                          [--single_frequency_epochs N] [--fast_run]
+                          [--fast_run] [--no_new_runs] [--use_auc]
+                          [--reverse] [--use_dataset_cache]
+                          [--out_selected_config out_config.yaml]
 
 Runs the set of experiments of CBM-like models in the provided configuration file.
 
@@ -28,18 +31,26 @@ optional arguments:
                         workers than cores in the machine.
   -d, --debug           starts debug mode in our program.
   --force_cpu           forces CPU training.
-  -p param_name=value param_name=value, --param param_name=value param_name=value
+  -p param_name value, --param param_name value
                         Allows the passing of a config param that will overwrite
                         anything passed as part of the config file itself.
-  --activation_freq N   how frequently, in terms of epochs, should we store the
-                        embedding activations for our validation set. By default
-                        we will not store any activations.
   --filter_out regex    skips runs whose names match the regexes provided via
                         this argument. These regexes must follow Python's regex
                         syntax.
   --filter_in regex     includes only runs whose names match the regexes provided
                         with this argument. These regexes must follow Python's
                         regex syntax.
+  --filter_in_file model_selection_file.joblib
+                        includes only runs whose names are in the joblib file
+                        outputed from a previous model selection run.
+  --extra_datasets_filter_in_file model_selection_file.joblib
+                        includes for extra dataset evaluation only runs whose
+                        names are in the joblib file outputed from a previous
+                        model selection run.
+  --only_previously_selected
+                        it runs the models that were only previously selected by
+                        the model selection ran on a previous iteration of this
+                        experiment
   --model_selection_metrics metric_name
                         metrics to be used to make a summary table by selecting
                         models based on some (validation) metric. If provided,
@@ -48,24 +59,36 @@ optional arguments:
   --summary_table_metrics metric_name pretty_name metric_name pretty_name
                         List of metrics to be included as part of the final
                         summary table of this run.
-  -m group_pattern_regex group_name group_pattern_regex group_name, --model_selection_groups group_pattern_regex group_name group_pattern_regex group_name
+  -m group_pattern_regex group_name group_pattern_regex group_name,
+    --model_selection_groups group_pattern_regex group_name group_pattern_regex group_name
                         Performs model selection based on the requested model
                         selection metrics by grouping methods that match the
                         Python regex `group_pattern_regex` into a single group
                         with name `group_name`.
-  --single_frequency_epochs N
-                        how frequently, in terms of epochs, should we store the
-                        embedding activations for our validation set. By default
-                        we will not store any activations.
   --fast_run            does not perform a check on expected result keys on
                         previously found results. Only use if you are certain
                         old results are not stale and are complete!
+  --no_new_runs         does excecute any new runs whose results were not
+                        previously computed/cached.
+  --use_auc             use ROC-AUC as the main performance metric rather than
+                        accuracy.
+  --reverse             Reverses the order in which we process experiments
+                        (useful for multiprocessing).
+  --use_dataset_cache   we will avoid re-generating dataset loaders if they have
+                        already been generated for previous runs.
+  --out_selected_config out_config.yaml
+                        outputs a config that will kick-start the same
+                        experiments with only the selected models after running
+                        the entire model selection process.
 """
 import argparse
 import copy
+import gc
+import hashlib
 import joblib
 import json
 import logging
+import multiprocessing
 import numpy as np
 import os
 import re
@@ -73,56 +96,75 @@ import sys
 import torch
 import yaml
 
+
+
 torch.multiprocessing.set_sharing_strategy('file_system')
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 from pytorch_lightning import seed_everything
 
-from cem.data.synthetic_loaders import (
-    get_synthetic_data_loader, get_synthetic_num_features
-)
+import cem.data.awa2_loader as awa2_data_module
 import cem.data.celeba_loader as celeba_data_module
+import cem.data.cifar_10_loader as cifar_10_data_module
+import cem.data.color_mnist_add as color_mnist_data_module
 import cem.data.CUB200.cub_loader as cub_data_module
 import cem.data.mnist_add as mnist_data_module
-import cem.interventions.utils as intervention_utils
-import cem.train.evaluate as evaluation
+import cem.data.siim_arc_loader as siim_arc_data_module
+import cem.data.traffic_loader as traffic_data_module
+import cem.data.waterbirds_loader as waterbirds_data_module
+import cem.train.train_blackbox as train_blackbox
+import cem.train.train_fixed_cem as train_fixed_cem
+import cem.train.train_glancenet as train_glancenet
+import cem.train.train_mixcem as train_mixcem
+import cem.train.train_pcbm as train_pcbm
+import cem.train.train_prob_cbm as train_prob_cbm
 import cem.train.training as training
 import cem.train.utils as utils
 
-import experiment_utils
+import experiments.evaluate_models as evaluate_models
+import experiments.experiment_utils as experiment_utils
+
+from cem.data.synthetic_loaders import (
+    get_synthetic_data_loader, get_synthetic_num_features
+)
+from cem.data.utils import LambdaDataset, transform_from_config
+
+
+################################################################################
+## Global Register
+################################################################################
+
+DATASET_CACHE = {}
 
 ################################################################################
 ## HELPER FUNCTIONS
 ################################################################################
 
+def update_statistics(
+    aggregate_results,
+    test_results,
+    prefix='',
+):
+    for key, val in test_results.items():
+        aggregate_results[prefix + key] = val
 
-def _debug_ds(train_dl, n_tasks, n_concepts):
 
-    real_sample = []
-    for x in sample:
-        if isinstance(x, list):
-            real_sample += x
-        else:
-            real_sample.append(x)
-    sample = real_sample
-    logging.info(
-        f"Training sample shape is: {sample[0].shape} with "
-        f"type {sample[0].type()}"
+def hash_function(func):
+    if func is None:
+        return hash(None)
+    bytecode = func.__code__.co_code
+    return hashlib.sha256(bytecode).hexdigest()
+
+def _apply_transformation(dl, transformation_config):
+    new_ds = LambdaDataset(
+        dl.dataset,
+        transform_from_config(transformation_config),
     )
-    logging.info(
-        f"Training label shape is: {sample[1].shape} with "
-        f"type {sample[1].type()}"
-    )
-    logging.info(
-        f"\tNumber of output classes: {n_tasks}"
-    )
-    logging.info(
-        f"Training concept shape is: {sample[2].shape} with "
-        f"type {sample[2].type()}"
-    )
-    logging.info(
-        f"\tNumber of training concepts: {n_concepts}"
+    return torch.utils.data.DataLoader(
+        new_ds,
+        batch_size=dl.batch_size,
+        num_workers=dl.num_workers,
     )
 
 def _update_config_with_dataset(
@@ -131,6 +173,7 @@ def _update_config_with_dataset(
     n_concepts,
     n_tasks,
     concept_map,
+    data_module=None,
 ):
     config["n_concepts"] = config.get(
         "n_concepts",
@@ -144,6 +187,9 @@ def _update_config_with_dataset(
         "concept_map",
         concept_map,
     )
+    for data in train_dl:
+        config['input_shape'] = tuple(data[0].shape)
+        break
 
     task_class_weights = None
 
@@ -158,7 +204,7 @@ def _update_config_with_dataset(
             if len(data) == 2:
                 (_, (y, _)) = data
             else:
-                (_, y, _) = data
+                y = data[1]
             if n_tasks > 1:
                 y = torch.nn.functional.one_hot(
                     y,
@@ -181,7 +227,8 @@ def _update_config_with_dataset(
     return task_class_weights
 
 def _generate_dataset_and_update_config(
-    experiment_config
+    experiment_config,
+    use_dataset_cache=False,
 ):
     if experiment_config.get("dataset_config", None) is None:
         raise ValueError(
@@ -189,21 +236,124 @@ def _generate_dataset_and_update_config(
         )
 
     dataset_config = experiment_config['dataset_config']
+    dataset_config['num_workers'] = experiment_config.get(
+        'num_workers',
+        dataset_config.get('num_workers', 8),
+    )
+
+    ds_name = dataset_config["dataset"].strip().lower()
     logging.debug(
         f"The dataset's root directory is {dataset_config.get('root_dir')}"
     )
     intervention_config = experiment_config.get('intervention_config', {})
-    if dataset_config["dataset"] == "cub":
+    if ds_name == "cub":
         data_module = cub_data_module
-    elif dataset_config["dataset"] == "celeba":
+    elif ds_name == "awa2":
+        data_module = awa2_data_module
+    elif ds_name == "waterbirds":
+        data_module = waterbirds_data_module
+    elif ds_name == "celeba":
         data_module = celeba_data_module
-    elif dataset_config["dataset"] in ["xor", "vector", "dot", "trig"]:
-        data_module = get_synthetic_data_loader(dataset_config["dataset"])
-    elif dataset_config["dataset"] == "mnist_add":
+    elif ds_name in ["xor", "vector", "dot", "trig"]:
+        data_module = get_synthetic_data_loader(ds_name)
+    elif ds_name == "mnist_add":
         data_module = mnist_data_module
-
+    elif ds_name == "traffic":
+        data_module = traffic_data_module
+    elif ds_name in ["siim_arc", "siim-arc", "siim"]:
+        data_module = siim_arc_data_module
+    elif ds_name in ['cifar10', 'cifar_10']:
+        data_module = cifar_10_data_module
+    elif ds_name == "color_mnist_add":
+        data_module = color_mnist_data_module
     else:
         raise ValueError(f"Unsupported dataset {dataset_config['dataset']}!")
+
+
+    transformation_config = dataset_config.get("transformation_config", {})
+    train_transform_config = dataset_config.get(
+        "train_transformation_config",
+        transformation_config,
+    )
+    if not train_transform_config.get('post_generation', True):
+        train_transform_fn = transform_from_config(train_transform_config)
+    else:
+        train_transform_fn = None
+
+    test_transform_config = dataset_config.get(
+        "test_transformation_config",
+        transformation_config,
+    )
+    if not test_transform_config.get('post_generation', True):
+        test_transform_fn = transform_from_config(test_transform_config)
+    else:
+        test_transform_fn = None
+
+    val_transform_config = dataset_config.get(
+        "val_transformation_config",
+        transformation_config,
+    )
+    if not val_transform_config.get('post_generation', True):
+        val_transform_fn = transform_from_config(val_transform_config)
+    else:
+        val_transform_fn = None
+
+    if use_dataset_cache:
+        key_dict = copy.deepcopy(dataset_config)
+        key_dict['seed'] = 42
+        key_dict['train_transform_fn'] = hash_function(train_transform_fn)
+        key_dict['test_transform_fn'] = hash_function(test_transform_fn)
+        key_dict['val_transform_fn'] = hash_function(val_transform_fn)
+        config_key = hashlib.sha256(
+            json.dumps(key_dict, sort_keys=True).encode()
+        ).hexdigest()
+        if config_key not in DATASET_CACHE:
+            print(
+                "First time we find dataset config, so adding it into our cache"
+            )
+            DATASET_CACHE[config_key] = data_module.generate_data(
+                config=dataset_config,
+                seed=42,
+                output_dataset_vars=True,
+                root_dir=dataset_config.get('root_dir', None),
+                train_sample_transform=train_transform_fn,
+                test_sample_transform=test_transform_fn,
+                val_sample_transform=val_transform_fn,
+            )
+
+        # Now we can safely fetch it from the dataset cache
+        (
+            train_dl,
+            val_dl,
+            test_dl,
+            imbalance,
+            (n_concepts, n_tasks, concept_map),
+        ) = DATASET_CACHE[config_key]
+
+    else:
+        train_dl, val_dl, test_dl, imbalance, (n_concepts, n_tasks, concept_map) = \
+            data_module.generate_data(
+                config=dataset_config,
+                seed=42,
+                output_dataset_vars=True,
+                root_dir=dataset_config.get('root_dir', None),
+                train_sample_transform=train_transform_fn,
+                test_sample_transform=test_transform_fn,
+                val_sample_transform=val_transform_fn,
+            )
+
+    # For now, we assume that all concepts have the same
+    # aquisition cost
+    acquisition_costs = None
+
+
+    task_class_weights = _update_config_with_dataset(
+        config=experiment_config,
+        train_dl=train_dl,
+        n_concepts=n_concepts,
+        n_tasks=n_tasks,
+        concept_map=concept_map,
+    )
 
     if experiment_config['c_extractor_arch'] == "mnist_extractor":
         num_operands = dataset_config.get('num_operands', 32)
@@ -215,10 +365,27 @@ def _generate_dataset_and_update_config(
                     28,
                     28,
                 ),
-                num_operands=num_operands,
+                in_channels=num_operands,
+            )
+    if experiment_config['c_extractor_arch'] == "color_mnist_extractor":
+        num_operands = dataset_config.get('num_operands', 32)
+        in_channels = 3 if (dataset_config.get('concat_dim', 'y') != 'c') else (
+                num_operands * (
+                1 if len(dataset_config.get('colors', ['gray'])) == 0 else 3
+            )
+        )
+        experiment_config["c_extractor_arch"] = \
+            experiment_utils.get_mnist_extractor_arch(
+                input_shape=(
+                    dataset_config.get('batch_size', 512),
+                    in_channels,
+                    28*num_operands if (dataset_config.get('concat_dim', 'y') == 'y') else 28,
+                    28*num_operands if (dataset_config.get('concat_dim', 'y') == 'x') else 28,
+                ),
+                in_channels=in_channels,
             )
     elif experiment_config['c_extractor_arch'] == 'synth_extractor':
-        input_features = get_synthetic_num_features(dataset_config["dataset"])
+        input_features = get_synthetic_num_features(ds_name)
         def synth_c_extractor_arch(
             output_dim,
             pretrained=False,
@@ -234,47 +401,151 @@ def _generate_dataset_and_update_config(
             ])
         experiment_config["c_extractor_arch"] = synth_c_extractor_arch
 
-    train_dl, val_dl, test_dl, imbalance, (n_concepts, n_tasks, concept_map) = \
-        data_module.generate_data(
-            config=dataset_config,
-            seed=42,
-            output_dataset_vars=True,
-            root_dir=dataset_config.get('root_dir', None),
-        )
-    # For now, we assume that all concepts have the same
-    # aquisition cost
-    acquisition_costs = None
-    if concept_map is not None:
-        intervened_groups = list(
-            range(
-                0,
-                len(concept_map) + 1,
-                intervention_config.get('intervention_freq', 1),
-            )
-        )
-    else:
-        intervened_groups = list(
-            range(
-                0,
-                n_concepts + 1,
-                intervention_config.get('intervention_freq', 1),
-            )
-        )
+    elif isinstance(experiment_config['c_extractor_arch'], str) and (
+        experiment_config['c_extractor_arch'].lower() == 'mlp'
+    ):
+        input_features = experiment_config["input_shape"][-1]
+        def c_extractor_arch(
+            output_dim,
+        ):
+            if output_dim is None:
+                output_dim = 128
+            layer_units = [input_features] + experiment_config.get('c_extractor_arch_layers', []) + [output_dim]
+            used_layers = []
+            for i in range(1, len(layer_units)):
+                num_units = layer_units[i]
+                used_layers.append(torch.nn.Linear(layer_units[i - 1], num_units))
+                if i != len(layer_units) - 1:
+                    used_layers.append(torch.nn.LeakyReLU())
+                if i in experiment_config.get('batch_norm_layers', []) and (
+                    i != len(layer_units) - 1
+                ):
+                    used_layers.append(
+                        torch.nn.BatchNorm1d(num_units)
+                    )
+            return torch.nn.Sequential(*used_layers)
 
-    task_class_weights = _update_config_with_dataset(
-        config=experiment_config,
-        train_dl=train_dl,
-        n_concepts=n_concepts,
-        n_tasks=n_tasks,
-        concept_map=concept_map,
-    )
+        experiment_config["c_extractor_arch"] = c_extractor_arch
+
+    elif isinstance(experiment_config['c_extractor_arch'], str) and (
+        experiment_config['c_extractor_arch'].lower() == 'cnn'
+    ):
+        input_shape = experiment_config["input_shape"]
+        def c_extractor_arch(output_dim=n_tasks):
+            if output_dim is None:
+                output_dim = 128
+            layers = []
+            current_shape = input_shape[1:]
+            extractor_config = experiment_config.get(
+                'c_extractor_config',
+                {},
+            )
+            for layer in extractor_config.get("cnn_layers", []):
+                layers.append(torch.nn.Conv2d(
+                    in_channels=current_shape[0],
+                    out_channels=layer['out_channels'],
+                    kernel_size=layer['filter'],
+                    padding='same',
+                ))
+                current_shape = (layer['out_channels'], *current_shape[1:])
+                act_fn = layer.get(
+                    'activation_fn',
+                    extractor_config.get('activation_fn', 'relu'),
+                )
+                if act_fn.lower() == 'relu':
+                    layers.append(torch.nn.ReLU())
+                elif act_fn.lower() == 'leakyrelu':
+                    layers.append(torch.nn.LeakyReLU())
+                else:
+                    raise ValueError(
+                        f'Unsupported activation {act_fn}'
+                    )
+                if layer.get('batchnorm', False):
+                    layers.append(
+                        torch.nn.BatchNorm2d(num_features=layer['out_channels'])
+                    )
+                if layer.get('max_pool_kernel', False):
+                    kernel = layer['max_pool_kernel']
+                    layers.append(
+                        torch.nn.MaxPool2d(kernel)
+                    )
+                    current_shape = (
+                        current_shape[0],
+                        int(np.floor(1 + (current_shape[1] - (kernel[0] - 1) - 1) / kernel[0])),
+                        int(np.floor(1 + (current_shape[2] - (kernel[1] - 1) - 1) / kernel[1])),
+                    )
+                elif layer.get('avg_pool_kernel', False):
+                    kernel = layer['avg_pool_kernel']
+                    layers.append(
+                        torch.nn.AvgPool2d(kernel)
+                    )
+                    current_shape = (
+                        current_shape[0],
+                        int(np.floor(1 + (current_shape[1] - (kernel[0] - 1) - 1) / kernel[0])),
+                        int(np.floor(1 + (current_shape[2] - (kernel[1] - 1) - 1) / kernel[1])),
+                    )
+            layers.append(torch.nn.Flatten())
+            current_shape = np.prod(current_shape)
+            for num_acts in extractor_config.get('mlp_layers', []):
+                layers.append(torch.nn.Linear(
+                    current_shape,
+                    num_acts,
+                ))
+                current_shape = num_acts
+                act_fn = extractor_config.get(
+                    'activation_fn',
+                    'relu',
+                )
+                if act_fn.lower() == 'relu':
+                    layers.append(torch.nn.ReLU())
+                elif act_fn.lower() == 'leakyrelu':
+                    layers.append(torch.nn.LeakyReLU())
+                else:
+                    raise ValueError(
+                        f'Unsupported activation {extractor_config["activation_fn"]}'
+                    )
+            layers.append(torch.nn.Linear(
+                current_shape,
+                output_dim,
+            ))
+            out_model = torch.nn.Sequential(*layers)
+            return out_model
+
+        experiment_config["c_extractor_arch"] = c_extractor_arch
+
+    if train_transform_config.get('post_generation', True):
+        train_dl = _apply_transformation(
+            train_dl,
+            transformation_config=train_transform_config,
+        )
+    if test_transform_config.get('post_generation', True):
+        test_dl = _apply_transformation(
+            test_dl,
+            transformation_config=test_transform_config,
+        )
+    if not (val_dl is None):
+        if val_transform_config.get('post_generation', True):
+            val_dl = _apply_transformation(
+                val_dl,
+                transformation_config=val_transform_config,
+            )
+
+    if (data_module is not None) and (experiment_config.get(
+        'initial_concept_embeddings',
+        None,
+    ) is not None):
+        experiment_config['initial_concept_embeddings'] = \
+            data_module.get_concept_embeddings(
+                config=experiment_config,
+                root_dir=dataset_config.get('root_dir', None),
+            )
+
     return (
         train_dl,
         val_dl,
         test_dl,
         imbalance,
         concept_map,
-        intervened_groups,
         task_class_weights,
         acquisition_costs,
     )
@@ -287,6 +558,8 @@ def _perform_model_selection(
     split,
     summary_table_metrics=None,
     config=None,
+    included_models=None,
+    use_auc=False,
 ):
     ############################################################################
     ## Automatic Model Selection
@@ -296,12 +569,15 @@ def _perform_model_selection(
         model_selection_metrics is not None
     ):
         prev_selected_results = []
-        for model_selection_metric in model_selection_metrics:
+        for idx, model_selection_metric in enumerate(model_selection_metrics):
             model_selection_results, selection_map = \
                 experiment_utils.perform_model_selection(
                     results=results,
                     selection_metric=model_selection_metric,
                     model_groupings=model_selection_groups,
+                    included_models=(
+                        included_models[idx] if included_models else None
+                    ),
                 )
             print(
                 f"********** Results after model selection "
@@ -314,6 +590,11 @@ def _perform_model_selection(
                 result_dir=result_dir,
                 split=split,
                 save_name=f"output_table_{model_selection_metric}",
+                use_auc=(use_auc or config.get("n_tasks", 3) <= 2),
+                use_int_auc=use_auc or config.get('intervention_config', {}).get(
+                    'use_auc',
+                    False,
+                ),
             )
             with open(
                 os.path.join(
@@ -332,9 +613,236 @@ def _perform_model_selection(
             ) as f:
                 joblib.dump(selection_map, f)
             prev_selected_results.append(
-                (model_selection_results, model_selection_metric)
+                (model_selection_results, selection_map, model_selection_metric)
             )
     return prev_selected_results
+
+
+
+def _multiprocess_run_trial(
+    trial_results,
+    run_name,
+    run_config,
+    accelerator,
+    devices,
+    result_dir,
+    split,
+    project_name,
+    current_rerun,
+    old_results,
+    use_dataset_cache=False,
+    extra_datasets_filter_in_file=None,
+):
+    config = run_config #copy.deepcopy(run_config)
+    (
+        train_dl,
+        val_dl,
+        test_dl,
+        imbalance,
+        concept_map,
+        task_class_weights,
+        acquisition_costs
+    ) = _generate_dataset_and_update_config(
+        config,
+        use_dataset_cache=use_dataset_cache,
+    )
+    experiment_utils.evaluate_expressions(config)
+
+    # Get the appropiate training function
+    if config["architecture"] == \
+            "IndependentConceptBottleneckModel":
+        # Special case for now for independent CBMs
+        # config["architecture"] = "ConceptBottleneckModel"
+        config["sigmoidal_prob"] = True
+        train_fn = training.train_independent_model
+    elif config["architecture"] == \
+            "SequentialConceptBottleneckModel":
+        # Special case for now for sequential CBMs
+        # config["architecture"] = "ConceptBottleneckModel"
+        config["sigmoidal_prob"] = True
+        train_fn = training.train_sequential_model
+    elif config["architecture"] in [
+        "ProbCBM",
+        "ProbabilisticCBM",
+        "ProbabilisticConceptBottleneckModel",
+    ]:
+        train_fn = train_prob_cbm.train_prob_cbm
+
+    elif config['architecture'] in [
+        'GlanceNet',
+    ]:
+        train_fn = train_glancenet.train_glancenet
+
+    elif config['architecture'] in [
+        'MixtureOfConceptEmbeddingsModel',
+        'MixCEM',
+        'MCIntCEM', # Legacy
+    ]:
+        train_fn = train_mixcem.train_mixcem
+
+    elif config["architecture"] in [
+        "PosthocCBM",
+        "PCBM",
+        "PosthocConceptBottleneckModel",
+        "Post-hocConceptBottleneckModel",
+    ]:
+        train_fn = train_pcbm.train_pcbm
+
+    elif config["architecture"] in [
+        "FixedEmbConceptEmbeddingModel",
+        "FixedConceptEmbeddingModel",
+        "FixedCEM",
+    ]:
+        train_fn = train_fixed_cem.train_fixed_cem
+
+    elif config["architecture"] in [
+        "BBModel",
+        "BlackBoxModel",
+        "BlackBox",
+    ]:
+        train_fn = train_blackbox.train_blackbox
+    else:
+        train_fn = training.train_end_to_end_model
+
+    # Train the model and get testing and validation results
+    model, model_results = train_fn(
+        run_name=run_name,
+        task_class_weights=task_class_weights,
+        accelerator=accelerator,
+        devices=devices,
+        n_concepts=config['n_concepts'],
+        n_tasks=config['n_tasks'],
+        input_shape=config['input_shape'],
+        config=config,
+        train_dl=train_dl,
+        val_dl=val_dl,
+        split=split,
+        result_dir=result_dir,
+        rerun=current_rerun,
+        project_name=project_name,
+        seed=(42 + split),
+        imbalance=imbalance,
+        old_results=old_results,
+        gradient_clip_val=config.get(
+            'gradient_clip_val',
+            0,
+        ),
+    )
+    update_statistics(
+        aggregate_results=trial_results,
+        test_results=model_results,
+    )
+    test_datasets = [
+        (val_dl, "val"),
+        (test_dl, "test"),
+    ]
+    # Change the model to eval mode
+    was_training = model.training
+    model.eval()
+    # Add the no grad guard to save memory and speed things up
+    with torch.no_grad():
+        eval_results = evaluate_models.evaluate_model(
+            model,
+            config,
+            test_datasets,
+            train_dl,
+            val_dl=val_dl,
+            run_name=run_name,
+            task_class_weights=task_class_weights,
+            imbalance=imbalance,
+            acquisition_costs=acquisition_costs,
+            result_dir=result_dir,
+            concept_map=concept_map,
+            accelerator=accelerator,
+            devices=devices,
+            split=split,
+            rerun=current_rerun,
+            old_results=old_results,
+        )
+        update_statistics(
+            aggregate_results=trial_results,
+            test_results=eval_results,
+        )
+
+        eval_config = config.get('eval_config', {})
+        run_additional = True
+        if extra_datasets_filter_in_file is not None:
+            run_additional = False
+            for reg in extra_datasets_filter_in_file:
+                if re.search(reg, f'{run_name}_split_{split}'):
+                    logging.info(
+                        f'Including additional dataset runs for '
+                        f'{f"{run_name}_split_{split}"} as it '
+                        f'matched filter-out regex {reg}'
+                    )
+                    run_additional = True
+                    break
+        config_copy = copy.deepcopy(config)
+        if run_additional:
+            for new_test_dl_configs in eval_config.get(
+                'additional_test_sets',
+                [],
+            ):
+                skip = False
+                for skip_regex in new_test_dl_configs.get('skip_list', []):
+                    if re.search(skip_regex, f'{run_name}_split_{split}'):
+                        logging.info(
+                            f"Skipping evaluation of dataset "
+                            f"{new_test_dl_configs['name'] + '_test'} as it "
+                            f"matched skip regex {skip_regex}"
+                        )
+                        skip = True
+                        break
+                if skip:
+                    continue
+
+                config_copy = copy.deepcopy(config)
+                if new_test_dl_configs.get('update_previous', False):
+                    config_copy['dataset_config'].update(
+                        new_test_dl_configs['dataset_config']
+                    )
+                else:
+                    config_copy['dataset_config'] = (
+                        new_test_dl_configs['dataset_config']
+                    )
+                (
+                    _,
+                    _,
+                    new_test_dl,
+                    new_imbalance,
+                    new_concept_map,
+                    new_task_class_weights,
+                    new_acquisition_costs
+                ) = _generate_dataset_and_update_config(
+                    config_copy,
+                    use_dataset_cache=use_dataset_cache,
+                )
+                eval_results = evaluate_models.evaluate_model(
+                    model,
+                    config_copy,
+                    [(new_test_dl, (new_test_dl_configs['name'] + "_test"))],
+                    train_dl,
+                    val_dl=val_dl,
+                    run_name=run_name,
+                    task_class_weights=new_task_class_weights,
+                    imbalance=new_imbalance,
+                    acquisition_costs=new_acquisition_costs,
+                    result_dir=result_dir,
+                    concept_map=new_concept_map,
+                    accelerator=accelerator,
+                    devices=devices,
+                    split=split,
+                    rerun=current_rerun,
+                    old_results=old_results,
+                )
+                update_statistics(
+                    aggregate_results=trial_results,
+                    test_results=eval_results,
+                )
+    # And restore training mode if the model was previously training
+    if was_training:
+        model.train()
+    return config_copy
 
 
 ################################################################################
@@ -353,13 +861,16 @@ def main(
     devices="auto",
     summary_table_metrics=None,
     sort_key="Task Accuracy",
-    single_frequency_epochs=0,
-    activation_freq=0,
     filter_out_regex=None,
     filter_in_regex=None,
     model_selection_metrics=None,
     model_selection_groups=None,
     fast_run=False,
+    no_new_runs=False,
+    use_auc=False,
+    use_dataset_cache=False,
+    extra_datasets_filter_in_file=None,
+    reverse_experiments=False,
 ):
     seed_everything(42)
     # parameters for data, model, and training
@@ -386,6 +897,14 @@ def main(
     loglevel = os.environ['LOGLEVEL']
     logging.info(f'Setting log level to: "{loglevel}"')
 
+    # Things regarding model selection
+    model_selection_trials = shared_params.get(
+        'model_selection_trials',
+        shared_params["trials"],
+    )
+    models_selected_to_continue = None
+    included_models = None
+
     os.makedirs(result_dir, exist_ok=True)
     results = {}
     for split in range(
@@ -400,16 +919,22 @@ def main(
             f"BEGINS AT {now.strftime('%d/%m/%Y at %H:%M:%S')}"
         )
         # And then over all runs in a given trial
-        for current_config in experiment_config['runs']:
+        runs = experiment_config['runs']
+        if reverse_experiments:
+            runs.reverse()
+        for current_config in runs:
             # Construct the config for this particular trial
             trial_config = copy.deepcopy(shared_params)
             trial_config.update(current_config)
             # Time to try as many seeds as requested
-            for run_config in experiment_utils.generate_hyperatemer_configs(trial_config):
+            for run_config in experiment_utils.generate_hyperparameter_configs(
+                trial_config
+            ):
+                torch.cuda.empty_cache()
                 run_config = copy.deepcopy(run_config)
                 run_config['result_dir'] = result_dir
-                experiment_utils.evaluate_expressions(run_config, soft=True)
                 run_config['split'] = split
+                experiment_utils.evaluate_expressions(run_config, soft=True)
 
                 old_results = None
                 if "run_name" not in run_config:
@@ -425,7 +950,7 @@ def main(
                 run_name = run_config["run_name"]
 
                 # Determine filtering in and filtering out of run
-                if filter_out_regex is not None:
+                if filter_out_regex:
                     skip = False
                     for reg in filter_out_regex:
                         if re.search(reg, f'{run_name}_split_{split}'):
@@ -438,7 +963,7 @@ def main(
                             break
                     if skip:
                         continue
-                if filter_in_regex is not None:
+                if filter_in_regex:
                     found = False
                     for reg in filter_in_regex:
                         if re.search(reg, f'{run_name}_split_{split}'):
@@ -455,6 +980,16 @@ def main(
                             f'did not match any filter-in regexes'
                         )
                         continue
+
+                if models_selected_to_continue and (
+                    run_name not in models_selected_to_continue
+                ):
+                    logging.info(
+                        f'Skipping run {f"{run_name}_split_{split}"} it was '
+                        f'not selected based on any of the model-selection '
+                        f'metrics measured after fold {model_selection_trials}'
+                    )
+                    continue
 
                 # Determine training rerun or not
                 current_results_path = os.path.join(
@@ -473,8 +1008,17 @@ def main(
                         f"as requested by the config"
                     )
                 if (not current_rerun) and os.path.exists(current_results_path):
-                    with open(current_results_path, 'rb') as f:
-                        old_results = joblib.load(f)
+                    try:
+                        with open(current_results_path, 'rb') as f:
+                            old_results = joblib.load(f)
+                    except Exception as e:
+                        logging.info(
+                            f'\t\t[IMPORTANT] We found previous results for '
+                            f'run {run_name} at trial {split + 1} but we were '
+                            f'unable to properly open them after encountering '
+                            f'exception {e}'
+                        )
+                        old_results = None
                 if fast_run and (old_results is not None):
                     logging.info(
                         f'\t\t[IMPORTANT] We found previous results for '
@@ -484,206 +1028,73 @@ def main(
                     )
                     results[f'{split}'][run_name].update(old_results)
                     continue
-                (
-                    train_dl,
-                    val_dl,
-                    test_dl,
-                    imbalance,
-                    concept_map,
-                    intervened_groups,
-                    task_class_weights,
-                    acquisition_costs
-                ) = _generate_dataset_and_update_config(
-                    run_config,
-                )
-                experiment_utils.evaluate_expressions(run_config)
+                if no_new_runs:
+                    if old_results is not None:
+                        logging.info(
+                            f'\t\t[IMPORTANT] We found previous results for '
+                            f'run {run_name} at trial {split + 1} and WILL '
+                            f'use them without verifying all expected evaluation '
+                            f'keys are present as we are running in NO NEW RUNS mode.'
+                        )
+                        results[f'{split}'][run_name].update(old_results)
+                        continue
+                    else:
+                        logging.info(
+                            f'\t\t[IMPORTANT] Skipping '
+                            f'run {run_name} at trial {split + 1} as no '
+                            f'previous results were found and we are running '
+                            f'in NO NEW RUNS mode.'
+                        )
+                        continue
 
-                now = datetime.now()
-
-                # Get the appropiate training function
-                if run_config["architecture"] == \
-                        "IndependentConceptBottleneckModel":
-                    # Special case for now for independent CBMs
-                    config = copy.deepcopy(run_config)
-                    # config["architecture"] = "ConceptBottleneckModel"
-                    config["sigmoidal_prob"] = True
-                    train_fn = training.train_independent_model
-                elif run_config["architecture"] == \
-                        "SequentialConceptBottleneckModel":
-                    # Special case for now for sequential CBMs
-                    config = copy.deepcopy(run_config)
-                    # config["architecture"] = "ConceptBottleneckModel"
-                    config["sigmoidal_prob"] = True
-                    train_fn = training.train_sequential_model
+                if int(os.environ.get("MULTIPROCESS", "0")):
+                    manager = multiprocessing.Manager()
+                    trial_results = manager.dict()
+                    context = multiprocessing.get_context('spawn')
+                    p = context.Process(
+                        target=_multiprocess_run_trial,
+                        kwargs=dict(
+                            trial_results=trial_results,
+                            run_name=run_name,
+                            run_config=run_config,
+                            accelerator=accelerator,
+                            devices=devices,
+                            result_dir=result_dir,
+                            split=split,
+                            project_name=project_name,
+                            current_rerun=current_rerun,
+                            old_results=old_results,
+                            use_dataset_cache=use_dataset_cache,
+                            extra_datasets_filter_in_file=extra_datasets_filter_in_file,
+                        ),
+                    )
+                    p.start()
+                    logging.debug(f"\t\tStarting run in subprocess {p.pid}")
+                    p.join()
+                    if p.exitcode:
+                        raise ValueError(
+                            f'Subprocess for trial {split + 1} of {run_name} failed!'
+                        )
+                    p.kill()
                 else:
-                    train_fn = training.train_end_to_end_model
-
-                # Train the model and get testing and validation results
-                model, model_results = train_fn(
-                    run_name=run_name,
-                    task_class_weights=task_class_weights,
-                    accelerator=accelerator,
-                    devices=devices,
-                    n_concepts=run_config['n_concepts'],
-                    n_tasks=run_config['n_tasks'],
-                    config=run_config,
-                    train_dl=train_dl,
-                    val_dl=val_dl,
-                    test_dl=test_dl,
-                    split=split,
-                    result_dir=result_dir,
-                    rerun=current_rerun,
-                    project_name=project_name,
-                    seed=(42 + split),
-                    imbalance=imbalance,
-                    old_results=old_results,
-                    gradient_clip_val=run_config.get(
-                        'gradient_clip_val',
-                        0,
-                    ),
-                    single_frequency_epochs=single_frequency_epochs,
-                    activation_freq=activation_freq,
-                )
-                training.update_statistics(
-                    aggregate_results=results[f'{split}'][run_name],
-                    run_config=run_config,
-                    model=model,
-                    test_results=model_results,
-                    run_name=run_name,
-                    prefix="",
-                )
-                results[f'{split}'][run_name][f'num_trainable_params'] = sum(
-                    p.numel() for p in model.parameters() if p.requires_grad
-                )
-                results[f'{split}'][run_name][f'num_non_trainable_params'] = sum(
-                    p.numel() for p in model.parameters() if not p.requires_grad
-                )
-
-                # Evaluate interventions
-                if 'intervention_config' in run_config:
-                    intervention_config = run_config['intervention_config']
-                    test_int_args = dict(
-                        task_class_weights=task_class_weights,
+                    trial_results = {}
+                    _multiprocess_run_trial(
+                        trial_results=trial_results,
                         run_name=run_name,
-                        train_dl=train_dl,
-                        val_dl=val_dl,
-                        test_dl=test_dl,
-                        imbalance=imbalance,
-                        config=run_config,
-                        n_tasks=run_config['n_tasks'],
-                        n_concepts=run_config['n_concepts'],
-                        acquisition_costs=acquisition_costs,
-                        result_dir=result_dir,
-                        concept_map=concept_map,
-                        intervened_groups=intervened_groups,
-                        accelerator=accelerator,
-                        devices=devices,
-                        split=split,
-                        rerun=current_rerun,
-                        old_results=old_results,
-                        group_level_competencies=intervention_config.get(
-                            "group_level_competencies",
-                            False,
-                        ),
-                        competence_levels=intervention_config.get(
-                            'competence_levels',
-                            [1],
-                        ),
-                    )
-                    if "real_competencies" in intervention_config:
-                        for real_comp in \
-                                intervention_config['real_competencies']:
-                            def _real_competence_generator(x):
-                                if real_comp == "same":
-                                    return x
-                                if real_comp == "complement":
-                                    return 1 - x
-                                if test_int_args['group_level_competencies']:
-                                    if real_comp == "unif":
-                                        batch_group_level_competencies = np.zeros(
-                                            (x.shape[0], len(concept_map))
-                                        )
-                                        for batch_idx in range(x.shape[0]):
-                                            for group_idx, (_, concept_members) in enumerate(
-                                                concept_map.items()
-                                            ):
-                                                batch_group_level_competencies[
-                                                    batch_idx,
-                                                    group_idx,
-                                                ] = np.random.uniform(
-                                                    1/len(concept_members),
-                                                    1,
-                                                )
-                                    else:
-                                        batch_group_level_competencies = np.ones(
-                                            (x.shape[0], len(concept_map))
-                                        ) * real_comp
-                                    return batch_group_level_competencies
-
-                                if real_comp == "unif":
-                                    return np.random.uniform(
-                                        0.5,
-                                        1,
-                                        size=x.shape,
-                                    )
-                                return np.ones(x.shape) * real_comp
-                            if real_comp == "same":
-                                # Then we will just run what we normally run
-                                # as the provided competency matches the level
-                                # of competency of the user
-                                test_int_args.pop(
-                                    "real_competence_generator",
-                                    None,
-                                )
-                                test_int_args.pop(
-                                    "extra_suffix",
-                                    None,
-                                )
-                                test_int_args.pop(
-                                    "real_competence_level",
-                                    None,
-                                )
-                            else:
-                                test_int_args['real_competence_generator'] = \
-                                        _real_competence_generator
-                                test_int_args['extra_suffix'] = \
-                                    f"_real_comp_{real_comp}_"
-                                test_int_args["real_competence_level"] = \
-                                    real_comp
-                    training.update_statistics(
-                        aggregate_results=results[f'{split}'][run_name],
                         run_config=run_config,
-                        model=model,
-                        test_results=intervention_utils.test_interventions(
-                            **test_int_args
-                        ),
-                        run_name=run_name,
-                        prefix="",
-                    )
-
-                # Finally, evaluate various representation metrics
-                training.update_statistics(
-                    aggregate_results=results[f'{split}'][run_name],
-                    run_config=run_config,
-                    model=model,
-                    test_results=evaluation.evaluate_representation_metrics(
-                        config=run_config,
-                        n_concepts=run_config['n_concepts'],
-                        n_tasks=run_config['n_tasks'],
-                        test_dl=test_dl,
-                        run_name=run_name,
-                        split=split,
-                        imbalance=imbalance,
-                        result_dir=result_dir,
-                        task_class_weights=task_class_weights,
                         accelerator=accelerator,
                         devices=devices,
-                        rerun=current_rerun,
-                        seed=42,
+                        result_dir=result_dir,
+                        split=split,
+                        project_name=project_name,
+                        current_rerun=current_rerun,
                         old_results=old_results,
-                    ),
-                    run_name=run_name,
-                    prefix="",
+                        use_dataset_cache=use_dataset_cache,
+                        extra_datasets_filter_in_file=extra_datasets_filter_in_file,
+                    )
+                update_statistics(
+                    aggregate_results=results[f'{split}'][run_name],
+                    test_results=trial_results,
                 )
 
                 logging.debug(
@@ -696,6 +1107,11 @@ def main(
                         results[f'{split}'][run_name],
                         f,
                     )
+
+                # Clean-up memory to setup everything for the next experiment
+                gc.collect()
+                torch.cuda.empty_cache()
+                torch.cuda.ipc_collect()
 
 
             # Save this run's results
@@ -743,9 +1159,41 @@ def main(
                 sort_key=sort_key,
                 result_dir=None,
                 split=split,
+                use_auc=(use_auc or run_config.get("n_tasks", 3) <= 2),
+                use_int_auc=use_auc or run_config.get('intervention_config', {}).get(
+                    'use_auc',
+                    False,
+                ),
             )
+        if (model_selection_groups is not None) and (
+            model_selection_metrics is not None
+        ) and (
+            models_selected_to_continue is None
+        ) and (
+            (split + 1) >= model_selection_trials
+        ):
+            # Then time to do model selection to avoid running every
+            # iteration on every seed
+            model_selection_results = _perform_model_selection(
+                model_selection_groups=model_selection_groups,
+                model_selection_metrics=model_selection_metrics,
+                results=results,
+                result_dir=result_dir,
+                split=split,
+                summary_table_metrics=summary_table_metrics,
+                config=experiment_config,
+                use_auc=use_auc,
+            )
+            models_selected_to_continue = set()
+            included_models = []
+            for _, selection_map, _ in model_selection_results:
+                included_models.append(set())
+                for _, group_selected_method in selection_map.items():
+                    included_models[-1].add(group_selected_method)
+                    models_selected_to_continue.add(group_selected_method)
+
             logging.debug(f"\t\tDone with trial {split + 1}")
-    print(f"********** Results after trial {split + 1} **********")
+    print(f"********** End Experiment Results **********")
     experiment_utils.print_table(
         config=experiment_config,
         results=results,
@@ -753,8 +1201,14 @@ def main(
         sort_key=sort_key,
         result_dir=result_dir,
         split=split,
+        use_auc=(use_auc or run_config.get("n_tasks", 3) <= 2),
+        use_int_auc=use_auc or run_config.get('intervention_config', {}).get(
+            'use_auc',
+            False,
+        ),
     )
-    logging.debug(f"\t\tDone with trial {split + 1}")
+    # And repring the final model selection table after all other folds have
+    # been computed
     _perform_model_selection(
         model_selection_groups=model_selection_groups,
         model_selection_metrics=model_selection_metrics,
@@ -763,8 +1217,10 @@ def main(
         split=split,
         summary_table_metrics=summary_table_metrics,
         config=experiment_config,
+        included_models=included_models,
+        use_auc=use_auc,
     )
-        # Locally serialize the results of this trial
+    logging.debug(f"\t\tDone complete experiment after {split + 1} trials")
     return results
 
 
@@ -806,7 +1262,6 @@ def _build_arg_parser():
             "directory where we will dump our experiment's results."
         ),
         metavar="path",
-
     )
     parser.add_argument(
         '--rerun',
@@ -850,23 +1305,12 @@ def _build_arg_parser():
         '--param',
         action='append',
         nargs=2,
-        metavar=('param_name=value'),
+        metavar=('param_name', 'value'),
         help=(
             'Allows the passing of a config param that will overwrite '
             'anything passed as part of the config file itself.'
         ),
         default=[],
-    )
-    parser.add_argument(
-        '--activation_freq',
-        default=0,
-        help=(
-            'how frequently, in terms of epochs, should we store the '
-            'embedding activations for our validation set. By default we will '
-            'not store any activations.'
-        ),
-        metavar='N',
-        type=int,
     )
     parser.add_argument(
         "--filter_out",
@@ -886,6 +1330,35 @@ def _build_arg_parser():
         help=(
             "includes only runs whose names match the regexes provided with "
             "this argument. These regexes must follow Python's regex syntax."
+        ),
+    )
+    parser.add_argument(
+        "--filter_in_file",
+        action='append',
+        metavar=('model_selection_file.joblib'),
+        default=None,
+        help=(
+            "includes only runs whose names are in the joblib file outputed "
+            "from a previous model selection run."
+        ),
+    )
+    parser.add_argument(
+        "--extra_datasets_filter_in_file",
+        action='append',
+        metavar=('model_selection_file.joblib'),
+        default=None,
+        help=(
+            "includes for extra dataset evaluation only runs whose names are "
+            "in the joblib file outputed from a previous model selection run."
+        ),
+    )
+    parser.add_argument(
+        "--only_previously_selected",
+        action="store_true",
+        default=False,
+        help=(
+            "it runs the models that were only previously selected by the "
+            "model selection ran on a previous iteration of this experiment"
         ),
     )
     parser.add_argument(
@@ -927,17 +1400,6 @@ def _build_arg_parser():
     )
 
     parser.add_argument(
-        '--single_frequency_epochs',
-        default=0,
-        help=(
-            'how frequently, in terms of epochs, should we store the '
-            'embedding activations for our validation set. By default we will '
-            'not store any activations.'
-        ),
-        metavar='N',
-        type=int,
-    )
-    parser.add_argument(
          "--fast_run",
          action="store_true",
          default=False,
@@ -947,6 +1409,52 @@ def _build_arg_parser():
              "stale and are complete!"
          ),
      )
+    parser.add_argument(
+        '--no_new_runs',
+        action="store_true",
+         default=False,
+         help=(
+             "does excecute any new runs whose results were not previously "
+             "computed/cached."
+         ),
+    )
+    parser.add_argument(
+        '--use_auc',
+        action="store_true",
+         default=False,
+         help=(
+             "use ROC-AUC as the main performance metric rather than accuracy."
+         ),
+    )
+    parser.add_argument(
+        '--reverse',
+        action="store_true",
+         default=False,
+         help=(
+             "Reverses the order in which we process experiments (useful for multiprocessing)."
+         ),
+    )
+
+    parser.add_argument(
+        '--use_dataset_cache',
+        action="store_true",
+         default=False,
+         help=(
+            "we will avoid re-generating dataset loaders if they have already "
+            "been generated for previous runs."
+         ),
+    )
+    parser.add_argument(
+        '--out_selected_config',
+        default=None,
+        help=(
+            'outputs a config that will kick-start the same experiments with '
+            'only the selected models after running the entire model selection '
+            'process.'
+        ),
+        metavar='out_config.yaml',
+        type=str,
+    )
     return parser
 
 
@@ -997,13 +1505,28 @@ if __name__ == '__main__':
         command_args = [
             arg if " " not in arg else f'"{arg}"' for arg in sys.argv
         ]
-        f.write("python " + " ".join(command_args))
+        command = "python " + " ".join(command_args) + "\n"
+        f.write(command)
+    with open(
+        os.path.join(loaded_config['results_dir'], f"last_run_command.txt"),
+        "w",
+    ) as f:
+        f.write(command)
 
     # Also save the current experiment configuration
     with open(
         os.path.join(
             loaded_config['results_dir'],
             f"experiment_{dt_string}_config.yaml")
+        ,
+        "w"
+    ) as f:
+        yaml.dump(loaded_config, f)
+
+    with open(
+        os.path.join(
+            loaded_config['results_dir'],
+            f"last_run_experiment_config.yaml")
         ,
         "w"
     ) as f:
@@ -1022,12 +1545,52 @@ if __name__ == '__main__':
     if args.model_selection_metrics:
         model_selection_metrics = args.model_selection_metrics
 
+    result_dir = (
+        args.output_dir if args.output_dir
+        else loaded_config.get('results_dir', 'results')
+    )
+
+    given_filter_in_file = args.filter_in_file
+    if args.only_previously_selected and model_selection_metrics:
+        if given_filter_in_file is None:
+            given_filter_in_file = []
+        for model_selection_metric in model_selection_metrics:
+            given_filter_in_file.append(
+                os.path.join(
+                    result_dir,
+                    f'selected_models_{model_selection_metric}.joblib'
+                )
+            )
+
+    if given_filter_in_file is not None:
+        if args.filter_in is None:
+            args.filter_in = []
+        for file_path in given_filter_in_file:
+            if not os.path.exists(file_path):
+                raise ValueError(
+                    f'Path for filter-in file {file_path} is not a valid path'
+                )
+            loaded_selection = joblib.load(file_path)
+            for _, method_name in loaded_selection.items():
+                args.filter_in.append(method_name)
+
+    extra_datasets_filter_in_file = None
+    if args.extra_datasets_filter_in_file is not None:
+        extra_datasets_filter_in_file = []
+        if args.filter_in is None:
+            args.filter_in = []
+        for file_path in args.extra_datasets_filter_in_file:
+            if not os.path.exists(file_path):
+                raise ValueError(
+                    f'Path for extra dataset filter-in file {file_path} is '
+                    f'not a valid path'
+                )
+            loaded_selection = joblib.load(file_path)
+            for _, method_name in loaded_selection.items():
+                extra_datasets_filter_in_file.append(method_name)
     main(
         rerun=args.rerun,
-        result_dir=(
-            args.output_dir if args.output_dir
-            else loaded_config['results_dir']
-        ),
+        result_dir=result_dir,
         project_name=args.project_name,
         num_workers=args.num_workers,
         global_params=args.param,
@@ -1036,12 +1599,15 @@ if __name__ == '__main__':
             else "cpu"
         ),
         experiment_config=loaded_config,
-        activation_freq=args.activation_freq,
-        single_frequency_epochs=args.single_frequency_epochs,
         filter_out_regex=args.filter_out,
         filter_in_regex=args.filter_in,
         model_selection_metrics=model_selection_metrics,
         model_selection_groups=model_selection_groups,
         summary_table_metrics=summary_table_metrics,
         fast_run=args.fast_run,
+        no_new_runs=args.no_new_runs,
+        use_auc=args.use_auc,
+        use_dataset_cache=args.use_dataset_cache,
+        extra_datasets_filter_in_file=extra_datasets_filter_in_file,
+        reverse_experiments=args.reverse,
     )

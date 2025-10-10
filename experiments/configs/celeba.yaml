@@ -1,136 +1,221 @@
-trials: 5
-results_dir: results/celeba/
-model_selection_groups:
- - ["^CEM", "CEM"]
- - ["^IntCEM(.*)", "IntCEM"]
- - ["^CBM_Sigmoid", "CBM_Logit"]
- - ["^CBM_Ind", "CBM_Seq"]
-model_selection_metrics: [val_acc_y]
-
-
 shared_params:
-  # Dataset Configuration
+  results_dir: "results/celeba/"
+  trials: 5
+  model_selection_trials: 3
   dataset_config:
     dataset: "celeba"
     image_size: 64
     num_classes: 1000
     batch_size: 512
-    root_dir: data/
-    use_imbalance: True
-    use_binary_vector_class: True
+    root_dir: "/path/to/celeba/" # REPLACE ME
+    use_imbalance: true
+    use_binary_vector_class: true
     num_concepts: 6
     label_binary_width: 1
     label_dataset_subsample: 12
     num_hidden_concepts: 2
-    selected_concepts: False
+    selected_concepts: false
     num_workers: 8
-
-  # Intervention Parameters
   intervention_config:
-    competence_levels: [1, 0]
+    competence_levels: [1]
     intervention_freq: 1
-    intervention_batch_size: 1024
+    intervention_batch_size: 256
+    val_intervention_policies:
+      - policy: "random"
+        group_level: true
+        use_prior: false
     intervention_policies:
       - policy: "random"
-        group_level: True
-        use_prior: True  # This will make the random policy use the learnt IntCEM prior!!!
+        group_level: true
+        use_prior: false
+      # Remove the following if you are only interested in random interventions
       - policy: "random"
-        group_level: True
-        use_prior: False
+        group_level: true
+        use_prior: true
+        include_run_names: [".*(IntCEM).*"]
       - policy: "coop"
-        group_level: True
+        group_level: true
         use_prior: False
       - policy: "behavioural_cloning"
-        group_level: True
+        group_level: true
         use_prior: False
       - policy: "optimal_greedy"
-        group_level: True
+        group_level: true
         use_prior: False
       - policy: "global_val_error"
-        group_level: True
+        group_level: true
         use_prior: False
       - policy: "global_val_improvement"
-        group_level: True
+        group_level: true
         use_prior: False
+      ##########################################################################
+  eval_config:
+    additional_metrics:
+      - name: "mixcem_sel"
+        include_list: [".*(MixCEM).*", ".*(MixIntCEM).*"]
+    additional_test_sets:
+      - name: "OOD_sap_0.1"
+        update_previous: true
+        dataset_config:
+          test_transformation_config:
+            post_generation: true
+            name: "salt_and_pepper"
+            amount: 0.1
+            s_vs_p: 0.5
 
-  # Representation metrics
-  # Change to False if you want representation metrics to be included in the
-  # evaluation (may significantly increase experiment times)
-  skip_repr_evaluation: True
-  top_k_accuracy: [3, 5, 10]
-  save_model: True
-  max_epochs: 200
-  patience: 15
+  skip_repr_evaluation: true
+  save_model: true
+  max_epochs: 150
+  lr_scheduler_patience: 10
+  patience: 5
   emb_size: 16
   extra_dims: 0
-  concept_loss_weight: 1
+  concept_loss_weight: [1, 10]
   learning_rate: 0.005
-  weight_decay: 0.000004
-  weight_loss: False
-  c_extractor_arch: resnet34
-  optimizer: sgd
-  bool: False
-  early_stopping_monitor: val_loss
-  early_stopping_mode: min
+  weight_decay: 4.0e-06
+  weight_loss: false
+  c_extractor_arch: "resnet34"
+  optimizer: "sgd"
+  bool: false
+  early_stopping_monitor: "val_loss"
+  early_stopping_mode: "min"
   early_stopping_delta: 0.0
   momentum: 0.9
-  sigmoidal_prob: False
+  sigmoidal_prob: false
   training_intervention_prob: 0.25
-
-
 runs:
-  - architecture: 'ConceptEmbeddingModel'
+
+  - architecture: "ConceptBottleneckModel"
+    run_name: "DNN"
+    extra_dims: 200
+    concept_loss_weight: 0
+    sigmoidal_prob: true
+    training_intervention_prob: 0
+    embedding_activation: "leakyrelu"
+
+  - architecture: "ConceptBottleneckModel"
+    run_name: "Joint CBM"
+    concept_loss_weight: 10
+    sigmoidal_prob: true
+    embedding_activation: "leakyrelu"
+    sigmoidal_extra_capacity: false
+
+  - architecture: "ConceptBottleneckModel"
+    run_name: "Joint Logit CBM"
+    concept_loss_weight: 10
+    embedding_activation: "leakyrelu"
+    sigmoidal_extra_capacity: false
+
+  - architecture: "SequentialConceptBottleneckModel"
+    run_name: "Sequential CBM"
+    concept_loss_weight: 1
+    sigmoidal_prob: true
+    embedding_activation: "leakyrelu"
+    sigmoidal_extra_capacity: false
+
+  - architecture: "IndependentConceptBottleneckModel"
+    run_name: "Independent CBM"
+    concept_loss_weight: 1
+    sigmoidal_prob: true
+    embedding_activation: "leakyrelu"
+    sigmoidal_extra_capacity: false
+
+  - architecture: "ConceptBottleneckModel"
+    run_name: "Hybrid-CBM"
+    extra_dims: 200
+    concept_loss_weight: 10
+    sigmoidal_prob: true
+    training_intervention_prob: 0
+    embedding_activation: "leakyrelu"
+
+  - architecture: "ConceptEmbeddingModel"
     run_name: "CEM"
-    sigmoidal_prob: True
-    training_intervention_prob: 0.25
+    emb_size: 32
+    concept_loss_weight: 10
+    sigmoidal_prob: true
     embedding_activation: "leakyrelu"
 
   - architecture: "IntAwareConceptEmbeddingModel"
-    run_name: "IntCEM_intervention_weight_{intervention_weight}_intervention_task_discount_{intervention_task_discount}"
-    training_intervention_prob: 0.25
-    intervention_weight: [0.1, 1, 5]
-    intervention_task_discount: [1.1, 1.5]
-    use_concept_groups: True
-    int_model_use_bn: True
+    run_name: "IntCEM"
+    concept_loss_weight: 1
+    intervention_weight: 5
+    intervention_task_discount: 1.5
+    use_concept_groups: true
+    int_model_use_bn: true
     int_model_layers: [128, 128, 64, 64]
     embedding_activation: "leakyrelu"
     max_horizon: 6
     horizon_rate: 1.005
     gradient_clip_val: 100
-    grid_variables:
-        - intervention_task_discount
-        - intervention_weight
-    grid_search_mode: exhaustive
 
-  - architecture: 'ConceptBottleneckModel'
-    run_name: "CBM_Sigmoid"
-    training_intervention_prob: 0.25
-    embedding_activation: "leakyrelu"
-    bool: False
-    extra_dims: 0
-    sigmoidal_extra_capacity: False
-    sigmoidal_prob: True
+  - architecture: "ProbabilisticConceptBottleneckModel"
+    run_name: "ProbCBM"
+    concept_loss_weight: 1
+    learning_rate: 0.001
+    weight_decay: 0
+    optimizer: "adam"
+    n_samples_inference: 50
+    use_neg_concept: true
+    pred_class: true
+    init_negative_scale: 5
+    init_shift: 5
+    pretrained: true
+    hidden_dim: 16
+    class_hidden_dim: 32
+    intervention_prob: 0.5
+    gradient_clip_val: 2.0
+    max_concept_epochs: 70
+    warmup_epochs: 5
+    max_task_epochs: 75
+    vib_beta: 5.0e-05
+    lr_ratio: 10
 
-  - architecture: 'ConceptBottleneckModel'
-    run_name: "CBM_Logit"
-    embedding_activation: "leakyrelu"
-    bool: False
-    extra_dims: 0
-    sigmoidal_extra_capacity: False
-    sigmoidal_prob: False
+  - architecture: "PosthocConceptBottleneckModel"
+    run_name: "Posthoc CBM"
+    emb_size: null
+    residual: false
+    reg_strength: 0.1
+    l1_ratio: 0.99
+    freeze_pretrained_model: true
+    freeze_concept_embeddings: true
+    svd_penalty: 1
+    active_top_percentile: 95
+    active_bottom_percentile: 5
+    blackbox_model_config:
+      name: "resnet34"
+      imagenet_pretrained: true
+      add_linear_layers: [8]
+    blackbox_training_epochs: 150
+    max_residual_epochs: 150
+    blackbox_path: "PCBM_BlackBox_Model_resnet34_pre_True_fold_4_layers_[8]"
 
-  - architecture: 'SequentialConceptBottleneckModel'
-    run_name: "CBM_Seq"
-    embedding_activation: "leakyrelu"
-    bool: False
-    extra_dims: 0
-    sigmoidal_extra_capacity: False
-    sigmoidal_prob: True
+  - architecture: "PosthocConceptBottleneckModel"
+    run_name: "Posthoc Hybrid CBM"
+    emb_size: null
+    residual: true
+    reg_strength: 0.1
+    l1_ratio: 0.99
+    freeze_pretrained_model: true
+    freeze_concept_embeddings: true
+    svd_penalty: 1
+    blackbox_model_config:
+      name: "resnet34"
+      imagenet_pretrained: true
+      add_linear_layers: [8]
+    blackbox_training_epochs: 150
+    max_residual_epochs: 150
+    blackbox_path: "PCBM_BlackBox_Model_resnet34_pre_True_fold_4_layers_[8]"
 
-  - architecture: 'IndependentConceptBottleneckModel'
-    run_name: "CBM_Ind"
-    embedding_activation: "leakyrelu"
-    bool: False
-    extra_dims: 0
-    sigmoidal_extra_capacity: False
-    sigmoidal_prob: True
+  - architecture: "ConceptToLabelModel"
+    run_name: "Bayes MLP"
+    max_epochs: 75
+    c2y_layers: [128, 64, 32]
+    feature_drop_out: 0.25
+
+  - architecture: "MixCEM"
+    run_name: "MixCEM"
+    concept_loss_weight: 10
+    load_path_name: "MixCEM_r_1_g_ood_0.9_cwl_10_ce_0"
+    all_intervened_loss_weight: 1
+    ood_dropout_prob: 0.9
+    calibration_epochs: 0

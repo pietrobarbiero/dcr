@@ -111,7 +111,30 @@ def generate_data(
     root_dir=DATASET_DIR,
     seed=42,
     output_dataset_vars=False,
+    train_sample_transform=None,
+    test_sample_transform=None,
+    val_sample_transform=None,
 ):
+    if (
+        (val_sample_transform != train_sample_transform) or
+        (val_sample_transform != test_sample_transform)
+    ):
+        raise ValueError(
+            f'CelebA currently does not support fold-specific sample transforms'
+        )
+    train_sample_transform = (
+        (lambda x: x) if train_sample_transform is None
+        else train_sample_transform
+    )
+    val_sample_transform = (
+        (lambda x: x) if val_sample_transform is None
+        else val_sample_transform
+    )
+    test_sample_transform = (
+        (lambda x: x) if test_sample_transform is None
+        else test_sample_transform
+    )
+
     if root_dir is None:
         root_dir = DATASET_DIR
     concept_group_map = None
@@ -172,6 +195,7 @@ def generate_data(
             split='all',
             download=True,
             transform=transforms.Compose([
+                train_sample_transform,
                 transforms.Resize(config['image_size']),
                 transforms.CenterCrop(config['image_size']),
                 transforms.ToTensor(),
@@ -211,6 +235,7 @@ def generate_data(
             split='all',
             download=True,
             transform=transforms.Compose([
+                train_sample_transform,
                 transforms.Resize(config['image_size']),
                 transforms.CenterCrop(config['image_size']),
                 transforms.ToTensor(),
@@ -253,6 +278,9 @@ def generate_data(
             root=root_dir,
             split='all',
             download=True,
+            transform=transforms.Compose([
+                train_sample_transform
+            ]),
             target_transform=lambda x: x[0].long() - 1,
             target_type=['identity'],
         )
@@ -291,6 +319,7 @@ def generate_data(
             split='all',
             download=True,
             transform=transforms.Compose([
+                train_sample_transform,
                 transforms.Resize(config['image_size']),
                 transforms.CenterCrop(config['image_size']),
                 transforms.ToTensor(),

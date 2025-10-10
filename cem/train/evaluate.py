@@ -16,9 +16,252 @@ import tensorflow as tf
 import cem.metrics.niching as niching
 import cem.metrics.oracle as oracle
 import cem.train.utils as utils
+import cem.utils.data as data_utils
+import cem.metrics.accs as accs
 
 from cem.metrics.cas import concept_alignment_score
 from cem.models.construction import load_trained_model
+
+
+def evaluate_cbm(
+    model,
+    trainer,
+    config,
+    run_name,
+    old_results=None,
+    rerun=False,
+    test_dl=None,
+    dl_name="test",
+):
+    was_training = model.training
+    model.eval()
+    with torch.no_grad():
+        eval_results = {}
+        if test_dl is None:
+            return eval_results
+        include_c_aucs = config.get('include_c_aucs', False)
+        def _inner_call():
+            batch_results = trainer.predict(model, test_dl)
+            y_true, c_true = data_utils.daloader_to_memory(
+                test_dl,
+                as_torch=True,
+                only_labels=True,
+                num_workers=config.get('num_load_workers', config.get('num_workers', 1)),
+            )
+            c_pred = torch.cat(
+                list(map(lambda x: x[0].detach().cpu(), batch_results)),
+                dim=0,
+            )
+            y_pred = torch.cat(
+                list(map(lambda x: x[2].detach().cpu(), batch_results)),
+                axis=0,
+            )
+            c_metrics, (y_accuracy, y_auc, y_f1) = \
+                accs.compute_accuracy(
+                    c_pred=c_pred,
+                    y_pred=y_pred,
+                    c_true=c_true,
+                    y_true=y_true,
+                    include_c_aucs=include_c_aucs,
+                )
+
+            if include_c_aucs:
+                (c_accuracy, c_auc, c_f1, c_aucs_vector) = c_metrics
+                output = [
+                    c_accuracy,
+                    y_accuracy,
+                    c_auc,
+                    y_auc,
+                    c_f1,
+                    y_f1,
+                    c_aucs_vector,
+                ]
+            else:
+                (c_accuracy, c_auc, c_f1) = c_metrics
+                output = [
+                    c_accuracy,
+                    y_accuracy,
+                    c_auc,
+                    y_auc,
+                    c_f1,
+                    y_f1,
+                ]
+            top_k_vals = []
+            for key, val in eval_results.items():
+                if f"test_y_top" in key:
+                    top_k = int(
+                        key[len(f"test_y_top_"):-len("_accuracy")]
+                    )
+                    top_k_vals.append((top_k, val))
+            output += list(map(
+                lambda x: x[1],
+                sorted(top_k_vals, key=lambda x: x[0]),
+            ))
+            return output
+
+        if include_c_aucs:
+            keys = [
+                f"{dl_name}_acc_c",
+                f"{dl_name}_acc_y",
+                f"{dl_name}_auc_c",
+                f"{dl_name}_auc_y",
+                f"{dl_name}_f1_c",
+                f"{dl_name}_aucs_c",
+            ]
+        else:
+            keys = [
+                f"{dl_name}_acc_c",
+                f"{dl_name}_acc_y",
+                f"{dl_name}_auc_c",
+                f"{dl_name}_auc_y",
+                f"{dl_name}_f1_c",
+                f"{dl_name}_f1_y",
+            ]
+        if 'top_k_accuracy' in config:
+            top_k_args = config['top_k_accuracy']
+            if top_k_args is None:
+                top_k_args = []
+            if not isinstance(top_k_args, list):
+                top_k_args = [top_k_args]
+            for top_k in sorted(top_k_args):
+                keys.append(f'{dl_name}_top_{top_k}_acc_y')
+
+        values, _ = utils.load_call(
+            function=_inner_call,
+            keys=keys,
+            run_name=run_name,
+            old_results=old_results,
+            rerun=rerun,
+            kwargs={},
+        )
+        eval_results.update({
+            key: val
+            for (key, val) in zip(keys, values)
+        })
+    if was_training:
+        model.train()
+    return eval_results
+
+
+def evaluate_metric(
+    metric_name,
+    model,
+    trainer,
+    config,
+    run_name,
+    metric_config={},
+    old_results=None,
+    rerun=False,
+    test_dl=None,
+    dl_name="test",
+    current_results=None,
+):
+    eval_results = {}
+    if test_dl is None:
+        return eval_results
+    if metric_name == 'mixcem_sel':
+        keys = [f"{dl_name}_mixcem_sel_acc", f"{dl_name}_mixcem_sel_auc"]
+        current_results = current_results or {}
+        def _inner_call():
+            accs_to_include = []
+            aucs_to_include = []
+            y_true = None
+            if (f"{dl_name}_acc_y" in current_results) and (
+                f"{dl_name}_auc_y" in current_results
+            ):
+                vanilla_y_accuracy = current_results[f"{dl_name}_acc_y"]
+                vanilla_y_auc = current_results[f"{dl_name}_auc_y"]
+            else:
+                y_true, _ = data_utils.daloader_to_memory(
+                    test_dl,
+                    as_torch=True,
+                    only_labels=True,
+                    num_workers=config.get('num_load_workers', config.get('num_workers', 1)),
+                )
+                # Make predictions without any interventions or global embedding use
+                vanilla_batch_results = trainer.predict(model, test_dl)
+                vanilla_y_pred = torch.cat(
+                    list(map(lambda x: x[2].detach().cpu(), vanilla_batch_results)),
+                    axis=0,
+                )
+                _, (vanilla_y_accuracy, vanilla_y_auc, _) = \
+                    accs.compute_accuracy(
+                        y_pred=vanilla_y_pred,
+                        y_true=y_true,
+                    )
+            accs_to_include.append(vanilla_y_accuracy)
+            aucs_to_include.append(vanilla_y_auc)
+
+
+
+            # Force the model to intervene on all concepts
+            if y_true is None:
+                y_true, _ = data_utils.daloader_to_memory(
+                    test_dl,
+                    as_torch=True,
+                    only_labels=True,
+                    num_workers=config.get(
+                        'num_load_workers',
+                        config.get('num_workers', 1),
+                    ),
+                )
+            prev_force_all_interventions = getattr(model, 'force_all_interventions', False)
+            model.force_all_interventions = True
+            all_int_batch_results = trainer.predict(model, test_dl)
+            all_int_y_pred = torch.cat(
+                list(map(lambda x: x[2].detach().cpu(), all_int_batch_results)),
+                axis=0,
+            )
+            _, (all_int_y_accuracy, all_int_y_auc, _) = \
+                accs.compute_accuracy(
+                    y_pred=all_int_y_pred,
+                    y_true=y_true,
+                )
+            accs_to_include.append(all_int_y_accuracy)
+            aucs_to_include.append(all_int_y_auc)
+
+            # Force the selection to always use the global embeddings when we
+            # intervene on, and compute that accuracy
+            if hasattr(model, 'hard_selection_value'):
+                prev_hard_selection_value = model.hard_selection_value
+                model.hard_selection_value = 1
+                global_int_batch_results = trainer.predict(model, test_dl)
+                global_int_y_pred = torch.cat(
+                    list(map(lambda x: x[2].detach().cpu(), global_int_batch_results)),
+                    axis=0,
+                )
+                _, (global_int_y_accuracy, global_int_y_auc, _) = \
+                    accs.compute_accuracy(
+                        y_pred=global_int_y_pred,
+                        y_true=y_true,
+                    )
+                accs_to_include.append(global_int_y_accuracy)
+                aucs_to_include.append(global_int_y_auc)
+
+
+            # Reset the model accordingly
+            if hasattr(model, 'hard_selection_value'):
+                model.hard_selection_value = prev_hard_selection_value
+            model.force_all_interventions = prev_force_all_interventions
+            return [np.mean(accs_to_include), np.mean(aucs_to_include)]
+    else:
+        raise ValueError(
+            f'Unsupported metric "{metric_name}".'
+        )
+    values, _ = utils.load_call(
+        function=_inner_call,
+        keys=keys,
+        run_name=run_name,
+        old_results=old_results,
+        rerun=rerun,
+        kwargs={},
+    )
+    for (key, val) in zip(keys, values):
+        eval_results[key] = val
+        print(
+            f'{dl_name} {key}: {val}'
+        )
+    return eval_results
 
 
 def representation_avg_task_pred(
@@ -110,21 +353,12 @@ def evaluate_representation_metrics(
     if seed is not None:
         seed_everything(seed)
 
-    x_test, y_test, c_test = [], [], []
-    for ds_data in test_dl:
-        if len(ds_data) == 2:
-            x, (y, c) = ds_data
-        else:
-            (x, y, c) = ds_data
-        x_type = x.type()
-        y_type = y.type()
-        c_type = c.type()
-        x_test.append(x)
-        y_test.append(y)
-        c_test.append(c)
-    x_test = np.concatenate(x_test, axis=0)
-    y_test = np.concatenate(y_test, axis=0)
-    c_test = np.concatenate(c_test, axis=0)
+    x_test, y_test, c_test = data_utils.daloader_to_memory(
+        test_dl,
+        as_torch=True,
+        num_workers=config.get('num_load_workers', config.get('num_workers', 1)),
+    )
+    c_test_np = None
 
     # Now include the competence that we will assume
     # for all concepts
@@ -138,9 +372,9 @@ def evaluate_representation_metrics(
         y_test = y_test[indices]
         test_dl = torch.utils.data.DataLoader(
             dataset=torch.utils.data.TensorDataset(
-                torch.FloatTensor(x_test).type(x_type),
-                torch.FloatTensor(y_test).type(y_type),
-                torch.FloatTensor(c_test).type(c_type),
+                x_test,
+                y_test,
+                c_test,
             ),
             batch_size=test_dl.batch_size,
             num_workers=test_dl.num_workers,
@@ -187,6 +421,8 @@ def evaluate_representation_metrics(
             oracle_matrix = np.load(
                 os.path.join(result_dir, f'oracle_matrix.npy')
             )
+        if c_test_np is None:
+            c_test_np = c_test.detach().cpu().numpy()
         ois, loaded = utils.execute_and_save(
             fun=utils.load_call,
             kwargs=dict(
@@ -197,10 +433,10 @@ def evaluate_representation_metrics(
                 run_name=run_name,
                 kwargs=dict(
                     c_soft=np.transpose(c_pred, (0, 2, 1)),
-                    c_true=c_test,
+                    c_true=c_test_np,
                     predictor_train_kwags={
                         'epochs': config.get("ois_epochs", 50),
-                        'batch_size': min(2048, c_test.shape[0]),
+                        'batch_size': min(2048, c_test_np.shape[0]),
                         'verbose': 0,
                     },
                     test_size=0.2,
@@ -234,27 +470,17 @@ def evaluate_representation_metrics(
     if train_dl is not None and (
         config.get("run_repr_avg_pred", False)
     ):
-        x_train, y_train, c_train = [], [], []
-        for ds_data in train_dl:
-            if len(ds_data) == 2:
-                x, (y, c) = ds_data
-            else:
-                (x, y, c) = ds_data
-            x_type = x.type()
-            y_type = y.type()
-            c_type = c.type()
-            x_train.append(x)
-            y_train.append(y)
-            c_train.append(c)
-        x_train = np.concatenate(x_train, axis=0)
-        y_train = np.concatenate(y_train, axis=0)
-        c_train = np.concatenate(c_train, axis=0)
+        x_train, y_train, c_train = data_utils.daloader_to_memory(
+            train_dl,
+            as_torch=True,
+            num_workers=config.get('num_load_workers', config.get('num_workers', 1)),
+        )
 
         used_train_dl = torch.utils.data.DataLoader(
             dataset=torch.utils.data.TensorDataset(
-                torch.FloatTensor(x_train).type(x_type),
-                torch.FloatTensor(y_train).type(y_type),
-                torch.FloatTensor(c_train).type(c_type),
+                x_train,
+                y_train,
+                c_train,
             ),
             batch_size=32,
             num_workers=train_dl.num_workers,
@@ -309,6 +535,8 @@ def evaluate_representation_metrics(
         # Niche impurity score now
         nis_key = f'test_nis'
         logging.info(f"Computing NIS score...")
+        if c_test_np is None:
+            c_test_np = c_test.detach().cpu().numpy()
         nis, loaded = utils.execute_and_save(
             fun=utils.load_call,
             kwargs=dict(
@@ -319,7 +547,7 @@ def evaluate_representation_metrics(
                 run_name=run_name,
                 kwargs=dict(
                     c_soft=np.transpose(c_pred, (0, 2, 1)),
-                    c_true=c_test,
+                    c_true=c_test_np,
                     test_size=0.2,
                 ),
             ),
